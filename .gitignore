@@ -1,0 +1,384 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+*.manifest
+*.spec
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+.ENV/
+
+# Environment variables (secrets)
+.env
+.env.local
+.env.*.local
+
+# Python testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Python type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.pydevproject
+.project
+.metadata
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*.bak
+*.tmp
+*.orig
+*.log
+
+# Android
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+*.iml
+.gradle/
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+android/app/build/
+android/.gradle/
+android/.idea/
+android/local.properties
+android/build/
+android/captures/
+android/.externalNativeBuild/
+android/.cxx/
+
+# iOS (if ever needed)
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+*.xcuserstate
+*.dSYM.zip
+*.dSYM
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Database files (local development)
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup and temp files
+*.bak
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.fuse_hidden*
+.nfs*
+
+# Docker (if used)
+docker-compose.override.yml
+
+# Node.js (if ever needed)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp
+.pnp.js
+
+# Coverage directory
+coverage/
+*.lcov
+
+# Temporary folders
+tmp/
+temp/
+
+# Profiling
+prof/
+*.prof
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Flask / FastAPI instance folder
+instance/
+.webassets-cache
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# pdm
+.pdm.toml
+.pdm-python
+.pdm-build/
+
+# PEP 582
+__pypackages__/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# Ruff
+.ruff_cache/
+
+# PyCharm
+.idea/
+
+# MSVC
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Windows
+*.msi
+*.msix
+*.msm
+*.msp
+
+# JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Android Studio
+*.jks
+*.keystore
+
+# Google Services (if used)
+google-services.json
+
+# Keystore files (if not in source control)
+*.jks
+*.keystore
+
+# External native build folder generated in Android Studio 2.2 and later
+.externalNativeBuild
+.cxx
+
+# Signing files
+signing/
+*.jks
+*.keystore
+
+# Uncomment the following line if you do not want to check your credentials
+# google-services.json
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Log/OS Files
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/dictionaries
+.idea/shelf
+
+# Android Studio
+*.jks
+*.keystore
+.externalNativeBuild
+.cxx
+local.properties
+
+# Keystore files
+*.jks
+*.keystore
+
+# Google Services
+google-services.json
+
+# Android Profiling
+*.hprof
+
+# WorkBuddy
+.workbuddy/
+
+# Spec & design documents
+spec/
+
+# Deploy script & artifacts
+deploy_update.py
+deploy_*.zip
+deploy_*.tar.gz
+backend_upload.zip
+
+# Workflow & process docs (not source code)
+WORKFLOW_CONFIG.md
+
+# One-off test & migration scripts (not part of source code)
+backend/test_*.py
+backend/scripts/migrate_*.py
+
+# Accidental files (empty files with non-ASCII names, temp artifacts)
+backend/「
+
+# Alembic
+alembic/versions/*.pyc

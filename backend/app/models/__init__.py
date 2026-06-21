@@ -1,0 +1,71 @@
+from app.models.user import User
+from app.models.user_profile import UserProfile
+from app.models.couple_relation import CoupleRelation
+from app.models.couple_space import CoupleSpace
+from app.models.questionnaire import (
+    Questionnaire,
+    QuestionnaireQuestion,
+    QuestionnaireOption,
+    QuestionnaireAnswer,
+    QuestionnaireProgress,
+    QuestionnaireSubmission,
+)
+from app.models.profile import (
+    PsychologyModel,
+    RelationshipProfile,
+    ProfileDimensionScore,
+    CoupleProfile,
+)
+from app.models.ai import (
+    AiScene,
+    AiPromptTemplate,
+    AiPromptVersion,
+    AiChatSession,
+    AiChatMessage,
+    AiOutputFeedback,
+    AiKnowledgeDoc,
+    AiKnowledgeChunk,
+    AiMemory,
+)
+from app.models.letter import Letter
+from app.models.dual_perspective import DualPerspectiveEvent, DualPerspectiveRecord
+from app.models.museum import MuseumItem
+from app.models.practice import RelationshipPractice, PracticeRecord
+from app.models.anniversary import Anniversary, Wishlist
+from app.models.avatar import AiAvatar, AiAvatarAsset
+
+__all__ = [
+    "User",
+    "UserProfile",
+    "CoupleRelation",
+    "CoupleSpace",
+    "Questionnaire",
+    "QuestionnaireQuestion",
+    "QuestionnaireOption",
+    "QuestionnaireAnswer",
+    "QuestionnaireProgress",
+    "QuestionnaireSubmission",
+    "PsychologyModel",
+    "RelationshipProfile",
+    "ProfileDimensionScore",
+    "CoupleProfile",
+    "AiScene",
+    "AiPromptTemplate",
+    "AiPromptVersion",
+    "AiChatSession",
+    "AiChatMessage",
+    "AiOutputFeedback",
+    "AiKnowledgeDoc",
+    "AiKnowledgeChunk",
+    "AiMemory",
+    "Letter",
+    "DualPerspectiveEvent",
+    "DualPerspectiveRecord",
+    "MuseumItem",
+    "RelationshipPractice",
+    "PracticeRecord",
+    "Anniversary",
+    "Wishlist",
+    "AiAvatar",
+    "AiAvatarAsset",
+]

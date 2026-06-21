@@ -1,0 +1,275 @@
+package com.couple.translator.feature.couple.museum
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.feature.couple.data.model.MuseumDto
+import com.couple.translator.core.ui.components.ErrorDialog
+import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.theme.Accent
+import com.couple.translator.core.ui.theme.AccentLight
+import com.couple.translator.core.ui.theme.Background
+import com.couple.translator.core.ui.theme.Surface
+import com.couple.translator.core.ui.theme.TextTertiary
+
+private val typeFilters = listOf(
+    null to "全部",
+    "letter" to "信件",
+    "photo" to "照片",
+    "word" to "一句话",
+    "record" to "记录",
+    "joke" to "梗",
+    "apology" to "道歉",
+    "promise" to "承诺",
+    "dual_perspective" to "双视角",
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MuseumScreen(
+    onNavigateBack: () -> Unit,
+    onNavigateToDetail: (Long) -> Unit,
+    onNavigateToAdd: () -> Unit,
+    viewModel: MuseumViewModel = hiltViewModel(),
+) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    if (uiState.error.isNotEmpty()) {
+        ErrorDialog(message = uiState.error, onDismiss = { viewModel.clearError() })
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("关系博物馆", style = MaterialTheme.typography.titleLarge) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = onNavigateToAdd,
+                containerColor = Accent,
+                shape = CircleShape,
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "新增藏品", tint = Surface)
+            }
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+        ) {
+            LazyRow(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(typeFilters) { (type, label) ->
+                    FilterChip(
+                        selected = uiState.selectedType == type,
+                        onClick = { viewModel.selectType(type) },
+                        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = AccentLight,
+                            selectedLabelColor = Accent,
+                        ),
+                    )
+                }
+            }
+
+            if (uiState.isLoading) {
+                LoadingIndicator()
+                return@Column
+            }
+
+            if (uiState.items.isEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(48.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        text = "博物馆还是空的",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextTertiary,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "收藏你们珍贵的瞬间",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiary,
+                    )
+                }
+                return@Column
+            }
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
+                item { Spacer(modifier = Modifier.height(8.dp)) }
+
+                uiState.items.groupBy { it.createdAt?.take(7) ?: "" }
+                    .forEach { (month, monthItems) ->
+                        item {
+                            TimelineMonthHeader(month)
+                        }
+                        items(monthItems) { item ->
+                            TimelineItem(
+                                item = item,
+                                onClick = { onNavigateToDetail(item.id) },
+                            )
+                        }
+                    }
+
+                item { Spacer(modifier = Modifier.height(16.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimelineMonthHeader(month: String) {
+    if (month.isNotBlank()) {
+        Text(
+            text = month,
+            style = MaterialTheme.typography.titleSmall,
+            color = Accent,
+            modifier = Modifier.padding(vertical = 12.dp),
+        )
+    }
+}
+
+@Composable
+private fun TimelineItem(
+    item: MuseumDto.MuseumItemResponse,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.width(24.dp),
+        ) {
+            Spacer(modifier = Modifier.height(6.dp))
+            androidx.compose.foundation.Canvas(modifier = Modifier.size(10.dp)) {
+                drawCircle(color = Accent)
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            androidx.compose.foundation.Canvas(modifier = Modifier.size(1.dp, 40.dp)) {
+                drawRect(color = com.couple.translator.core.ui.theme.BorderLight)
+            }
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Card(
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = Surface),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                    )
+                    if (item.story != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = item.story,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextTertiary,
+                            maxLines = 2,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = museumItemTypeText(item.itemType),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Accent,
+                    )
+                }
+                if (item.pinned) {
+                    Icon(
+                        Icons.Default.PushPin,
+                        contentDescription = "已置顶",
+                        tint = Accent,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+internal fun museumItemTypeText(type: String): String = when (type) {
+    "letter" -> "信件"
+    "photo" -> "照片"
+    "word" -> "一句话"
+    "record" -> "记录"
+    "joke" -> "梗"
+    "apology" -> "道歉"
+    "promise" -> "承诺"
+    "dual_perspective" -> "双视角"
+    "chat" -> "聊天"
+    "decision" -> "决定"
+    else -> type
+}

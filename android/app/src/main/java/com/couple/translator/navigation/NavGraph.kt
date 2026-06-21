@@ -1,0 +1,661 @@
+package com.couple.translator.navigation
+
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.navigation.NavHostController
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.couple.translator.core.data.repository.TokenStore
+import com.couple.translator.core.navigation.Screen
+import com.couple.translator.feature.couple.data.repository.CoupleStateManager
+import com.couple.translator.feature.couple.ai.AiSessionListScreen
+import com.couple.translator.feature.couple.ai.ColdWarScreen
+import com.couple.translator.feature.couple.anniversary.AddAnniversaryScreen
+import com.couple.translator.feature.couple.anniversary.AnniversaryListScreen
+import com.couple.translator.core.ui.auth.ForgotPasswordScreen
+import com.couple.translator.core.ui.auth.LoginScreen
+import com.couple.translator.core.ui.auth.RegisterScreen
+import com.couple.translator.feature.couple.avatar.AvatarCustomizeScreen
+import com.couple.translator.feature.couple.couplebind.CoupleBindScreen
+import com.couple.translator.feature.couple.couplebind.CoupleInfoScreen
+import com.couple.translator.feature.couple.dual.CreateDualEventScreen
+import com.couple.translator.feature.couple.dual.DualPerspectiveDetailScreen
+import com.couple.translator.feature.couple.dual.DualPerspectiveListScreen
+import com.couple.translator.feature.couple.dual.SubmitRecordScreen
+import com.couple.translator.feature.couple.letter.ComposeLetterScreen
+import com.couple.translator.feature.couple.letter.LetterDetailScreen
+import com.couple.translator.feature.couple.letter.LetterListScreen
+import com.couple.translator.feature.couple.mediation.MediationExplanationScreen
+import com.couple.translator.feature.couple.mediation.MediationConfirmScreen
+import com.couple.translator.feature.couple.mediation.MediationInputScreen
+import com.couple.translator.feature.couple.mediation.MediationInviteScreen
+import com.couple.translator.feature.couple.mediation.MediationResultScreen
+import com.couple.translator.feature.couple.museum.AddMuseumItemScreen
+import com.couple.translator.feature.couple.museum.MuseumItemDetailScreen
+import com.couple.translator.feature.couple.museum.MuseumScreen
+import com.couple.translator.feature.couple.practice.PracticeDetailScreen
+import com.couple.translator.feature.couple.practice.PracticeListScreen
+import com.couple.translator.feature.couple.practice.PracticeResultScreen
+import com.couple.translator.core.ui.profile.CoupleProfileScreen
+import com.couple.translator.core.ui.profile.ProfileResultScreen
+import com.couple.translator.core.ui.profile.ProfileScreen
+import com.couple.translator.core.ui.questionnaire.QuestionnaireHistoryScreen
+import com.couple.translator.core.ui.questionnaire.QuestionnaireIntroScreen
+import com.couple.translator.core.ui.questionnaire.QuestionnaireResultScreen
+import com.couple.translator.core.ui.questionnaire.QuestionnaireScreen
+import com.couple.translator.feature.couple.wishlist.AddWishlistScreen
+import com.couple.translator.feature.couple.wishlist.WishlistScreen
+import com.couple.translator.feature.single.diary.DiaryListScreen
+import com.couple.translator.feature.single.diary.DiaryDetailScreen
+import com.couple.translator.feature.single.diary.ComposeDiaryScreen
+import com.couple.translator.feature.single.practice.SelfPracticeListScreen
+import com.couple.translator.feature.single.SingleShell
+import com.couple.translator.feature.couple.CoupleShell
+
+@Composable
+fun NavGraph(
+    navController: NavHostController = rememberNavController(),
+    tokenStore: TokenStore? = null,
+    coupleStateManager: CoupleStateManager? = null,
+) {
+    var startDest by remember { mutableStateOf<String?>(null) }
+    val coupleState = coupleStateManager?.state?.collectAsState()?.value
+    val isCoupleMode = coupleState?.mode != com.couple.translator.feature.couple.data.repository.AppMode.SINGLE
+
+    LaunchedEffect(Unit) {
+        val hasToken = tokenStore?.isLoggedIn() == true
+        startDest = if (hasToken) Screen.Main.route else Screen.Login.route
+    }
+
+    if (startDest == null) return
+
+    // 动画参数：300ms + FastOutSlowInEasing，比默认更丝滑
+    val animDuration = 300
+    val animEasing = FastOutSlowInEasing
+
+    NavHost(
+        navController = navController,
+        startDestination = startDest!!,
+        enterTransition = {
+            slideIntoContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.Left,
+                animationSpec = tween(animDuration, easing = animEasing)
+            ) + fadeIn(animationSpec = tween(animDuration / 2))
+        },
+        exitTransition = {
+            slideOutOfContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.Left,
+                animationSpec = tween(animDuration, easing = animEasing)
+            ) + fadeOut(animationSpec = tween(animDuration / 3))
+        },
+        popEnterTransition = {
+            slideIntoContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                animationSpec = tween(animDuration, easing = animEasing)
+            ) + fadeIn(animationSpec = tween(animDuration / 2))
+        },
+        popExitTransition = {
+            slideOutOfContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                animationSpec = tween(animDuration, easing = animEasing)
+            ) + fadeOut(animationSpec = tween(animDuration / 3))
+        },
+    ) {
+        composable(Screen.Login.route) {
+            LoginScreen(
+                onNavigateToRegister = { navController.navigate(Screen.Register.route) },
+                onNavigateToForgotPassword = { navController.navigate(Screen.ForgotPassword.route) },
+                onLoginSuccess = {
+                    navController.navigate(Screen.Main.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(Screen.Register.route) {
+            RegisterScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onRegisterSuccess = {
+                    navController.navigate(Screen.Main.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(Screen.ForgotPassword.route) {
+            ForgotPasswordScreen(
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(Screen.Main.route) {
+            if (isCoupleMode) {
+                CoupleShell(
+                    onNavigateToRoute = { route -> navController.navigate(route) },
+                    onLogout = {
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                    tokenStore = tokenStore,
+                    coupleStateManager = coupleStateManager,
+                )
+            } else {
+                SingleShell(
+                    onNavigateToRoute = { route -> navController.navigate(route) },
+                    onLogout = {
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                    tokenStore = tokenStore,
+                )
+            }
+        }
+
+        composable(Screen.Profile.route) {
+            ProfileScreen(
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(Screen.CoupleBind.route) {
+            CoupleBindScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onBindSuccess = {
+                    navController.navigate(Screen.CoupleInfo.route) {
+                        popUpTo(Screen.CoupleBind.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(Screen.CoupleInfo.route) {
+            CoupleInfoScreen(
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(Screen.QuestionnaireIntro.route) {
+            QuestionnaireIntroScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToQuestionnaire = { questionnaireId ->
+                    navController.navigate("${Screen.Questionnaire.route}/$questionnaireId")
+                },
+                onNavigateToHistory = {
+                    navController.navigate(Screen.QuestionnaireHistory.route)
+                },
+            )
+        }
+
+        composable(
+            route = "${Screen.Questionnaire.route}/{questionnaireId}",
+            arguments = listOf(navArgument("questionnaireId") { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val questionnaireId = backStackEntry.arguments?.getLong("questionnaireId") ?: return@composable
+            QuestionnaireScreen(
+                questionnaireId = questionnaireId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToProfile = { coupleReady ->
+                    navController.navigate("${Screen.QuestionnaireResult.route}/$questionnaireId?coupleReady=$coupleReady") {
+                        popUpTo(Screen.Main.route) { inclusive = false }
+                    }
+                },
+            )
+        }
+
+        composable(
+            route = "${Screen.QuestionnaireResult.route}/{questionnaireId}?coupleReady={coupleReady}&submissionId={submissionId}",
+            arguments = listOf(
+                navArgument("questionnaireId") { type = NavType.LongType },
+                navArgument("coupleReady") { type = NavType.BoolType; defaultValue = false },
+                navArgument("submissionId") { type = NavType.LongType; defaultValue = 0L },
+            ),
+        ) { backStackEntry ->
+            val questionnaireId = backStackEntry.arguments?.getLong("questionnaireId") ?: return@composable
+            val coupleReady = backStackEntry.arguments?.getBoolean("coupleReady") ?: false
+            val submissionId = backStackEntry.arguments?.getLong("submissionId") ?: 0L
+            QuestionnaireResultScreen(
+                questionnaireId = questionnaireId,
+                submissionId = submissionId,
+                coupleProfileReady = coupleReady,
+                onNavigateBack = {
+                    navController.navigate(Screen.Main.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                onNavigateToProfile = {
+                    navController.navigate(Screen.ProfileResult.route)
+                },
+                onNavigateToCoupleProfile = {
+                    navController.navigate(Screen.CoupleProfile.route)
+                },
+            )
+        }
+
+        composable(Screen.QuestionnaireHistory.route) {
+            QuestionnaireHistoryScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToResult = { submissionId ->
+                    navController.navigate("${Screen.QuestionnaireResult.route}/0?coupleReady=false&submissionId=$submissionId")
+                },
+            )
+        }
+
+        composable(Screen.ProfileResult.route) {
+            ProfileResultScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToCoupleProfile = {
+                    navController.navigate(Screen.CoupleProfile.route)
+                },
+                isCoupleMode = isCoupleMode,
+            )
+        }
+
+        composable(Screen.CoupleProfile.route) {
+            CoupleProfileScreen(
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(Screen.AiSessionList.route) {
+            AiSessionListScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSession = { sessionId, sceneKey ->
+                    navController.popBackStack()
+                },
+            )
+        }
+
+        composable(Screen.LetterList.route) {
+            LetterListScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToLetterDetail = { letterId ->
+                    navController.navigate("${Screen.LetterDetail.route}/$letterId")
+                },
+                isCoupleMode = isCoupleMode,
+            )
+        }
+
+        composable(
+            route = "${Screen.LetterDetail.route}/{letterId}",
+            arguments = listOf(navArgument("letterId") { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val letterId = backStackEntry.arguments?.getLong("letterId") ?: return@composable
+            LetterDetailScreen(
+                letterId = letterId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToComposeReply = { replyToId ->
+                    navController.navigate("${Screen.ComposeLetter.route}?draftId=$replyToId")
+                },
+                onNavigateToEdit = { editId ->
+                    navController.navigate("${Screen.ComposeLetter.route}?draftId=$editId")
+                },
+            )
+        }
+
+        composable(
+            route = "${Screen.ComposeLetter.route}?draftId={draftId}",
+            arguments = listOf(
+                navArgument("draftId") {
+                    type = NavType.LongType
+                    defaultValue = 0L
+                },
+            ),
+        ) { backStackEntry ->
+            val draftId = backStackEntry.arguments?.getLong("draftId") ?: 0L
+            ComposeLetterScreen(
+                draftId = if (draftId > 0) draftId else null,
+                onNavigateBack = { navController.popBackStack() },
+                onLetterSent = {
+                    navController.navigate(Screen.Main.route) {
+                        popUpTo(Screen.ComposeLetter.route) { inclusive = true }
+                    }
+                },
+                isCoupleMode = isCoupleMode,
+            )
+        }
+
+        composable(Screen.ColdWar.route) {
+            ColdWarScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToComposeLetter = { content ->
+                    navController.navigate("${Screen.ComposeLetter.route}?draftId=0")
+                },
+            )
+        }
+
+        composable(Screen.MediationExplanation.route) {
+            MediationExplanationScreen(
+                onStartMediation = { navController.navigate(Screen.MediationInvite.route) },
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(
+            route = "${Screen.MediationInvite.route}?sessionId={sessionId}&isInviter={isInviter}",
+            arguments = listOf(
+                navArgument("sessionId") {
+                    type = NavType.LongType
+                    defaultValue = 0L
+                },
+                navArgument("isInviter") {
+                    type = NavType.BoolType
+                    defaultValue = true
+                },
+            ),
+        ) { backStackEntry ->
+            val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L
+            val isInviter = backStackEntry.arguments?.getBoolean("isInviter") ?: true
+            MediationInviteScreen(
+                sessionId = sessionId,
+                isInviter = isInviter,
+                onNavigateToInput = { id ->
+                    navController.navigate("${Screen.MediationInput.route}?sessionId=$id") {
+                        popUpTo(Screen.MediationInvite.route) { inclusive = true }
+                    }
+                },
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(
+            route = "${Screen.MediationInput.route}?sessionId={sessionId}",
+            arguments = listOf(
+                navArgument("sessionId") {
+                    type = NavType.LongType
+                    defaultValue = 0L
+                },
+            ),
+        ) { backStackEntry ->
+            val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L
+            MediationInputScreen(
+                sessionId = sessionId,
+                onSubmitSuccess = { id ->
+                    navController.navigate("${Screen.MediationConfirm.route}?sessionId=$id") {
+                        popUpTo(Screen.MediationInput.route) { inclusive = true }
+                    }
+                },
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(
+            route = "${Screen.MediationConfirm.route}?sessionId={sessionId}",
+            arguments = listOf(
+                navArgument("sessionId") {
+                    type = NavType.LongType
+                    defaultValue = 0L
+                },
+            ),
+        ) { backStackEntry ->
+            val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L
+            MediationConfirmScreen(
+                sessionId = sessionId,
+                onConfirmed = { id ->
+                    navController.navigate("${Screen.MediationResult.route}?sessionId=$id") {
+                        popUpTo(Screen.MediationConfirm.route) { inclusive = true }
+                    }
+                },
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(
+            route = "${Screen.MediationResult.route}?sessionId={sessionId}",
+            arguments = listOf(
+                navArgument("sessionId") {
+                    type = NavType.LongType
+                    defaultValue = 0L
+                },
+            ),
+        ) { backStackEntry ->
+            val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L
+            MediationResultScreen(
+                sessionId = sessionId,
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        // Dual Perspective
+        composable(Screen.DualPerspectiveList.route) {
+            DualPerspectiveListScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToDetail = { eventId ->
+                    navController.navigate("${Screen.DualPerspectiveDetail.route}/$eventId")
+                },
+                onNavigateToCreate = {
+                    navController.navigate(Screen.CreateDualEvent.route)
+                },
+            )
+        }
+
+        composable(
+            route = "${Screen.DualPerspectiveDetail.route}/{eventId}",
+            arguments = listOf(navArgument("eventId") { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val eventId = backStackEntry.arguments?.getLong("eventId") ?: return@composable
+            DualPerspectiveDetailScreen(
+                eventId = eventId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSubmitRecord = { id ->
+                    navController.navigate("${Screen.SubmitDualRecord.route}/$id")
+                },
+            )
+        }
+
+        composable(Screen.CreateDualEvent.route) {
+            CreateDualEventScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSubmitRecord = { eventId ->
+                    navController.navigate("${Screen.SubmitDualRecord.route}/$eventId") {
+                        popUpTo(Screen.CreateDualEvent.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(
+            route = "${Screen.SubmitDualRecord.route}/{eventId}",
+            arguments = listOf(navArgument("eventId") { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val eventId = backStackEntry.arguments?.getLong("eventId") ?: return@composable
+            SubmitRecordScreen(
+                eventId = eventId,
+                onNavigateBack = { navController.popBackStack() },
+                onSubmitSuccess = {
+                    navController.navigate("${Screen.DualPerspectiveDetail.route}/$eventId") {
+                        popUpTo(Screen.SubmitDualRecord.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        // Museum
+        composable(Screen.Museum.route) {
+            MuseumScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToDetail = { itemId ->
+                    navController.navigate("${Screen.MuseumItemDetail.route}/$itemId")
+                },
+                onNavigateToAdd = {
+                    navController.navigate(Screen.AddMuseumItem.route)
+                },
+            )
+        }
+
+        composable(
+            route = "${Screen.MuseumItemDetail.route}/{itemId}",
+            arguments = listOf(navArgument("itemId") { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val itemId = backStackEntry.arguments?.getLong("itemId") ?: return@composable
+            MuseumItemDetailScreen(
+                itemId = itemId,
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(Screen.AddMuseumItem.route) {
+            AddMuseumItemScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onCreated = { navController.popBackStack() },
+            )
+        }
+
+        // Practice
+        composable(Screen.PracticeList.route) {
+            PracticeListScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToDetail = { recordId ->
+                    navController.navigate("${Screen.PracticeDetail.route}/$recordId")
+                },
+                onNavigateToResult = { recordId ->
+                    navController.navigate("${Screen.PracticeResult.route}/$recordId")
+                },
+            )
+        }
+
+        composable(
+            route = "${Screen.PracticeDetail.route}/{recordId}",
+            arguments = listOf(navArgument("recordId") { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val recordId = backStackEntry.arguments?.getLong("recordId") ?: return@composable
+            PracticeDetailScreen(
+                practiceId = 0L,
+                recordId = recordId,
+                onNavigateBack = { navController.popBackStack() },
+                onSubmitSuccess = { id ->
+                    navController.navigate("${Screen.PracticeResult.route}/$id") {
+                        popUpTo(Screen.PracticeList.route) { inclusive = false }
+                    }
+                },
+            )
+        }
+
+        composable(
+            route = "${Screen.PracticeResult.route}/{recordId}",
+            arguments = listOf(navArgument("recordId") { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val recordId = backStackEntry.arguments?.getLong("recordId") ?: return@composable
+            PracticeResultScreen(
+                recordId = recordId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToAddMuseum = {
+                    navController.navigate(Screen.AddMuseumItem.route)
+                },
+            )
+        }
+
+        // Anniversary
+        composable(Screen.AnniversaryList.route) {
+            AnniversaryListScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToAdd = {
+                    navController.navigate(Screen.AddAnniversary.route)
+                },
+            )
+        }
+
+        composable(Screen.AddAnniversary.route) {
+            AddAnniversaryScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onCreated = { navController.popBackStack() },
+            )
+        }
+
+        // Wishlist
+        composable(Screen.Wishlist.route) {
+            WishlistScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToAdd = {
+                    navController.navigate(Screen.AddWishlist.route)
+                },
+            )
+        }
+
+        composable(Screen.AddWishlist.route) {
+            AddWishlistScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onCreated = { navController.popBackStack() },
+            )
+        }
+
+        // Avatar Customize
+        composable(Screen.AvatarCustomize.route) {
+            AvatarCustomizeScreen(
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        // Diary (单身模式专属)
+        composable(Screen.DiaryList.route) {
+            DiaryListScreen(
+                onOpenDrawer = {},
+                onNavigateToDetail = { diaryId ->
+                    navController.navigate("${Screen.DiaryDetail.route}/$diaryId")
+                },
+                onNavigateToCompose = {
+                    navController.navigate(Screen.ComposeDiary.route)
+                },
+            )
+        }
+
+        composable(
+            route = "${Screen.DiaryDetail.route}/{diaryId}",
+            arguments = listOf(navArgument("diaryId") { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val diaryId = backStackEntry.arguments?.getLong("diaryId") ?: return@composable
+            DiaryDetailScreen(
+                diaryId = diaryId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToEdit = { editId ->
+                    navController.navigate("${Screen.ComposeDiary.route}?editId=$editId")
+                },
+            )
+        }
+
+        composable(Screen.ComposeDiary.route) {
+            ComposeDiaryScreen(
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        // Self Practice (单身模式专属)
+        composable(Screen.SelfPracticeList.route) {
+            SelfPracticeListScreen(
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        // Settings
+        composable("settings") {
+            com.couple.translator.core.ui.settings.SettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToProfile = {
+                    navController.navigate(Screen.Profile.route)
+                },
+                onLogout = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                isCoupleMode = isCoupleMode,
+            )
+        }
+    }
+}

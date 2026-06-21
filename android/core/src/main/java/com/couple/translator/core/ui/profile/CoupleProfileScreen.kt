@@ -1,0 +1,258 @@
+package com.couple.translator.core.ui.profile
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.data.model.ProfileDto
+import com.couple.translator.core.ui.components.ErrorDialog
+import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.theme.Accent
+import com.couple.translator.core.ui.theme.AccentLight
+import com.couple.translator.core.ui.theme.Background
+import com.couple.translator.core.ui.theme.BorderLight
+import com.couple.translator.core.ui.theme.Surface
+import com.couple.translator.core.ui.theme.TextPrimary
+import com.couple.translator.core.ui.theme.TextSecondary
+import com.couple.translator.core.ui.theme.TextTertiary
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CoupleProfileScreen(
+    onNavigateBack: () -> Unit,
+    viewModel: CoupleProfileViewModel = hiltViewModel(),
+) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    if (uiState.error.isNotEmpty()) {
+        ErrorDialog(
+            message = uiState.error,
+            onDismiss = { viewModel.clearError() },
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("情侣组合画像") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Background,
+                ),
+            )
+        },
+    ) { padding ->
+        if (uiState.isLoading) {
+            LoadingIndicator(modifier = Modifier.padding(padding))
+            return@Scaffold
+        }
+
+        val coupleProfile = uiState.coupleProfile
+        if (coupleProfile == null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = "双方都完成问卷后才能查看组合画像",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = TextSecondary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 32.dp),
+                )
+            }
+            return@Scaffold
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = AccentLight),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = uiState.conflictPatternName,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Accent,
+                        fontWeight = FontWeight.Bold,
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = uiState.conflictPatternDescription,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            coupleProfile.summary?.let { summary ->
+                Text(
+                    text = "画像摘要",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = TextSecondary,
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    ProfileMiniCard(
+                        title = "我的画像",
+                        profile = coupleProfile.userAProfile,
+                        dimensions = coupleProfile.userADimensions,
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    ProfileMiniCard(
+                        title = "TA 的画像",
+                        profile = coupleProfile.userBProfile,
+                        dimensions = coupleProfile.userBDimensions,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun ProfileMiniCard(
+    title: String,
+    profile: ProfileDto.RelationshipProfileResponse?,
+    dimensions: List<ProfileDto.DimensionScoreResponse>,
+) {
+    val profileTypeName = when (profile?.profileType) {
+        "secure" -> "安全型"
+        "anxious" -> "焦虑型"
+        "dismissive" -> "疏离型"
+        "fearful" -> "恐惧型"
+        else -> "未知"
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Surface),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                color = TextTertiary,
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = profileTypeName,
+                style = MaterialTheme.typography.titleMedium,
+                color = Accent,
+                fontWeight = FontWeight.Bold,
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            dimensions.take(4).forEach { dim ->
+                val name = when (dim.dimensionKey) {
+                    "attachment_anxiety" -> "焦虑"
+                    "attachment_avoidance" -> "回避"
+                    "conflict_pursue" -> "追问"
+                    "conflict_withdraw" -> "退缩"
+                    else -> dim.dimensionKey.take(4)
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                    Text(
+                        text = "${dim.score.toInt()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,44 @@
+from sqlalchemy.orm import Session
+from typing import Optional
+
+from app.models.couple_relation import CoupleRelation
+from app.models.avatar import AiAvatar
+from app.repositories import avatar_repo, couple_repo
+
+
+def _check_relation(db: Session, user_id: int) -> CoupleRelation:
+    relation = couple_repo.get_active_relation_by_user(db, user_id)
+    if not relation:
+        raise ValueError("30005")
+    return relation
+
+
+def get_avatar(db: Session, user_id: int) -> AiAvatar:
+    relation = _check_relation(db, user_id)
+    avatar = avatar_repo.get_or_create_avatar(db, relation.id)
+    db.commit()
+    return avatar
+
+
+def update_avatar(db: Session, user_id: int, data: dict) -> AiAvatar:
+    relation = _check_relation(db, user_id)
+    avatar = avatar_repo.get_or_create_avatar(db, relation.id)
+    avatar = avatar_repo.update_avatar(db, avatar, data)
+    db.commit()
+    db.refresh(avatar)
+    return avatar
+
+
+def get_assets(db: Session, user_id: int) -> list:
+    _check_relation(db, user_id)
+    assets = avatar_repo.list_assets(db)
+    return assets
+
+
+def set_voice_style(db: Session, user_id: int, voice_style: str) -> AiAvatar:
+    relation = _check_relation(db, user_id)
+    avatar = avatar_repo.get_or_create_avatar(db, relation.id)
+    avatar = avatar_repo.update_avatar(db, avatar, {"voice_style": voice_style})
+    db.commit()
+    db.refresh(avatar)
+    return avatar

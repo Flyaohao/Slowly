@@ -1,0 +1,24 @@
+from sqlalchemy import String, BigInteger, Boolean, Text, DateTime, ForeignKey, Index
+from sqlalchemy.orm import Mapped, mapped_column
+from datetime import datetime
+from typing import Optional
+
+from app.models.base import BigIntPKMixin, TimestampMixin, Base
+
+
+class DiaryEntry(BigIntPKMixin, TimestampMixin, Base):
+    __tablename__ = "diary_entry"
+    __table_args__ = (
+        Index("ix_diary_entry_user_id", "user_id"),
+        Index("ix_diary_entry_deleted_at", "deleted_at"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("user.id"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    mood: Mapped[Optional[str]] = mapped_column(String(50))
+    weather: Mapped[Optional[str]] = mapped_column(String(50))
+    is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)

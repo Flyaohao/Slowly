@@ -1,0 +1,128 @@
+package com.couple.translator.core.ui.profile
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.couple.translator.core.data.model.UserDto
+import com.couple.translator.core.data.repository.UserRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+data class ProfileUiState(
+    val nickname: String = "",
+    val gender: String = "",
+    val birthday: String = "",
+    val city: String = "",
+    val signature: String = "",
+    val avatarUrl: String = "",
+    val isEditing: Boolean = false,
+    val isLoading: Boolean = false,
+    val error: String = "",
+)
+
+sealed class ProfileUiEvent {
+    data object SaveSuccess : ProfileUiEvent()
+    data class ShowError(val message: String) : ProfileUiEvent()
+}
+
+@HiltViewModel
+class ProfileViewModel @Inject constructor(
+    private val userRepository: UserRepository,
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(ProfileUiState())
+    val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
+
+    private val _event = MutableSharedFlow<ProfileUiEvent>()
+    val event: SharedFlow<ProfileUiEvent> = _event.asSharedFlow()
+
+    init {
+        loadProfile()
+    }
+
+    fun loadProfile() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            userRepository.getCurrentUser().fold(
+                onSuccess = { user ->
+                    _uiState.update {
+                        it.copy(
+                            nickname = user.nickname ?: "",
+                            gender = user.gender ?: "",
+                            birthday = user.birthday ?: "",
+                            city = user.city ?: "",
+                            signature = user.signature ?: "",
+                            avatarUrl = user.avatarUrl ?: "",
+                            isLoading = false,
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isLoading = false, error = error.message ?: "加载失败")
+                    }
+                },
+            )
+        }
+    }
+
+    fun onNicknameChange(value: String) {
+        _uiState.update { it.copy(nickname = value) }
+    }
+
+    fun onGenderChange(value: String) {
+        _uiState.update { it.copy(gender = value) }
+    }
+
+    fun onBirthdayChange(value: String) {
+        _uiState.update { it.copy(birthday = value) }
+    }
+
+    fun onCityChange(value: String) {
+        _uiState.update { it.copy(city = value) }
+    }
+
+    fun onSignatureChange(value: String) {
+        _uiState.update { it.copy(signature = value) }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(error = "") }
+    }
+
+    fun toggleEditing() {
+        _uiState.update { it.copy(isEditing = !it.isEditing) }
+    }
+
+    fun save() {
+        val state = _uiState.value
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            val request = UserDto.UpdateProfileRequest(
+                nickname = state.nickname.ifBlank { null },
+                gender = state.gender.ifBlank { null },
+                birthday = state.birthday.ifBlank { null },
+                city = state.city.ifBlank { null },
+                signature = state.signature.ifBlank { null },
+            )
+            userRepository.updateProfile(request).fold(
+                onSuccess = {
+                    _uiState.update { it.copy(isLoading = false, isEditing = false) }
+                    _event.emit(ProfileUiEvent.SaveSuccess)
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isLoading = false, error = error.message ?: "保存失败")
+                    }
+                },
+            )
+        }
+    }
+}
