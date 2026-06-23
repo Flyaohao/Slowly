@@ -15,6 +15,7 @@ import javax.inject.Inject
 data class CoupleProfileUiState(
     val coupleProfile: ProfileDto.CoupleProfileResponse? = null,
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
     val error: String = "",
 ) {
     val conflictPatternName: String
@@ -52,6 +53,24 @@ class CoupleProfileViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.update { it.copy(error = "") }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true, error = "") }
+            profileRepository.getCoupleProfile().fold(
+                onSuccess = { coupleProfile ->
+                    _uiState.update {
+                        it.copy(coupleProfile = coupleProfile, isRefreshing = false)
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isRefreshing = false, error = error.message ?: "加载失败")
+                    }
+                },
+            )
+        }
     }
 
     fun loadCoupleProfile() {

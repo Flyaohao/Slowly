@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.couple.data.model.WishlistDto
 import com.couple.translator.core.ui.components.ErrorDialog
+import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.Background
@@ -82,16 +83,20 @@ fun WishlistScreen(
             }
         },
     ) { padding ->
+        PullToRefreshLayout(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.padding(padding),
+        ) {
         if (uiState.isLoading) {
             LoadingIndicator()
-            return@Scaffold
+            return@PullToRefreshLayout
         }
 
         if (uiState.items.isEmpty()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
                     .padding(48.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -108,7 +113,7 @@ fun WishlistScreen(
                     color = TextTertiary,
                 )
             }
-            return@Scaffold
+            return@PullToRefreshLayout
         }
 
         val pending = uiState.items.filter { it.status == "pending" }
@@ -117,7 +122,6 @@ fun WishlistScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -158,6 +162,7 @@ fun WishlistScreen(
             }
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
+        }
         }
     }
 }

@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.AiDto
 import com.couple.translator.core.ui.components.ErrorDialog
+import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.Background
@@ -83,16 +84,20 @@ fun AiSessionListScreen(
             )
         },
     ) { padding ->
+        PullToRefreshLayout(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.padding(padding),
+        ) {
         if (uiState.isLoading) {
-            LoadingIndicator(modifier = Modifier.padding(padding))
-            return@Scaffold
+            LoadingIndicator()
+            return@PullToRefreshLayout
         }
 
         if (uiState.sessions.isEmpty()) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                    .fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -102,13 +107,12 @@ fun AiSessionListScreen(
                     color = TextSecondary,
                 )
             }
-            return@Scaffold
+            return@PullToRefreshLayout
         }
 
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -123,6 +127,7 @@ fun AiSessionListScreen(
             }
 
             item { Spacer(modifier = Modifier.height(8.dp)) }
+        }
         }
     }
 }

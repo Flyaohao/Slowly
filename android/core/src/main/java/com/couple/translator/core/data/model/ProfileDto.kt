@@ -44,4 +44,9 @@ object ProfileDto {
         @Json(name = "user_a_dimensions") val userADimensions: List<DimensionScoreResponse> = emptyList(),
         @Json(name = "user_b_dimensions") val userBDimensions: List<DimensionScoreResponse> = emptyList(),
     )
+
+    @JsonClass(generateAdapter = true)
+    data class AiReportResponse(
+        @Json(name = "report") val report: String,
+    )
 }

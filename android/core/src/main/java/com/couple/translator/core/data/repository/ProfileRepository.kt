@@ -60,4 +60,17 @@ class ProfileRepository @Inject constructor(
             Result.failure(e)
         }
     }
+
+    suspend fun getAiReport(): Result<String> {
+        return try {
+            val response = apiService.getAiReport()
+            if (response.isSuccess && response.data != null) {
+                Result.success(response.data.report)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

@@ -14,6 +14,7 @@ import javax.inject.Inject
 
 data class QuestionnaireResultUiState(
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
     val isAnalyzing: Boolean = false,
     val analysis: QuestionnaireDto.AnalysisResponse? = null,
     val error: String = "",
@@ -67,6 +68,32 @@ class QuestionnaireResultViewModel @Inject constructor(
         loadAnalysis(questionnaireId)
     }
 
+    fun refresh() {
+        if (questionnaireId <= 0) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true, error = "") }
+            questionnaireRepository.analyzeQuestionnaire(questionnaireId).fold(
+                onSuccess = { analysis ->
+                    _uiState.update {
+                        it.copy(
+                            isRefreshing = false,
+                            analysis = analysis,
+                            error = "",
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(
+                            isRefreshing = false,
+                            error = error.message ?: "分析生成失败",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
     fun clearError() {
         _uiState.update { it.copy(error = "") }
     }
@@ -76,7 +103,23 @@ class QuestionnaireResultViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = "") }
             questionnaireRepository.getSubmissionDetail(subId).fold(
                 onSuccess = { submission ->
-                    val analysis = if (!submission.analysisText.isNullOrBlank()) {
+                    // 优先使用结构化分析字段（后端已解析 analysis_text JSON）
+                    val hasStructured = !submission.profileAnalysis.isNullOrBlank()
+                    val analysis = if (hasStructured) {
+                        QuestionnaireDto.AnalysisResponse(
+                            analysis = "",
+                            profileType = submission.profileType ?: "",
+                            profileLabel = profileTypeLabels[submission.profileType] ?: submission.profileType ?: "",
+                            confidence = 0f,
+                            dimensionScores = submission.dimensionScores ?: emptyMap(),
+                            profileAnalysis = submission.profileAnalysis ?: "",
+                            dimensionAnalyses = submission.dimensionAnalyses ?: emptyList(),
+                            strengths = submission.strengths ?: "",
+                            growthTips = submission.growthTips ?: emptyList(),
+                            communicationGuide = submission.communicationGuide ?: "",
+                        )
+                    } else if (!submission.analysisText.isNullOrBlank()) {
+                        // 兼容旧格式：纯文本 analysisText
                         QuestionnaireDto.AnalysisResponse(
                             analysis = submission.analysisText,
                             profileType = submission.profileType ?: "",
@@ -85,7 +128,7 @@ class QuestionnaireResultViewModel @Inject constructor(
                             dimensionScores = submission.dimensionScores ?: emptyMap(),
                         )
                     } else {
-                        // No analysis text, trigger a new analysis
+                        // 无分析数据，触发新的 AI 分析
                         questionnaireRepository.analyzeQuestionnaire(submission.questionnaireId).getOrNull()
                     }
                     _uiState.update {

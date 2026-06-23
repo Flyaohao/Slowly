@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.QuestionnaireDto
 import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.AccentLight
 import com.couple.translator.core.ui.theme.Background
@@ -124,16 +125,20 @@ fun QuestionnaireHistoryScreen(
             )
         },
     ) { padding ->
+        PullToRefreshLayout(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.padding(padding),
+        ) {
         if (uiState.isLoading) {
-            LoadingIndicator(modifier = Modifier.padding(padding))
-            return@Scaffold
+            LoadingIndicator()
+            return@PullToRefreshLayout
         }
 
         if (uiState.submissions.isEmpty()) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                    .fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -150,13 +155,12 @@ fun QuestionnaireHistoryScreen(
                     )
                 }
             }
-            return@Scaffold
+            return@PullToRefreshLayout
         }
 
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 16.dp),
@@ -168,6 +172,7 @@ fun QuestionnaireHistoryScreen(
                     onDelete = { deleteTarget = submission },
                 )
             }
+        }
         }
     }
 }

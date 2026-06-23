@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.StarOutline
 import com.couple.translator.core.data.model.HomeDto
 import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.feature.couple.presence.MeetCountdown
 import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.AccentLight
@@ -73,6 +74,10 @@ fun NewHomeScreen(
         return
     }
 
+    PullToRefreshLayout(
+        isRefreshing = uiState.isRefreshing,
+        onRefresh = { viewModel.refresh() },
+    ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -148,6 +153,7 @@ fun NewHomeScreen(
         }
 
         Spacer(modifier = Modifier.height(100.dp))
+    }
     }
 }
 

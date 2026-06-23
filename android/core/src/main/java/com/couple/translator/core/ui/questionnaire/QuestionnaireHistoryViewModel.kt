@@ -14,6 +14,7 @@ import javax.inject.Inject
 
 data class QuestionnaireHistoryUiState(
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
     val submissions: List<QuestionnaireDto.SubmissionResponse> = emptyList(),
     val error: String = "",
 )
@@ -28,6 +29,24 @@ class QuestionnaireHistoryViewModel @Inject constructor(
 
     init {
         loadHistory()
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true, error = "") }
+            questionnaireRepository.getSubmissionHistory().fold(
+                onSuccess = { submissions ->
+                    _uiState.update {
+                        it.copy(isRefreshing = false, submissions = submissions)
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isRefreshing = false, error = error.message ?: "加载失败")
+                    }
+                },
+            )
+        }
     }
 
     fun loadHistory() {

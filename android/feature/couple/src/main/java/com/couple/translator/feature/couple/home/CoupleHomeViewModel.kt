@@ -42,6 +42,7 @@ data class NewHomeUiState(
     val isBound: Boolean = false,
     val daysCount: Int = 0,
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
     val error: String = "",
     val primaryAction: HomePrimaryAction = HomePrimaryAction.WriteLetter,
     val primaryButtonText: String = "写一封信",
@@ -73,6 +74,139 @@ class NewHomeViewModel @Inject constructor(
 
     init {
         loadData()
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true, error = "") }
+
+            try {
+                val isLoggedIn = tokenStore.isLoggedIn()
+                if (!isLoggedIn) {
+                    _uiState.update {
+                        it.copy(
+                            isRefreshing = false,
+                            isBound = false,
+                            heroText = "这个空间还差一个人。",
+                            primaryButtonText = "邀请 TA",
+                            primaryAction = HomePrimaryAction.InvitePartner,
+                        )
+                    }
+                    return@launch
+                }
+
+                val userResult = userRepository.getCurrentUser()
+                val nickname = userResult.getOrNull()?.nickname
+
+                val homeResult = homeRepository.getHomeData()
+                val homeData = homeResult.getOrNull()
+
+                if (homeData == null) {
+                    _uiState.update {
+                        it.copy(
+                            nickname = nickname,
+                            coupleInfo = null,
+                            isBound = false,
+                            isRefreshing = false,
+                            heroText = "这个空间还差一个人。",
+                            primaryButtonText = "邀请 TA",
+                            primaryAction = HomePrimaryAction.InvitePartner,
+                        )
+                    }
+                    return@launch
+                }
+
+                val relation = homeData.relation
+                val loveDays = relation?.loveDays ?: 0
+                val spaceName = homeData.space?.name ?: "我们的空间"
+
+                val pendingLetters = homeData.pendingLetters
+                val hasDraft = false
+                val hasMediation = homeData.activeMediation != null
+                val hasAnniversary = homeData.upcomingAnniversary != null
+
+                val action: HomePrimaryAction
+                val buttonText: String
+                val heroText: String
+
+                when {
+                    pendingLetters.isNotEmpty() -> {
+                        action = HomePrimaryAction.ReadLetter
+                        buttonText = "去读信"
+                        heroText = "有一封信还在等你。"
+                    }
+                    hasMediation -> {
+                        action = HomePrimaryAction.ContinueMediation
+                        buttonText = "继续调解"
+                        heroText = "还有一场未完成的对话。"
+                    }
+                    hasAnniversary -> {
+                        action = HomePrimaryAction.ViewAnniversary
+                        buttonText = "看看纪念日"
+                        heroText = "有一个特别的日子快到了。"
+                    }
+                    else -> {
+                        action = HomePrimaryAction.WriteLetter
+                        buttonText = "写一封信"
+                        heroText = "这里是只属于你们的地方。"
+                    }
+                }
+
+                val recentItems = mutableListOf<RecentItem>()
+                pendingLetters.firstOrNull()?.let { letter ->
+                    recentItems.add(
+                        RecentItem(
+                            id = letter.id,
+                            title = letter.title ?: "无标题",
+                            excerpt = "有一封信等你回应",
+                            timeLabel = letter.sendTime?.take(10) ?: "",
+                            type = "letter",
+                        ),
+                    )
+                }
+                homeData.futureLetter?.let { future ->
+                    recentItems.add(
+                        RecentItem(
+                            id = future.id,
+                            title = future.title ?: "未来信",
+                            excerpt = "一封还未到时间的信",
+                            timeLabel = "解锁于 ${future.unlockTime?.take(10) ?: ""}",
+                            type = "future_letter",
+                        ),
+                    )
+                }
+
+                _uiState.update {
+                    it.copy(
+                        nickname = nickname,
+                        coupleInfo = null,
+                        isBound = true,
+                        isRefreshing = false,
+                        daysCount = loveDays,
+                        heroText = heroText,
+                        primaryButtonText = buttonText,
+                        primaryAction = action,
+                        recentItems = recentItems.take(2),
+                        hasUnreadLetter = pendingLetters.isNotEmpty(),
+                        hasDraft = hasDraft,
+                        hasAnniversary = hasAnniversary,
+                        homeData = homeData,
+                        pendingLetterCount = homeData.pendingLetterCount,
+                        hasActiveMediation = hasMediation,
+                        hasFutureLetter = homeData.futureLetter != null,
+                        upcomingAnniversaryDays = homeData.upcomingAnniversary?.daysUntil,
+                        spaceName = spaceName,
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isRefreshing = false,
+                        error = e.message ?: "加载失败",
+                    )
+                }
+            }
+        }
     }
 
     fun loadData() {

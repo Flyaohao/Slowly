@@ -29,28 +29,33 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 import com.couple.translator.core.navigation.Screen
 
 @Composable
 fun SingleDrawerContent(
+    nickname: String? = null,
     onNavigateToRoute: (String) -> Unit,
     onNavigateToBind: () -> Unit,
+    onNavigateToProfile: () -> Unit = {},
     onLogout: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Background)
+            .background(AppBackground)
             .padding(horizontal = 20.dp, vertical = 40.dp),
     ) {
-        // 身份区域
-        DrawerIdentitySection()
+        // 身份区域 — 可点击跳转个人信息
+        DrawerIdentitySection(
+            nickname = nickname,
+            onClick = onNavigateToProfile,
+        )
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -68,7 +73,7 @@ fun SingleDrawerContent(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
-        HorizontalDivider(color = BorderLight)
+        HorizontalDivider(color = AppBorderLight)
         Spacer(modifier = Modifier.height(16.dp))
 
         // 绑定情侣（高亮）
@@ -81,7 +86,7 @@ fun SingleDrawerContent(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        HorizontalDivider(color = BorderLight)
+        HorizontalDivider(color = AppBorderLight)
         Spacer(modifier = Modifier.height(16.dp))
 
         DrawerNavItem(
@@ -93,9 +98,17 @@ fun SingleDrawerContent(
 }
 
 @Composable
-private fun DrawerIdentitySection() {
+private fun DrawerIdentitySection(
+    nickname: String?,
+    onClick: () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
     ) {
         Icon(
             imageVector = Icons.Outlined.Person,
@@ -104,20 +117,20 @@ private fun DrawerIdentitySection() {
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(AccentLight)
+                .background(AppAccentLight)
                 .padding(12.dp),
         )
         Spacer(modifier = Modifier.width(12.dp))
         Column {
             Text(
-                text = "我的空间",
+                text = nickname ?: "朋友",
                 style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary,
+                color = AppTextPrimary,
             )
             Text(
                 text = "单身模式",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextTertiary,
+                color = AppTextTertiary,
             )
         }
     }
@@ -141,14 +154,14 @@ private fun DrawerNavItem(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (highlight) Accent else TextSecondary,
+            tint = if (highlight) Accent else AppTextSecondary,
             modifier = Modifier.size(20.dp),
         )
         Spacer(modifier = Modifier.width(14.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = if (highlight) Accent else TextPrimary,
+            color = if (highlight) Accent else AppTextPrimary,
         )
     }
 }

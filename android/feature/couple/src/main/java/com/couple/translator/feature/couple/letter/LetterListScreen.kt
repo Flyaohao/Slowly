@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.couple.data.model.LetterDto
+import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.AccentLight
 import com.couple.translator.core.ui.theme.Background
@@ -156,10 +157,14 @@ fun LetterListScreen(
             )
         },
     ) { padding ->
+        PullToRefreshLayout(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.padding(padding),
+        ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+                .fillMaxSize(),
         ) {
             // Tabs
             ScrollableTabRow(
@@ -221,6 +226,7 @@ fun LetterListScreen(
                     }
                 }
             }
+        }
         }
     }
 }

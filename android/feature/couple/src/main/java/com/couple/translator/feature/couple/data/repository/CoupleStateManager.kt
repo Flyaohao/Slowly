@@ -1,6 +1,7 @@
 package com.couple.translator.feature.couple.data.repository
 
 import com.couple.translator.core.data.model.CoupleDto
+import com.couple.translator.core.network.SharedApiService
 import com.couple.translator.feature.couple.network.CoupleApiService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,11 +20,13 @@ data class CoupleState(
     val mode: AppMode = AppMode.SINGLE,
     val isLoading: Boolean = true,
     val coupleInfo: CoupleDto.CoupleRelationResponse? = null,
+    val userNickname: String? = null,
 )
 
 @Singleton
 class CoupleStateManager @Inject constructor(
     private val apiService: CoupleApiService,
+    private val sharedApiService: SharedApiService,
 ) {
     private val _state = MutableStateFlow(CoupleState())
     val state: StateFlow<CoupleState> = _state.asStateFlow()
@@ -53,6 +56,16 @@ class CoupleStateManager @Inject constructor(
                 it.copy(mode = AppMode.SINGLE, coupleInfo = null, isLoading = false)
             }
         }
+
+        // 加载用户昵称（单身/情侣模式通用）
+        try {
+            val homeResponse = sharedApiService.getHomeData()
+            if (homeResponse.isSuccess && homeResponse.data != null) {
+                val data = homeResponse.data!!
+                val nickname = data.userNickname ?: data.relation?.userNickname
+                _state.update { it.copy(userNickname = nickname) }
+            }
+        } catch (_: Exception) {}
     }
 
     fun setCoupleBound(info: CoupleDto.CoupleRelationResponse) {

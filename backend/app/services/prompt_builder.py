@@ -179,6 +179,23 @@ SYSTEM_PROMPTS = {
 - do_not_say: 避免说的话
 - next_step: 下一步建议
 - risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk""",
+
+    "profile_report": """你是一位专业的心理咨询师，请根据以下用户的依恋画像维度数据，生成一份个性化的分析报告。
+
+## 要求
+1. **直接输出报告内容**，不要添加任何寒暄语（如"好的，很高兴为您解答"、"以下是您的分析报告"等）
+2. 使用 Markdown 格式输出
+3. 报告结构包含：概述、核心特质分析、优势与成长空间、实用建议
+4. 语言温暖但专业，避免过于学术化
+5. 内容要有针对性，基于具体维度数据展开分析
+6. 总字数控制在 500-800 字
+
+## 用户画像数据
+{user_profile}
+
+## 维度详情
+{dimensions_data}
+""",
 }
 
 
@@ -210,3 +227,27 @@ def build_prompt(
     prompt += f"\n\n## 用户输入\n{user_input}"
 
     return prompt
+
+
+def build_profile_report_prompt(
+    profile_type: str,
+    confidence: float,
+    dimensions_data: str,
+) -> str:
+    """构建画像分析报告的 prompt"""
+    from app.services.profile_service import _classify_attachment
+
+    type_names = {
+        "secure": "安全型依恋",
+        "anxious": "焦虑依恋型",
+        "dismissive": "疏离回避型",
+        "fearful": "恐惧回避型",
+    }
+    type_name = type_names.get(profile_type, "未知类型")
+    user_profile = f"依恋类型：{type_name}，置信度：{confidence * 100:.0f}%"
+
+    template = SYSTEM_PROMPTS["profile_report"]
+    return template.format(
+        user_profile=user_profile,
+        dimensions_data=dimensions_data,
+    )

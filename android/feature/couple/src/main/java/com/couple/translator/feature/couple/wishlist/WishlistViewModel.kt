@@ -15,6 +15,7 @@ import javax.inject.Inject
 data class WishlistUiState(
     val items: List<WishlistDto.WishlistResponse> = emptyList(),
     val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
     val error: String = "",
 )
 
@@ -28,6 +29,26 @@ class WishlistViewModel @Inject constructor(
 
     init {
         loadWishlists()
+    }
+
+    fun refresh() {
+        _uiState.update { it.copy(isRefreshing = true, error = "") }
+        viewModelScope.launch {
+            repository.getWishlists().fold(
+                onSuccess = { response ->
+                    response?.let {
+                        _uiState.update { state ->
+                            state.copy(items = it.items, isRefreshing = false)
+                        }
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isRefreshing = false, error = error.message ?: "加载失败")
+                    }
+                },
+            )
+        }
     }
 
     fun clearError() {

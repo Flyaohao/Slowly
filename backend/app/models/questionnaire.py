@@ -91,3 +91,9 @@ class QuestionnaireSubmission(BigIntPKMixin, TimestampMixin, Base):
     dimension_scores: Mapped[Optional[dict]] = mapped_column(JSON)
     analysis_text: Mapped[Optional[str]] = mapped_column(Text)
     couple_profile_ready: Mapped[bool] = mapped_column(Boolean, default=False)
+    # AI 分析报告结构化字段
+    profile_analysis: Mapped[Optional[str]] = mapped_column(Text)
+    dimension_analyses: Mapped[Optional[dict]] = mapped_column(JSON)
+    strengths: Mapped[Optional[str]] = mapped_column(Text)
+    growth_tips: Mapped[Optional[dict]] = mapped_column(JSON)
+    communication_guide: Mapped[Optional[str]] = mapped_column(Text)

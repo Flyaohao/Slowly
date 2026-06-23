@@ -15,6 +15,7 @@ import javax.inject.Inject
 data class AnniversaryListUiState(
     val anniversaries: List<AnniversaryDto.AnniversaryResponse> = emptyList(),
     val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
     val error: String = "",
 )
 
@@ -28,6 +29,26 @@ class AnniversaryListViewModel @Inject constructor(
 
     init {
         loadAnniversaries()
+    }
+
+    fun refresh() {
+        _uiState.update { it.copy(isRefreshing = true, error = "") }
+        viewModelScope.launch {
+            repository.getAnniversaries().fold(
+                onSuccess = { response ->
+                    response?.let {
+                        _uiState.update { state ->
+                            state.copy(anniversaries = it.items, isRefreshing = false)
+                        }
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isRefreshing = false, error = error.message ?: "加载失败")
+                    }
+                },
+            )
+        }
     }
 
     fun clearError() {

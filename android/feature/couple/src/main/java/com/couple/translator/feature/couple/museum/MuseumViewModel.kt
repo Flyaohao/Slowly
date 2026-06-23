@@ -16,6 +16,7 @@ data class MuseumUiState(
     val items: List<MuseumDto.MuseumItemResponse> = emptyList(),
     val selectedType: String? = null,
     val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
     val error: String = "",
 )
 
@@ -29,6 +30,27 @@ class MuseumViewModel @Inject constructor(
 
     init {
         loadItems()
+    }
+
+    fun refresh() {
+        val type = _uiState.value.selectedType
+        _uiState.update { it.copy(isRefreshing = true, error = "") }
+        viewModelScope.launch {
+            repository.getItems(type).fold(
+                onSuccess = { response ->
+                    response?.let {
+                        _uiState.update { state ->
+                            state.copy(items = it.items, isRefreshing = false)
+                        }
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isRefreshing = false, error = error.message ?: "加载失败")
+                    }
+                },
+            )
+        }
     }
 
     fun clearError() {

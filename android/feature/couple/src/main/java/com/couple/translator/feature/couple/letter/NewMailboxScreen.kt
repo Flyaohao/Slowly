@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.couple.data.model.LetterDto
 import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.AccentLight
 import com.couple.translator.core.ui.theme.Background
@@ -75,6 +76,10 @@ fun NewMailboxScreen(
         return
     }
 
+    PullToRefreshLayout(
+        isRefreshing = uiState.isRefreshing,
+        onRefresh = { viewModel.refresh(isCoupleMode) },
+    ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -103,6 +108,7 @@ fun NewMailboxScreen(
         }
 
         Spacer(modifier = Modifier.height(100.dp))
+    }
     }
 }
 

@@ -24,6 +24,7 @@ data class ProfileUiState(
     val avatarUrl: String = "",
     val isEditing: Boolean = false,
     val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
     val error: String = "",
 )
 
@@ -45,6 +46,32 @@ class ProfileViewModel @Inject constructor(
 
     init {
         loadProfile()
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true) }
+            userRepository.getCurrentUser().fold(
+                onSuccess = { user ->
+                    _uiState.update {
+                        it.copy(
+                            nickname = user.nickname ?: "",
+                            gender = user.gender ?: "",
+                            birthday = user.birthday ?: "",
+                            city = user.city ?: "",
+                            signature = user.signature ?: "",
+                            avatarUrl = user.avatarUrl ?: "",
+                            isRefreshing = false,
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isRefreshing = false, error = error.message ?: "加载失败")
+                    }
+                },
+            )
+        }
     }
 
     fun loadProfile() {

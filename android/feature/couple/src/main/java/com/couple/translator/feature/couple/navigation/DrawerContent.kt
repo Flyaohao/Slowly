@@ -44,12 +44,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 import com.couple.translator.feature.couple.data.repository.AppMode
 import com.couple.translator.feature.couple.data.repository.CoupleState
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
@@ -80,7 +80,7 @@ fun DrawerContent(
         )
 
         Spacer(modifier = Modifier.height(8.dp))
-        HorizontalDivider(color = BorderLight)
+        HorizontalDivider(color = AppBorderLight)
         Spacer(modifier = Modifier.height(8.dp))
 
         // 我的画像 - 单身模式也可用
@@ -137,14 +137,14 @@ fun DrawerContent(
             Text(
                 text = "解绑冷静期中",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextTertiary,
+                color = AppTextTertiary,
                 modifier = Modifier.padding(horizontal = 4.dp),
             )
         }
 
         Spacer(modifier = Modifier.weight(1f))
         Spacer(modifier = Modifier.height(16.dp))
-        HorizontalDivider(color = BorderLight)
+        HorizontalDivider(color = AppBorderLight)
         Spacer(modifier = Modifier.height(8.dp))
 
         // 单身模式下突出显示绑定入口
@@ -190,7 +190,7 @@ private fun DrawerIdentitySection(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(AccentLight),
+                .background(AppAccentLight),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -203,14 +203,14 @@ private fun DrawerIdentitySection(
         Spacer(modifier = Modifier.width(14.dp))
         Column {
             Text(
-                text = coupleState.coupleInfo?.space?.name ?: "我的空间",
+                text = coupleState.userNickname ?: coupleState.coupleInfo?.space?.name ?: "我的空间",
                 style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary,
+                color = AppTextPrimary,
             )
             Text(
-                text = if (isCoupleMode) "情侣空间" else "点击绑定情侣",
+                text = if (isCoupleMode) "情侣空间" else "单身模式",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextTertiary,
+                color = AppTextTertiary,
             )
         }
     }
@@ -234,14 +234,14 @@ private fun DrawerNavItem(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (highlight) Accent else TextSecondary,
+            tint = if (highlight) Accent else AppTextSecondary,
             modifier = Modifier.size(20.dp),
         )
         Spacer(modifier = Modifier.width(14.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = if (highlight) Accent else TextPrimary,
+            color = if (highlight) Accent else AppTextPrimary,
         )
     }
 }

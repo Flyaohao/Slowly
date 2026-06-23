@@ -15,6 +15,7 @@ import javax.inject.Inject
 data class DualPerspectiveListUiState(
     val events: List<DualPerspectiveDto.DualEventResponse> = emptyList(),
     val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
     val error: String = "",
 )
 
@@ -28,6 +29,26 @@ class DualPerspectiveListViewModel @Inject constructor(
 
     init {
         loadEvents()
+    }
+
+    fun refresh() {
+        _uiState.update { it.copy(isRefreshing = true, error = "") }
+        viewModelScope.launch {
+            repository.getEvents().fold(
+                onSuccess = { response ->
+                    response?.let {
+                        _uiState.update { state ->
+                            state.copy(events = it.items, isRefreshing = false)
+                        }
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isRefreshing = false, error = error.message ?: "加载失败")
+                    }
+                },
+            )
+        }
     }
 
     fun clearError() {

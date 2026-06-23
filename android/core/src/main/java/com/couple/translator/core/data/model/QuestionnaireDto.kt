@@ -111,5 +111,11 @@ object QuestionnaireDto {
         @Json(name = "analysis_text") val analysisText: String? = null,
         @Json(name = "couple_profile_ready") val coupleProfileReady: Boolean = false,
         @Json(name = "created_at") val createdAt: String? = null,
+        // 结构化分析字段
+        @Json(name = "profile_analysis") val profileAnalysis: String? = null,
+        @Json(name = "dimension_analyses") val dimensionAnalyses: List<DimensionAnalysis>? = null,
+        @Json(name = "strengths") val strengths: String? = null,
+        @Json(name = "growth_tips") val growthTips: List<String>? = null,
+        @Json(name = "communication_guide") val communicationGuide: String? = null,
     )
 }

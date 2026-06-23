@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.Person
@@ -80,7 +81,7 @@ private fun TabItem(
         BottomTab.Mailbox -> Icons.Outlined.MailOutline
         BottomTab.AiChat -> Icons.Outlined.ChatBubbleOutline
         BottomTab.SingleHome -> Icons.Outlined.Person
-        BottomTab.Diary -> Icons.Outlined.MailOutline
+        BottomTab.Diary -> Icons.Outlined.Book
     }
 
     Box(

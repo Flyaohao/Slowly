@@ -5,13 +5,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -36,20 +34,30 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.Background
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ComposeDiaryScreen(
     onNavigateBack: () -> Unit,
+    diaryId: Long? = null,
     viewModel: ComposeDiaryViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    // 如果传入了 diaryId，加载编辑模式
+    LaunchedEffect(diaryId) {
+        if (diaryId != null && diaryId > 0) {
+            viewModel.loadForEdit(diaryId)
+        }
+    }
 
     LaunchedEffect(uiState.isSaved) {
         if (uiState.isSaved) {
@@ -57,22 +65,27 @@ fun ComposeDiaryScreen(
         }
     }
 
+    if (uiState.isLoading) {
+        LoadingIndicator()
+        return
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background),
+            .background(AppBackground),
     ) {
         TopAppBar(
-            title = { Text("写日记") },
+            title = { Text(if (uiState.isEditMode) "编辑日记" else "写日记") },
             navigationIcon = {
                 IconButton(onClick = onNavigateBack) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Background,
-                titleContentColor = TextPrimary,
-                navigationIconContentColor = TextPrimary,
+                containerColor = AppBackground,
+                titleContentColor = AppTextPrimary,
+                navigationIconContentColor = AppTextPrimary,
             ),
         )
 
@@ -119,7 +132,7 @@ fun ComposeDiaryScreen(
             Text(
                 text = "今天的心情",
                 style = MaterialTheme.typography.labelMedium,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
             Spacer(modifier = Modifier.height(8.dp))
             FlowRow(
@@ -130,12 +143,41 @@ fun ComposeDiaryScreen(
                     Surface(
                         onClick = { viewModel.updateMood(if (isSelected) null else mood) },
                         shape = RoundedCornerShape(50),
-                        color = if (isSelected) Accent else Surface,
+                        color = if (isSelected) Accent else AppSurface,
                     ) {
                         Text(
                             text = mood,
                             style = MaterialTheme.typography.labelMedium,
-                            color = if (isSelected) Surface else TextSecondary,
+                            color = if (isSelected) Surface else AppTextSecondary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 天气选择
+            Text(
+                text = "今天的天气",
+                style = MaterialTheme.typography.labelMedium,
+                color = AppTextSecondary,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                WEATHER_OPTIONS.forEach { weather ->
+                    val isSelected = uiState.weather == weather
+                    Surface(
+                        onClick = { viewModel.updateWeather(if (isSelected) null else weather) },
+                        shape = RoundedCornerShape(50),
+                        color = if (isSelected) Accent else AppSurface,
+                    ) {
+                        Text(
+                            text = weather,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isSelected) Surface else AppTextSecondary,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         )
                     }
@@ -162,13 +204,17 @@ fun ComposeDiaryScreen(
                     .height(48.dp),
                 shape = RoundedCornerShape(50),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = TextPrimary,
+                    containerColor = AppTextPrimary,
                     contentColor = Surface,
                 ),
                 enabled = !uiState.isSaving,
             ) {
                 Text(
-                    text = if (uiState.isSaving) "保存中..." else "保存日记",
+                    text = when {
+                        uiState.isSaving -> "保存中..."
+                        uiState.isEditMode -> "更新日记"
+                        else -> "保存日记"
+                    },
                     style = MaterialTheme.typography.titleSmall,
                 )
             }

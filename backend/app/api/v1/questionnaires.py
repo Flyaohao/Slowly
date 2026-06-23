@@ -164,6 +164,12 @@ def get_submission_history(
             "analysis_text": s.analysis_text,
             "couple_profile_ready": s.couple_profile_ready,
             "created_at": s.created_at.isoformat() if s.created_at else None,
+            # AI 分析报告结构化数据
+            "profile_analysis": s.profile_analysis,
+            "dimension_analyses": s.dimension_analyses,
+            "strengths": s.strengths,
+            "growth_tips": s.growth_tips,
+            "communication_guide": s.communication_guide,
         }
         for s in submissions
     ]
@@ -182,6 +188,22 @@ def get_submission_detail(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": 40005, "message": "记录不存在", "data": None},
         )
+
+    # 如果没有结构化分析数据，尝试生成
+    if not sub.profile_analysis and sub.profile_type:
+        try:
+            from app.services import questionnaire_analysis_service
+            analysis_result = questionnaire_analysis_service.analyze_for_user(db, current_user.id)
+            # 保存到submission
+            sub.profile_analysis = analysis_result.get("profile_analysis", "")
+            sub.dimension_analyses = analysis_result.get("dimension_analyses", [])
+            sub.strengths = analysis_result.get("strengths", "")
+            sub.growth_tips = analysis_result.get("growth_tips", [])
+            sub.communication_guide = analysis_result.get("communication_guide", "")
+            db.commit()
+        except Exception:
+            pass  # 如果生成失败，继续返回已有数据
+
     result = {
         "id": sub.id,
         "questionnaire_id": sub.questionnaire_id,
@@ -194,6 +216,12 @@ def get_submission_detail(
         "analysis_text": sub.analysis_text,
         "couple_profile_ready": sub.couple_profile_ready,
         "created_at": sub.created_at.isoformat() if sub.created_at else None,
+        # AI 分析报告结构化数据
+        "profile_analysis": sub.profile_analysis,
+        "dimension_analyses": sub.dimension_analyses,
+        "strengths": sub.strengths,
+        "growth_tips": sub.growth_tips,
+        "communication_guide": sub.communication_guide,
     }
     return ApiResponse(data=result)
 

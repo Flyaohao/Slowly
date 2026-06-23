@@ -183,9 +183,6 @@ fun MainScreen(
                                     restoreState = true
                                 }
                             },
-                            onNavigateToPractice = {
-                                onNavigateToRoute(Screen.SelfPracticeList.route)
-                            },
                         )
                     }
                 }

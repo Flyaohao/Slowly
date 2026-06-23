@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,44 @@ from app.schemas.questionnaire_schema import (
 )
 from app.services import questionnaire_service, questionnaire_analysis_service
 from app.repositories import questionnaire_repo
+
+
+def _parse_analysis_text(analysis_text) -> dict:
+    """解析 analysis_text JSON，返回结构化字段。兼容旧格式（纯文本）。"""
+    if not analysis_text:
+        return {}
+    try:
+        data = json.loads(analysis_text)
+        if isinstance(data, dict):
+            return data
+    except (json.JSONDecodeError, TypeError):
+        pass
+    # 旧格式：纯文本
+    return {"analysis": analysis_text}
+
+
+def _build_submission_response(s) -> dict:
+    """构建 submission 响应，包含结构化分析数据。"""
+    analysis = _parse_analysis_text(s.analysis_text)
+    return {
+        "id": s.id,
+        "questionnaire_id": s.questionnaire_id,
+        "questionnaire_title": s.questionnaire_title,
+        "total_questions": s.total_questions,
+        "answered_count": s.answered_count,
+        "profile_type": s.profile_type,
+        "profile_summary": s.profile_summary,
+        "dimension_scores": s.dimension_scores,
+        "analysis_text": s.analysis_text,
+        "couple_profile_ready": s.couple_profile_ready,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+        # 结构化分析字段
+        "profile_analysis": analysis.get("profile_analysis", ""),
+        "dimension_analyses": analysis.get("dimension_analyses", []),
+        "strengths": analysis.get("strengths", ""),
+        "growth_tips": analysis.get("growth_tips", []),
+        "communication_guide": analysis.get("communication_guide", ""),
+    }
 
 router = APIRouter(prefix="/questionnaires", tags=["问卷"])
 
@@ -138,7 +177,7 @@ def analyze_questionnaire(
     submissions = questionnaire_repo.get_submissions_by_user(db, current_user.id)
     for sub in submissions:
         if sub.questionnaire_id == questionnaire_id:
-            sub.analysis_text = result.get("analysis", "")
+            sub.analysis_text = json.dumps(result, ensure_ascii=False)
             break
     db.commit()
 
@@ -151,22 +190,7 @@ def get_submission_history(
     db: Session = Depends(get_db),
 ):
     submissions = questionnaire_repo.get_submissions_by_user(db, current_user.id)
-    result = [
-        {
-            "id": s.id,
-            "questionnaire_id": s.questionnaire_id,
-            "questionnaire_title": s.questionnaire_title,
-            "total_questions": s.total_questions,
-            "answered_count": s.answered_count,
-            "profile_type": s.profile_type,
-            "profile_summary": s.profile_summary,
-            "dimension_scores": s.dimension_scores,
-            "analysis_text": s.analysis_text,
-            "couple_profile_ready": s.couple_profile_ready,
-            "created_at": s.created_at.isoformat() if s.created_at else None,
-        }
-        for s in submissions
-    ]
+    result = [_build_submission_response(s) for s in submissions]
     return ApiResponse(data=result)
 
 
@@ -182,20 +206,7 @@ def get_submission_detail(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": 40005, "message": "记录不存在", "data": None},
         )
-    result = {
-        "id": sub.id,
-        "questionnaire_id": sub.questionnaire_id,
-        "questionnaire_title": sub.questionnaire_title,
-        "total_questions": sub.total_questions,
-        "answered_count": sub.answered_count,
-        "profile_type": sub.profile_type,
-        "profile_summary": sub.profile_summary,
-        "dimension_scores": sub.dimension_scores,
-        "analysis_text": sub.analysis_text,
-        "couple_profile_ready": sub.couple_profile_ready,
-        "created_at": sub.created_at.isoformat() if sub.created_at else None,
-    }
-    return ApiResponse(data=result)
+    return ApiResponse(data=_build_submission_response(sub))
 
 
 @router.delete("/history/{submission_id}", response_model=ApiResponse)

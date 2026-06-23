@@ -270,6 +270,51 @@ def submit_feedback(
     db.commit()
 
 
+def generate_profile_report(db: Session, user_id: int) -> str:
+    """生成 AI 画像分析报告（Markdown 格式）"""
+    from app.services.prompt_builder import build_profile_report_prompt
+    from app.repositories import profile_repo
+
+    profile = profile_repo.get_latest_profile(db, user_id)
+    if not profile:
+        raise ValueError("40001")
+
+    dimensions = profile_repo.get_dimension_scores(db, profile.id)
+    if not dimensions:
+        raise ValueError("40001")
+
+    dimension_names = {
+        "attachment_anxiety": "依恋焦虑",
+        "attachment_avoidance": "依恋回避",
+        "conflict_pursue": "冲突追问倾向",
+        "conflict_withdraw": "冲突退缩倾向",
+        "defensive_response": "防御反驳倾向",
+        "emotional_validation_need": "情绪确认需求",
+        "factual_explanation_need": "事实解释需求",
+        "personal_space_need": "独处冷静需求",
+        "reassurance_need": "安全感确认需求",
+        "directness_preference": "直接表达偏好",
+        "softness_preference": "柔和表达偏好",
+    }
+
+    dim_lines = []
+    for d in dimensions:
+        name = dimension_names.get(d.dimension_key, d.dimension_key)
+        explanation = d.explanation or ""
+        dim_lines.append(f"- {name}：{d.score:.0f}分（{explanation}）")
+    dimensions_text = "\n".join(dim_lines)
+
+    prompt = build_profile_report_prompt(
+        profile_type=profile.profile_type,
+        confidence=profile.confidence,
+        dimensions_data=dimensions_text,
+    )
+
+    # 调用 LLM 生成报告
+    result = _call_llm(prompt, "profile_report")
+    return result.get("raw_text", "")
+
+
 def delete_session(db: Session, user_id: int, session_id: int) -> None:
     session = ai_repo.get_session_by_id(db, session_id)
     if not session or session.user_id != user_id:

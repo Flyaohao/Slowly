@@ -15,6 +15,7 @@ import javax.inject.Inject
 data class PracticeListUiState(
     val practices: List<PracticeDto.PracticeResponse> = emptyList(),
     val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
     val error: String = "",
 )
 
@@ -28,6 +29,26 @@ class PracticeListViewModel @Inject constructor(
 
     init {
         loadPractices()
+    }
+
+    fun refresh() {
+        _uiState.update { it.copy(isRefreshing = true, error = "") }
+        viewModelScope.launch {
+            repository.getPractices().fold(
+                onSuccess = { practices ->
+                    practices?.let {
+                        _uiState.update { state ->
+                            state.copy(practices = it, isRefreshing = false)
+                        }
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isRefreshing = false, error = error.message ?: "加载失败")
+                    }
+                },
+            )
+        }
     }
 
     fun clearError() {

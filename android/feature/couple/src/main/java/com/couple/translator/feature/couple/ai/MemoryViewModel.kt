@@ -18,6 +18,7 @@ import javax.inject.Inject
 data class MemoryUiState(
     val memories: List<MemoryDto.MemoryItem> = emptyList(),
     val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
     val error: String = "",
 )
 
@@ -39,6 +40,20 @@ class MemoryViewModel @Inject constructor(
 
     init {
         loadMemories()
+    }
+
+    fun refresh() {
+        _uiState.update { it.copy(isRefreshing = true, error = "") }
+        viewModelScope.launch {
+            memoryRepository.getMemories().fold(
+                onSuccess = { memories ->
+                    _uiState.update { it.copy(memories = memories, isRefreshing = false) }
+                },
+                onFailure = { error ->
+                    _uiState.update { it.copy(isRefreshing = false, error = error.message ?: "加载失败") }
+                },
+            )
+        }
     }
 
     fun loadMemories() {

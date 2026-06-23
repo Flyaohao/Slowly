@@ -17,6 +17,11 @@ object HomeDto {
         @Json(name = "recommended_practices") val recommendedPractices: List<PracticeInfo> = emptyList(),
         @Json(name = "upcoming_anniversary") val upcomingAnniversary: AnniversaryInfo? = null,
         @Json(name = "space") val space: SpaceInfo? = null,
+        // 单身模式顶层字段
+        @Json(name = "user_nickname") val userNickname: String? = null,
+        @Json(name = "user_avatar_url") val userAvatarUrl: String? = null,
+        @Json(name = "recent_diaries") val recentDiaries: List<RecentDiary> = emptyList(),
+        @Json(name = "has_profile") val hasProfile: Boolean = false,
     )
 
     @JsonClass(generateAdapter = true)
@@ -86,5 +91,13 @@ object HomeDto {
         @Json(name = "name") val name: String? = null,
         @Json(name = "theme_color") val themeColor: String? = null,
         @Json(name = "next_meet_date") val nextMeetDate: String? = null,
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class RecentDiary(
+        @Json(name = "id") val id: Long,
+        @Json(name = "title") val title: String? = null,
+        @Json(name = "mood") val mood: String? = null,
+        @Json(name = "created_at") val createdAt: String? = null,
     )
 }

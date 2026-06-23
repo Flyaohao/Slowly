@@ -48,13 +48,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.PrimaryButton
 import com.couple.translator.core.ui.components.TextInputField
 import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
 
 private val genderOptions = listOf("男", "女", "其他", "不愿透露")
 
@@ -98,18 +99,22 @@ fun ProfileScreen(
                         Icon(Icons.Default.Edit, contentDescription = "编辑")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
+        PullToRefreshLayout(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.padding(padding),
+        ) {
         if (uiState.isLoading) {
-            LoadingIndicator(modifier = Modifier.padding(padding))
+            LoadingIndicator()
         } else {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
                     .padding(horizontal = 24.dp)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -171,6 +176,7 @@ fun ProfileScreen(
                 }
             }
         }
+        }
     }
 }
 
@@ -200,9 +206,9 @@ private fun GenderDropdown(
             modifier = Modifier.menuAnchor().fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Accent,
-                unfocusedBorderColor = BorderLight,
+                unfocusedBorderColor = AppBorderLight,
                 focusedLabelColor = Accent,
-                cursorColor = TextPrimary,
+                cursorColor = AppTextPrimary,
             ),
             shape = MaterialTheme.shapes.medium,
         )
@@ -240,7 +246,7 @@ private fun BirthdayPicker(
         Text(
             text = "生日",
             style = MaterialTheme.typography.bodySmall,
-            color = TextSecondary,
+            color = AppTextSecondary,
             modifier = Modifier.padding(bottom = 4.dp),
         )
         Row(
@@ -297,9 +303,9 @@ private fun SimpleDropdown(
             modifier = Modifier.menuAnchor().fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Accent,
-                unfocusedBorderColor = BorderLight,
+                unfocusedBorderColor = AppBorderLight,
                 focusedLabelColor = Accent,
-                cursorColor = TextPrimary,
+                cursorColor = AppTextPrimary,
             ),
             shape = MaterialTheme.shapes.medium,
             singleLine = true,

@@ -112,6 +112,9 @@ interface SharedApiService {
     @GET("api/v1/profiles/history")
     suspend fun getProfileHistory(): ApiResponse<List<ProfileDto.RelationshipProfileResponse>>
 
+    @GET("api/v1/profiles/me/ai-report")
+    suspend fun getAiReport(): ApiResponse<ProfileDto.AiReportResponse>
+
     // AI
     @POST("api/v1/ai/chat")
     suspend fun aiChat(@Body body: AiDto.ChatRequest): ApiResponse<AiDto.ChatResponse>

@@ -6,6 +6,7 @@ from app.core.dependencies import get_current_user
 from app.schemas.common import ApiResponse
 from app.repositories import profile_repo, couple_repo
 from app.services.conflict_detector import CONFLICT_PATTERN_INFO
+from app.services.ai_service import generate_profile_report
 
 router = APIRouter(prefix="/profiles", tags=["关系画像"])
 
@@ -136,3 +137,19 @@ def get_profile_history(
         }
         for p in profiles
     ])
+
+
+@router.get("/me/ai-report", response_model=ApiResponse)
+def get_ai_report(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """获取 AI 生成的画像分析报告（Markdown 格式）"""
+    try:
+        report = generate_profile_report(db, current_user.id)
+        return ApiResponse(data={"report": report})
+    except ValueError as e:
+        code = str(e)
+        if code == "40001":
+            return ApiResponse(code=40001, message="请先完成问卷", data=None)
+        return ApiResponse(code=50001, message="报告生成失败", data=None)

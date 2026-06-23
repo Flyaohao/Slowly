@@ -175,6 +175,11 @@ def create_submission(
     dimension_scores: dict = None,
     analysis_text: str = None,
     couple_profile_ready: bool = False,
+    profile_analysis: str = None,
+    dimension_analyses: dict = None,
+    strengths: str = None,
+    growth_tips: dict = None,
+    communication_guide: str = None,
 ) -> QuestionnaireSubmission:
     sub = QuestionnaireSubmission(
         user_id=user_id,
@@ -187,6 +192,11 @@ def create_submission(
         dimension_scores=dimension_scores,
         analysis_text=analysis_text,
         couple_profile_ready=couple_profile_ready,
+        profile_analysis=profile_analysis,
+        dimension_analyses=dimension_analyses,
+        strengths=strengths,
+        growth_tips=growth_tips,
+        communication_guide=communication_guide,
     )
     db.add(sub)
     db.flush()

@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
-from typing import Optional, List
-from datetime import datetime
+from sqlalchemy import func
+from typing import Optional, List, Tuple
+from datetime import datetime, timedelta
 
 from app.models.diary_entry import DiaryEntry
 
@@ -44,7 +45,8 @@ def get_list(
     page: int = 1,
     limit: int = 20,
     filter_type: str = "all",
-) -> List[DiaryEntry]:
+) -> Tuple[List[DiaryEntry], int]:
+    """返回 (日记列表, 总数) 的元组。"""
     query = db.query(DiaryEntry).filter(
         DiaryEntry.user_id == user_id,
         DiaryEntry.deleted_at.is_(None),
@@ -53,20 +55,21 @@ def get_list(
     if filter_type == "favorite":
         query = query.filter(DiaryEntry.is_favorite == True)
     elif filter_type == "week":
-        from datetime import timedelta
         week_ago = datetime.utcnow() - timedelta(days=7)
         query = query.filter(DiaryEntry.created_at >= week_ago)
     elif filter_type == "month":
-        from datetime import timedelta
         month_ago = datetime.utcnow() - timedelta(days=30)
         query = query.filter(DiaryEntry.created_at >= month_ago)
 
-    return (
+    total = query.count()
+
+    items = (
         query.order_by(DiaryEntry.created_at.desc())
         .offset((page - 1) * limit)
         .limit(limit)
         .all()
     )
+    return items, total
 
 
 def update(
@@ -79,7 +82,7 @@ def update(
     if not entry:
         return None
     for key, value in data.items():
-        if value is not None and hasattr(entry, key):
+        if hasattr(entry, key):
             setattr(entry, key, value)
     db.commit()
     db.refresh(entry)

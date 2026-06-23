@@ -40,6 +40,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.ProfileDto
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.AccentLight
 import com.couple.translator.core.ui.theme.Background
@@ -79,17 +80,21 @@ fun CoupleProfileScreen(
             )
         },
     ) { padding ->
+        PullToRefreshLayout(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.padding(padding),
+        ) {
         if (uiState.isLoading) {
-            LoadingIndicator(modifier = Modifier.padding(padding))
-            return@Scaffold
+            LoadingIndicator()
+            return@PullToRefreshLayout
         }
 
         val coupleProfile = uiState.coupleProfile
         if (coupleProfile == null) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                    .fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -101,13 +106,12 @@ fun CoupleProfileScreen(
                     modifier = Modifier.padding(horizontal = 32.dp),
                 )
             }
-            return@Scaffold
+            return@PullToRefreshLayout
         }
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .padding(horizontal = 24.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
@@ -180,6 +184,7 @@ fun CoupleProfileScreen(
             }
 
             Spacer(modifier = Modifier.height(32.dp))
+        }
         }
     }
 }

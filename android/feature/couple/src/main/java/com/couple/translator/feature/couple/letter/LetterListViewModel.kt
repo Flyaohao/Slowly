@@ -21,6 +21,7 @@ data class LetterListUiState(
     val letters: List<LetterDto.LetterResponse> = emptyList(),
     val selectedTab: Int = 0,
     val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
     val isSelectionMode: Boolean = false,
     val selectedIds: Set<Long> = emptySet(),
     val isDeleting: Boolean = false,
@@ -41,6 +42,48 @@ class LetterListViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.update { it.copy(error = "") }
+    }
+
+    fun refresh() {
+        val tabs = listOf("全部", "收到", "发出", "草稿", "未来", "冷静", "未说出口", "私密")
+        val tabName = tabs.getOrElse(uiState.value.selectedTab) { "全部" }
+        _uiState.update { it.copy(isRefreshing = true, error = "") }
+        viewModelScope.launch {
+            val result = when (tabName) {
+                "全部" -> letterRepository.getLetters()
+                "收到" -> letterRepository.getInbox()
+                "发出" -> letterRepository.getLetters(direction = "sent")
+                "草稿" -> letterRepository.getDrafts()
+                "未来" -> letterRepository.getLetters(type = "future")
+                "冷静" -> letterRepository.getLetters(type = "calm")
+                "未说出口" -> letterRepository.getLetters(type = "unsaid")
+                "私密" -> letterRepository.getLetters(type = "private")
+                "收藏" -> letterRepository.getLetters().map { resp ->
+                    resp?.copy(items = resp.items.filter { it.isFavorite })
+                }
+                "本周" -> letterRepository.getLetters().map { resp ->
+                    resp?.copy(items = resp.items.filter { isThisWeek(it.createdAt) })
+                }
+                "本月" -> letterRepository.getLetters().map { resp ->
+                    resp?.copy(items = resp.items.filter { isThisMonth(it.createdAt) })
+                }
+                else -> letterRepository.getLetters()
+            }
+            result.fold(
+                onSuccess = { response ->
+                    response?.let {
+                        _uiState.update { state ->
+                            state.copy(letters = it.items, isRefreshing = false)
+                        }
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isRefreshing = false, error = error.message ?: "加载失败")
+                    }
+                },
+            )
+        }
     }
 
     fun loadLetters(tabName: String = "全部") {

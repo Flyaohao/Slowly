@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -28,7 +29,7 @@ import com.couple.translator.core.data.repository.TokenStore
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.ui.components.BottomTabBar
-import com.couple.translator.core.ui.theme.Background
+import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.feature.single.diary.DiaryListScreen
 import kotlinx.coroutines.launch
 
@@ -41,12 +42,14 @@ fun SingleShell(
     onNavigateToRoute: (String) -> Unit,
     onLogout: () -> Unit,
     tokenStore: TokenStore? = null,
+    viewModel: SingleHomeViewModel = hiltViewModel(),
 ) {
     val tabNavController = rememberNavController()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val uiState by viewModel.uiState.collectAsState()
 
     val openDrawer: () -> Unit = { scope.launch { drawerState.open() } }
     val closeDrawer: () -> Unit = { scope.launch { drawerState.close() } }
@@ -57,8 +60,9 @@ fun SingleShell(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(drawerContainerColor = Background) {
+            ModalDrawerSheet(drawerContainerColor = AppBackground) {
                 SingleDrawerContent(
+                    nickname = uiState.nickname,
                     onNavigateToRoute = { route ->
                         closeDrawer()
                         onNavigateToRoute(route)
@@ -66,6 +70,10 @@ fun SingleShell(
                     onNavigateToBind = {
                         closeDrawer()
                         onNavigateToRoute(Screen.CoupleBind.route)
+                    },
+                    onNavigateToProfile = {
+                        closeDrawer()
+                        onNavigateToRoute(Screen.Profile.route)
                     },
                     onLogout = {
                         scope.launch {
@@ -80,7 +88,7 @@ fun SingleShell(
         gesturesEnabled = drawerState.isOpen,
     ) {
         Scaffold(
-            containerColor = Background,
+            containerColor = AppBackground,
             bottomBar = {
                 BottomTabBar(
                     currentRoute = currentRoute,
@@ -128,9 +136,6 @@ fun SingleShell(
                                 launchSingleTop = true
                                 restoreState = true
                             }
-                        },
-                        onNavigateToPractice = {
-                            onNavigateToRoute(Screen.SelfPracticeList.route)
                         },
                     )
                 }

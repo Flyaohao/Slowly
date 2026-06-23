@@ -49,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -56,14 +57,22 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.QuestionnaireDto
 import com.couple.translator.core.ui.components.DimensionRadarChart
 import com.couple.translator.core.ui.components.PrimaryButton
+import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.AccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 import com.couple.translator.core.ui.theme.Background
 import com.couple.translator.core.ui.theme.BorderLight
 import com.couple.translator.core.ui.theme.Surface
 import com.couple.translator.core.ui.theme.TextPrimary
 import com.couple.translator.core.ui.theme.TextSecondary
 import com.couple.translator.core.ui.theme.TextTertiary
+import io.noties.markwon.Markwon
 
 private val dimensionNames = mapOf(
     "attachment_anxiety" to "依恋焦虑",
@@ -114,10 +123,15 @@ fun QuestionnaireResultScreen(
             )
         },
     ) { padding ->
+        PullToRefreshLayout(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.padding(padding),
+        ) {
         // Loading
         if (uiState.isLoading || uiState.isAnalyzing) {
             Column(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -127,13 +141,13 @@ fun QuestionnaireResultScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("这可能需要 10-30 秒，请耐心等待", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
             }
-            return@Scaffold
+            return@PullToRefreshLayout
         }
 
         // Error with retry
         if (uiState.error.isNotEmpty()) {
             Column(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -145,13 +159,13 @@ fun QuestionnaireResultScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 TextButton(onClick = onNavigateBack) { Text("返回首页") }
             }
-            return@Scaffold
+            return@PullToRefreshLayout
         }
 
         val analysis = uiState.analysis
         if (analysis == null) {
             Column(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -159,7 +173,7 @@ fun QuestionnaireResultScreen(
                 Spacer(modifier = Modifier.height(24.dp))
                 PrimaryButton(text = "重新分析", onClick = { viewModel.retry() })
             }
-            return@Scaffold
+            return@PullToRefreshLayout
         }
 
         // Main content
@@ -169,7 +183,6 @@ fun QuestionnaireResultScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp),
         ) {
@@ -292,6 +305,7 @@ fun QuestionnaireResultScreen(
             }
             Spacer(modifier = Modifier.height(32.dp))
         }
+        }
     }
 }
 
@@ -309,12 +323,21 @@ private fun BodyCard(text: String) {
         colors = CardDefaults.cardColors(containerColor = Surface),
         shape = RoundedCornerShape(14.dp),
     ) {
-        Text(
-            text = text.trim(),
-            style = MaterialTheme.typography.bodyLarge,
-            color = TextPrimary,
-            lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
-            modifier = Modifier.padding(16.dp),
+        val textColor = TextPrimary
+        androidx.compose.ui.viewinterop.AndroidView(
+            factory = { ctx ->
+                android.widget.TextView(ctx).apply {
+                    this.setTextColor(textColor.toArgb())
+                    this.textSize = 15f
+                    this.setLineSpacing(0f, 1.4f)
+                }
+            },
+            update = { textView ->
+                val markwon = Markwon.create(textView.context)
+                markwon.setMarkdown(textView, text.trim())
+                textView.setTextColor(textColor.toArgb())
+            },
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
         )
     }
 }
@@ -393,9 +416,24 @@ private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // AI analysis text
+            // AI analysis text (Markdown)
             if (dim.analysis.isNotBlank()) {
-                Text(dim.analysis, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, lineHeight = MaterialTheme.typography.bodyMedium.lineHeight)
+                val dimTextColor = TextSecondary
+                androidx.compose.ui.viewinterop.AndroidView(
+                    factory = { ctx ->
+                        android.widget.TextView(ctx).apply {
+                            this.setTextColor(dimTextColor.toArgb())
+                            this.textSize = 14f
+                            this.setLineSpacing(0f, 1.3f)
+                        }
+                    },
+                    update = { textView ->
+                        val markwon = Markwon.create(textView.context)
+                        markwon.setMarkdown(textView, dim.analysis)
+                        textView.setTextColor(dimTextColor.toArgb())
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }

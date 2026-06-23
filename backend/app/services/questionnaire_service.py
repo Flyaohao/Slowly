@@ -163,6 +163,24 @@ def submit_questionnaire(db: Session, user_id: int, questionnaire_id: int) -> di
         scores = profile_repo.get_dimension_scores(db, profile_data.id)
         dim_scores = {s.dimension_key: s.score for s in scores}
 
+    # 生成 AI 分析报告
+    profile_analysis = ""
+    dimension_analyses = []
+    strengths = ""
+    growth_tips = []
+    communication_guide = ""
+    if profile_type and dim_scores:
+        try:
+            from app.services import questionnaire_analysis_service
+            analysis_result = questionnaire_analysis_service.analyze_for_user(db, user_id)
+            profile_analysis = analysis_result.get("profile_analysis", "")
+            dimension_analyses = analysis_result.get("dimension_analyses", [])
+            strengths = analysis_result.get("strengths", "")
+            growth_tips = analysis_result.get("growth_tips", [])
+            communication_guide = analysis_result.get("communication_guide", "")
+        except Exception:
+            pass  # 如果生成失败，继续创建submission
+
     questionnaire_repo.create_submission(
         db,
         user_id=user_id,
@@ -174,6 +192,11 @@ def submit_questionnaire(db: Session, user_id: int, questionnaire_id: int) -> di
         profile_summary=profile_summary,
         dimension_scores=dim_scores,
         couple_profile_ready=couple_profile_ready,
+        profile_analysis=profile_analysis,
+        dimension_analyses=dimension_analyses,
+        strengths=strengths,
+        growth_tips=growth_tips,
+        communication_guide=communication_guide,
     )
 
     # Clean up progress record (LOW-3 fix)

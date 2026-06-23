@@ -51,5 +51,4 @@ enum class Screen(val route: String) {
     DiaryList("diary_list"),
     DiaryDetail("diary_detail"),
     ComposeDiary("compose_diary"),
-    SelfPracticeList("self_practice_list"),
 }

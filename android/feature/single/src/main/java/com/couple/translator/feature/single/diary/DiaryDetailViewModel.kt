@@ -14,6 +14,7 @@ import javax.inject.Inject
 
 data class DiaryDetailUiState(
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
     val diary: DiaryDto.DiaryResponse? = null,
     val isDeleted: Boolean = false,
     val error: String? = null,
@@ -50,8 +51,29 @@ class DiaryDetailViewModel @Inject constructor(
                 val response = apiService.toggleDiaryFavorite(diary.id)
                 if (response.isSuccess && response.data != null) {
                     _uiState.update { it.copy(diary = response.data) }
+                } else {
+                    _uiState.update { it.copy(error = response.message) }
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "操作失败") }
+            }
+        }
+    }
+
+    fun refresh() {
+        val id = _uiState.value.diary?.id ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true, error = null) }
+            try {
+                val response = apiService.getDiary(id)
+                if (response.isSuccess && response.data != null) {
+                    _uiState.update { it.copy(isRefreshing = false, diary = response.data) }
+                } else {
+                    _uiState.update { it.copy(isRefreshing = false, error = response.message) }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isRefreshing = false, error = e.message) }
+            }
         }
     }
 
@@ -62,8 +84,12 @@ class DiaryDetailViewModel @Inject constructor(
                 val response = apiService.deleteDiary(diary.id)
                 if (response.isSuccess) {
                     _uiState.update { it.copy(isDeleted = true) }
+                } else {
+                    _uiState.update { it.copy(error = response.message) }
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "删除失败") }
+            }
         }
     }
 }

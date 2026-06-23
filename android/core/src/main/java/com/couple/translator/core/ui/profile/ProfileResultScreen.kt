@@ -1,6 +1,7 @@
 package com.couple.translator.core.ui.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,13 +17,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -30,26 +36,32 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.data.model.QuestionnaireDto
 import com.couple.translator.core.ui.components.DimensionRadarChart
-import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.PrimaryButton
 import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
+import io.noties.markwon.Markwon
 
 private val dimensionNames = mapOf(
     "attachment_anxiety" to "依恋焦虑",
@@ -85,21 +97,25 @@ fun ProfileResultScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Background,
+                    containerColor = AppBackground,
                 ),
             )
         },
     ) { padding ->
+        PullToRefreshLayout(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.padding(padding),
+        ) {
         if (uiState.isLoading) {
-            LoadingIndicator(modifier = Modifier.padding(padding))
-            return@Scaffold
+            LoadingIndicator()
+            return@PullToRefreshLayout
         }
 
-        if (uiState.profile == null) {
+        if (uiState.submissions.isEmpty()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
                     .padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -107,127 +123,181 @@ fun ProfileResultScreen(
                 Text(
                     text = "还没有关系画像",
                     style = MaterialTheme.typography.headlineMedium,
-                    color = TextSecondary,
+                    color = AppTextSecondary,
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = "完成问卷后，AI 会根据你们的回答生成专属画像",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                     textAlign = TextAlign.Center,
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 PrimaryButton(text = "去完成问卷", onClick = onNavigateBack)
             }
-            return@Scaffold
+            return@PullToRefreshLayout
         }
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .padding(horizontal = 24.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Surface),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+            // === 测评选择器 ===
+            SubmissionSelector(
+                submissions = uiState.submissions,
+                selectedId = uiState.selectedSubmissionId,
+                onSelect = { viewModel.selectSubmission(it) },
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // === 画像类型卡片 ===
+            uiState.profile?.let { profile ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 ) {
-                    Text(
-                        text = uiState.profileTypeName,
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Accent,
-                        fontWeight = FontWeight.Bold,
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    uiState.profile?.confidence?.let { confidence ->
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
                         Text(
-                            text = "置信度 ${(confidence * 100).toInt()}%",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextTertiary,
+                            text = uiState.profileTypeName,
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Accent,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = uiState.profileTypeDescription,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = AppTextSecondary,
+                            textAlign = TextAlign.Center,
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = uiState.profileTypeDescription,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary,
-                        textAlign = TextAlign.Center,
-                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Radar chart
+            // === AI 分析报告（Markdown） ===
+            if (uiState.hasAnalysis) {
+                Text(
+                    text = "AI 分析报告",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // profile_analysis
+                if (uiState.profileAnalysis.isNotBlank()) {
+                    MarkdownCard(uiState.profileAnalysis)
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // dimension_analyses
+                if (uiState.dimensionAnalyses.isNotEmpty()) {
+                    Text(
+                        text = "维度详细解读",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    uiState.dimensionAnalyses.forEach { dim ->
+                        DimensionAnalysisCard(dim)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // strengths
+                if (uiState.strengths.isNotBlank()) {
+                    Text(
+                        text = "你的关系优势",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    HighlightCard(text = uiState.strengths, icon = "💪")
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // growth_tips
+                if (uiState.growthTips.isNotEmpty()) {
+                    Text(
+                        text = "成长建议",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    uiState.growthTips.forEachIndexed { index, tip ->
+                        TipCard(number = index + 1, text = tip)
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // communication_guide
+                if (uiState.communicationGuide.isNotBlank()) {
+                    Text(
+                        text = "沟通指南",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    MarkdownCard(uiState.communicationGuide)
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // === 雷达图 ===
             if (uiState.dimensions.isNotEmpty()) {
                 Text(
                     text = "维度总览",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
-
                 Spacer(modifier = Modifier.height(16.dp))
-
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface),
                     shape = RoundedCornerShape(16.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 ) {
                     val chartData = uiState.dimensions.map { dim ->
-                        Triple(
-                            dim.dimensionKey,
-                            dimensionNames[dim.dimensionKey] ?: dim.dimensionKey,
-                            dim.score,
-                        )
+                        Triple(dim.dimensionKey, dimensionNames[dim.dimensionKey] ?: dim.dimensionKey, dim.score)
                     }
-                    DimensionRadarChart(
-                        dimensions = chartData,
-                        modifier = Modifier.padding(16.dp),
-                    )
+                    DimensionRadarChart(dimensions = chartData, modifier = Modifier.padding(16.dp))
                 }
-
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Dimension detail list
+                // 维度详情
                 Text(
                     text = "维度详情",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
-
                 Spacer(modifier = Modifier.height(12.dp))
-
-                uiState.dimensions
-                    .sortedByDescending { it.score }
-                    .forEach { dimension ->
-                        DimensionScoreItem(
-                            name = dimensionNames[dimension.dimensionKey] ?: dimension.dimensionKey,
-                            score = dimension.score,
-                            explanation = dimension.explanation,
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                    }
+                uiState.dimensions.sortedByDescending { it.score }.forEach { dimension ->
+                    DimensionScoreItem(
+                        name = dimensionNames[dimension.dimensionKey] ?: dimension.dimensionKey,
+                        score = dimension.score,
+                        explanation = dimension.explanation,
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 情侣模式显示组合画像按钮
             if (isCoupleMode) {
                 androidx.compose.material3.OutlinedButton(
                     onClick = onNavigateToCoupleProfile,
@@ -240,8 +310,207 @@ fun ProfileResultScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+        }
     }
 }
+
+// ==================== 测评选择器 ====================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SubmissionSelector(
+    submissions: List<com.couple.translator.core.data.model.QuestionnaireDto.SubmissionResponse>,
+    selectedId: Long,
+    onSelect: (Long) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selected = submissions.find { it.id == selectedId }
+    val displayText = selected?.let {
+        "${it.createdAt?.take(10) ?: ""} · ${it.profileType ?: ""}"
+    } ?: "选择测评"
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+    ) {
+        OutlinedTextField(
+            value = displayText,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("选择测评记录") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Accent,
+                focusedLabelColor = Accent,
+            ),
+            shape = RoundedCornerShape(12.dp),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            submissions.forEach { sub ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(sub.createdAt?.take(10) ?: "", style = MaterialTheme.typography.bodyMedium)
+                            Text(sub.questionnaireTitle, style = MaterialTheme.typography.bodySmall, color = AppTextTertiary)
+                        }
+                    },
+                    onClick = {
+                        onSelect(sub.id)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+// ==================== Markdown 组件 ====================
+
+@Composable
+private fun MarkdownCard(markdown: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
+        shape = RoundedCornerShape(14.dp),
+    ) {
+        val textColor = AppTextPrimary
+        AndroidView(
+            factory = { ctx ->
+                android.widget.TextView(ctx).apply {
+                    this.setTextColor(textColor.toArgb())
+                    this.textSize = 15f
+                    this.setLineSpacing(0f, 1.4f)
+                }
+            },
+            update = { textView ->
+                val markwon = Markwon.create(textView.context)
+                markwon.setMarkdown(textView, markdown.trim())
+                textView.setTextColor(textColor.toArgb())
+            },
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+        )
+    }
+}
+
+@Composable
+private fun HighlightCard(text: String, icon: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = AccentLight),
+        shape = RoundedCornerShape(14.dp),
+    ) {
+        Row(modifier = Modifier.padding(16.dp)) {
+            Text(icon, style = MaterialTheme.typography.titleLarge)
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = text.trim(),
+                style = MaterialTheme.typography.bodyLarge,
+                color = AppTextPrimary,
+                lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TipCard(number: Int, text: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
+            Box(
+                modifier = Modifier
+                    .height(24.dp)
+                    .width(24.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Accent),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("$number", style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color.White, fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = AppTextPrimary, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
+    val levelColor = when (dim.level) {
+        "高" -> androidx.compose.ui.graphics.Color(0xFFFF6B6B)
+        "中" -> androidx.compose.ui.graphics.Color(0xFFFFA726)
+        "低" -> androidx.compose.ui.graphics.Color(0xFF66BB6A)
+        else -> Accent
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
+        shape = RoundedCornerShape(14.dp),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(dim.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(levelColor.copy(alpha = 0.15f))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    ) {
+                        Text(dim.level, style = MaterialTheme.typography.labelSmall, color = levelColor, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("${dim.score.toInt()}", style = MaterialTheme.typography.titleMedium, color = Accent, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Box(
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(AppBorderLight),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction = (dim.score / 100f).coerceIn(0f, 1f))
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Accent),
+                )
+            }
+
+            if (dim.analysis.isNotBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                val dimTextColor = AppTextSecondary
+                AndroidView(
+                    factory = { ctx ->
+                        android.widget.TextView(ctx).apply {
+                            this.setTextColor(dimTextColor.toArgb())
+                            this.textSize = 14f
+                            this.setLineSpacing(0f, 1.3f)
+                        }
+                    },
+                    update = { textView ->
+                        val markwon = Markwon.create(textView.context)
+                        markwon.setMarkdown(textView, dim.analysis)
+                        textView.setTextColor(dimTextColor.toArgb())
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+// ==================== 基础组件 ====================
 
 @Composable
 private fun DimensionScoreItem(
@@ -251,40 +520,23 @@ private fun DimensionScoreItem(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         shape = RoundedCornerShape(12.dp),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                )
-                Text(
-                    text = "${score.toInt()}",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Accent,
-                    fontWeight = FontWeight.Bold,
-                )
+                Text(name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                Text("${score.toInt()}", style = MaterialTheme.typography.titleMedium, color = Accent, fontWeight = FontWeight.Bold)
             }
-
             Spacer(modifier = Modifier.height(8.dp))
-
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(BorderLight),
+                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(AppBorderLight),
             ) {
                 Box(
                     modifier = Modifier
@@ -294,14 +546,9 @@ private fun DimensionScoreItem(
                         .background(Accent),
                 )
             }
-
             if (!explanation.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = explanation,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextTertiary,
-                )
+                Text(explanation, style = MaterialTheme.typography.bodySmall, color = AppTextTertiary)
             }
         }
     }

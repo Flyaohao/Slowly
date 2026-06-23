@@ -23,7 +23,6 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Quiz
-import androidx.compose.material.icons.outlined.SelfImprovement
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -41,14 +40,17 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.single.data.model.DiaryDto
 import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
 
 @Composable
 fun SingleHomeScreen(
@@ -57,22 +59,26 @@ fun SingleHomeScreen(
     onNavigateToProfile: () -> Unit = {},
     onNavigateToBind: () -> Unit = {},
     onNavigateToDiary: () -> Unit = {},
-    onNavigateToPractice: () -> Unit = {},
     viewModel: SingleHomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     if (uiState.isLoading) {
-        Box(modifier = Modifier.fillMaxSize().background(Background)) {
+        Box(modifier = Modifier.fillMaxSize().background(AppBackground)) {
             LoadingIndicator()
         }
         return
     }
 
+    PullToRefreshLayout(
+        isRefreshing = uiState.isRefreshing,
+        onRefresh = { viewModel.refresh() },
+        modifier = Modifier.fillMaxSize().background(AppBackground),
+    ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(AppBackground)
             .verticalScroll(rememberScrollState()),
     ) {
         // Top bar
@@ -85,24 +91,23 @@ fun SingleHomeScreen(
             Text(
                 text = "你好，${uiState.nickname ?: "朋友"}",
                 style = MaterialTheme.typography.displayMedium,
-                color = TextPrimary,
+                color = AppTextPrimary,
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = "记录生活，了解自己",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextTertiary,
+                color = AppTextTertiary,
             )
         }
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // 快捷入口
+        // 快捷入口（已移除自我练习）
         SingleHomeQuickActions(
             onNavigateToQuestionnaire = onNavigateToQuestionnaire,
             onNavigateToProfile = onNavigateToProfile,
             onNavigateToBind = onNavigateToBind,
-            onNavigateToPractice = onNavigateToPractice,
         )
 
         // 最近日记
@@ -120,6 +125,7 @@ fun SingleHomeScreen(
 
         Spacer(modifier = Modifier.height(100.dp))
     }
+    }
 }
 
 @Composable
@@ -136,7 +142,7 @@ private fun SingleHomeTopBar(onOpenDrawer: () -> Unit) {
                 modifier = Modifier
                     .size(30.dp)
                     .clip(CircleShape)
-                    .background(AccentLight),
+                    .background(AppAccentLight),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -151,7 +157,7 @@ private fun SingleHomeTopBar(onOpenDrawer: () -> Unit) {
         Text(
             text = "我的空间",
             style = MaterialTheme.typography.titleMedium,
-            color = TextPrimary,
+            color = AppTextPrimary,
         )
 
         Spacer(modifier = Modifier.size(48.dp))
@@ -163,13 +169,12 @@ private fun SingleHomeQuickActions(
     onNavigateToQuestionnaire: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToBind: () -> Unit,
-    onNavigateToPractice: () -> Unit,
 ) {
     Column(modifier = Modifier.padding(horizontal = 20.dp)) {
         Text(
             text = "快捷入口",
             style = MaterialTheme.typography.labelSmall,
-            color = TextTertiary,
+            color = AppTextTertiary,
             modifier = Modifier.padding(bottom = 8.dp),
         )
 
@@ -185,13 +190,6 @@ private fun SingleHomeQuickActions(
             label = "我的画像",
             description = "查看个人维度分析",
             onClick = onNavigateToProfile,
-        )
-
-        QuickActionItem(
-            icon = Icons.Outlined.SelfImprovement,
-            label = "自我练习",
-            description = "情绪管理、正念冥想等练习",
-            onClick = onNavigateToPractice,
         )
 
         QuickActionItem(
@@ -221,7 +219,7 @@ private fun QuickActionItem(
             modifier = Modifier
                 .size(40.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Surface),
+                .background(AppSurface),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -236,18 +234,18 @@ private fun QuickActionItem(
             Text(
                 text = label,
                 style = MaterialTheme.typography.titleSmall,
-                color = TextPrimary,
+                color = AppTextPrimary,
             )
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
         }
         Icon(
             imageVector = Icons.Outlined.ChevronRight,
             contentDescription = null,
-            tint = TextTertiary,
+            tint = AppTextTertiary,
             modifier = Modifier.size(16.dp),
         )
     }
@@ -267,7 +265,7 @@ private fun SingleHomeRecentDiaries(
             Text(
                 text = "最近日记",
                 style = MaterialTheme.typography.labelSmall,
-                color = TextTertiary,
+                color = AppTextTertiary,
             )
             Text(
                 text = "查看全部",
@@ -289,7 +287,7 @@ private fun SingleHomeRecentDiaries(
                 Icon(
                     imageVector = Icons.Outlined.Book,
                     contentDescription = null,
-                    tint = TextSecondary,
+                    tint = AppTextSecondary,
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -297,25 +295,25 @@ private fun SingleHomeRecentDiaries(
                     Text(
                         text = diary.title,
                         style = MaterialTheme.typography.titleSmall,
-                        color = TextPrimary,
+                        color = AppTextPrimary,
                         maxLines = 1,
                     )
                     if (diary.mood != null) {
                         Text(
                             text = diary.mood,
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextTertiary,
+                            color = AppTextTertiary,
                         )
                     }
                 }
                 Text(
                     text = diary.createdAt?.take(10) ?: "",
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                 )
             }
             if (index < diaries.lastIndex) {
-                HorizontalDivider(color = BorderLight)
+                HorizontalDivider(color = AppBorderLight)
             }
         }
     }
@@ -331,7 +329,7 @@ private fun SingleHomeDiaryEntry(onClick: () -> Unit) {
             .height(48.dp),
         shape = RoundedCornerShape(50),
         colors = ButtonDefaults.buttonColors(
-            containerColor = TextPrimary,
+            containerColor = AppTextPrimary,
             contentColor = Surface,
         ),
     ) {

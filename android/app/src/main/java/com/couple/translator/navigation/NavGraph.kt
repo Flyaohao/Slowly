@@ -61,7 +61,6 @@ import com.couple.translator.feature.couple.wishlist.WishlistScreen
 import com.couple.translator.feature.single.diary.DiaryListScreen
 import com.couple.translator.feature.single.diary.DiaryDetailScreen
 import com.couple.translator.feature.single.diary.ComposeDiaryScreen
-import com.couple.translator.feature.single.practice.SelfPracticeListScreen
 import com.couple.translator.feature.single.SingleShell
 import com.couple.translator.feature.couple.CoupleShell
 
@@ -629,16 +628,17 @@ fun NavGraph(
             )
         }
 
-        composable(Screen.ComposeDiary.route) {
+        composable(
+            route = "${Screen.ComposeDiary.route}?editId={editId}",
+            arguments = listOf(navArgument("editId") {
+                type = NavType.LongType
+                defaultValue = -1L
+            }),
+        ) { backStackEntry ->
+            val editId = backStackEntry.arguments?.getLong("editId") ?: -1L
             ComposeDiaryScreen(
                 onNavigateBack = { navController.popBackStack() },
-            )
-        }
-
-        // Self Practice (单身模式专属)
-        composable(Screen.SelfPracticeList.route) {
-            SelfPracticeListScreen(
-                onNavigateBack = { navController.popBackStack() },
+                diaryId = if (editId > 0) editId else null,
             )
         }
 

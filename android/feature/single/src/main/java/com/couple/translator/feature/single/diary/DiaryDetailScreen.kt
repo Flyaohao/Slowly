@@ -45,12 +45,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.Background
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -74,7 +76,7 @@ fun DiaryDetailScreen(
     }
 
     Scaffold(
-        containerColor = Background,
+        containerColor = AppBackground,
         topBar = {
             TopAppBar(
                 title = { Text("日记详情") },
@@ -89,7 +91,7 @@ fun DiaryDetailScreen(
                             Icon(
                                 imageVector = if (uiState.diary!!.isFavorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
                                 contentDescription = if (uiState.diary!!.isFavorite) "取消收藏" else "收藏",
-                                tint = if (uiState.diary!!.isFavorite) Accent else TextSecondary,
+                                tint = if (uiState.diary!!.isFavorite) Accent else AppTextSecondary,
                             )
                         }
                         IconButton(onClick = { onNavigateToEdit(diaryId) }) {
@@ -101,18 +103,23 @@ fun DiaryDetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Background,
-                    titleContentColor = TextPrimary,
-                    navigationIconContentColor = TextPrimary,
-                    actionIconContentColor = TextPrimary,
+                    containerColor = AppBackground,
+                    titleContentColor = AppTextPrimary,
+                    navigationIconContentColor = AppTextPrimary,
+                    actionIconContentColor = AppTextPrimary,
                 ),
             )
         },
     ) { innerPadding ->
+        PullToRefreshLayout(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.padding(innerPadding),
+        ) {
         when {
             uiState.isLoading -> {
                 androidx.compose.foundation.layout.Box(
-                    modifier = Modifier.fillMaxSize().padding(innerPadding)
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     LoadingIndicator()
                 }
@@ -122,7 +129,6 @@ fun DiaryDetailScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(innerPadding)
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp),
                 ) {
@@ -130,7 +136,7 @@ fun DiaryDetailScreen(
                     Text(
                         text = diary.title,
                         style = MaterialTheme.typography.headlineSmall,
-                        color = TextPrimary,
+                        color = AppTextPrimary,
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -143,22 +149,32 @@ fun DiaryDetailScreen(
                         Text(
                             text = diary.createdAt?.take(16) ?: "",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextTertiary,
+                            color = AppTextTertiary,
                         )
                         if (diary.mood != null) {
                             Spacer(modifier = Modifier.width(12.dp))
                             Surface(
                                 shape = RoundedCornerShape(50),
-                                color = Surface,
+                                color = AppSurface,
                             ) {
                                 Text(
                                     text = diary.mood,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = TextSecondary,
+                                    color = AppTextSecondary,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                                 )
                             }
                         }
+                    }
+
+                    // 显示更新时间（如果与创建时间不同）
+                    if (diary.updatedAt != null && diary.updatedAt != diary.createdAt) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "最后编辑：${diary.updatedAt.take(16)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTextTertiary,
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -167,13 +183,14 @@ fun DiaryDetailScreen(
                     Text(
                         text = diary.content,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TextPrimary,
+                        color = AppTextPrimary,
                         lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
                     )
 
                     Spacer(modifier = Modifier.height(40.dp))
                 }
             }
+        }
         }
     }
 

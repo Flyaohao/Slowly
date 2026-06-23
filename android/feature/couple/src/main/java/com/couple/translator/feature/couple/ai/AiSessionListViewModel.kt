@@ -15,6 +15,7 @@ import javax.inject.Inject
 data class AiSessionListUiState(
     val sessions: List<AiDto.SessionResponse> = emptyList(),
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
     val error: String = "",
 )
 
@@ -28,6 +29,24 @@ class AiSessionListViewModel @Inject constructor(
 
     init {
         loadSessions()
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true, error = "") }
+            aiRepository.getSessions().fold(
+                onSuccess = { sessions ->
+                    _uiState.update {
+                        it.copy(sessions = sessions, isRefreshing = false)
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isRefreshing = false, error = error.message ?: "加载失败")
+                    }
+                },
+            )
+        }
     }
 
     fun clearError() {

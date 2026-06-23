@@ -34,3 +34,7 @@ class DiaryListResponse(BaseModel):
 
 class BatchDeleteRequest(BaseModel):
     ids: List[int]
+
+
+class BatchDeleteResponse(BaseModel):
+    deleted_count: int

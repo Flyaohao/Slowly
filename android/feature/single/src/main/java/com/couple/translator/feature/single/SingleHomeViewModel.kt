@@ -15,6 +15,7 @@ import javax.inject.Inject
 
 data class SingleHomeUiState(
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
     val nickname: String? = null,
     val avatarUrl: String? = null,
     val recentDiaries: List<DiaryDto.DiaryResponse> = emptyList(),
@@ -42,15 +43,19 @@ class SingleHomeViewModel @Inject constructor(
                 val homeResponse = sharedApiService.getHomeData()
                 if (homeResponse.isSuccess && homeResponse.data != null) {
                     val data = homeResponse.data!!
+                    // 单身模式用顶层字段，情侣模式用 relation 内字段
+                    val nickname = data.userNickname ?: data.relation?.userNickname
+                    val avatarUrl = data.userAvatarUrl ?: data.relation?.userAvatarUrl
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            nickname = data.relation?.userNickname,
-                            avatarUrl = data.relation?.userAvatarUrl,
-                            recentDiaries = emptyList(),
-                            hasProfile = true,
+                            nickname = nickname,
+                            avatarUrl = avatarUrl,
+                            hasProfile = data.hasProfile,
                         )
                     }
+                    // 加载最近日记
+                    loadDiaries()
                 } else {
                     // 单身模式首页可能返回不同结构，尝试加载日记
                     loadDiaries()
@@ -61,6 +66,46 @@ class SingleHomeViewModel @Inject constructor(
         }
     }
 
+    fun refresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true, error = null) }
+            try {
+                val homeResponse = sharedApiService.getHomeData()
+                if (homeResponse.isSuccess && homeResponse.data != null) {
+                    val data = homeResponse.data!!
+                    _uiState.update {
+                        it.copy(
+                            nickname = data.relation?.userNickname,
+                            avatarUrl = data.relation?.userAvatarUrl,
+                            hasProfile = true,
+                        )
+                    }
+                }
+                loadDiariesForRefresh()
+            } catch (e: Exception) {
+                loadDiariesForRefresh()
+            }
+        }
+    }
+
+    private suspend fun loadDiariesForRefresh() {
+        try {
+            val diaryResponse = singleApiService.getDiaries(limit = 3)
+            if (diaryResponse.isSuccess) {
+                _uiState.update {
+                    it.copy(
+                        isRefreshing = false,
+                        recentDiaries = diaryResponse.data?.items ?: emptyList(),
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(isRefreshing = false) }
+            }
+        } catch (e: Exception) {
+            _uiState.update { it.copy(isRefreshing = false, error = e.message) }
+        }
+    }
+
     private suspend fun loadDiaries() {
         try {
             val diaryResponse = singleApiService.getDiaries(limit = 3)
@@ -68,7 +113,7 @@ class SingleHomeViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        recentDiaries = diaryResponse.data ?: emptyList(),
+                        recentDiaries = diaryResponse.data?.items ?: emptyList(),
                     )
                 }
             } else {
