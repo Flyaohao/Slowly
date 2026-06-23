@@ -158,8 +158,8 @@ fun DrawerContent(
         } else {
             DrawerNavItem(
                 icon = Icons.Outlined.SwitchAccount,
-                label = "情侣绑定",
-                onClick = { onNavigateToRoute(Screen.CoupleBind.route) },
+                label = "关系管理",
+                onClick = { onNavigateToRoute(Screen.CoupleInfo.route) },
             )
         }
 

@@ -25,7 +25,7 @@ async def _notify_unbind_confirmed(user_a_id: int, user_b_id: int):
 
 
 def generate_invite_code(db: Session, user_id: int) -> dict:
-    """生成邀请码"""
+    """生成恋爱码"""
     existing = couple_repo.get_relation_by_user_including_unbinding(db, user_id)
     if existing:
         raise ValueError("30002")
@@ -43,7 +43,7 @@ def bind_couple(db: Session, user_id: int, invite_code_str: str) -> dict:
     if couple_repo.get_relation_by_user_including_unbinding(db, user_id):
         raise ValueError("30002")
 
-    # 验证邀请码
+    # 验证恋爱码
     code = invite_code_repo.get_valid_code(db, invite_code_str)
     if not code:
         raise ValueError("30001")
@@ -59,7 +59,7 @@ def bind_couple(db: Session, user_id: int, invite_code_str: str) -> dict:
     # 创建关系
     relation = couple_repo.create_relation(db, inviter_id, user_id)
 
-    # 标记邀请码为已使用
+    # 标记恋爱码为已使用
     invite_code_repo.mark_used(db, code.id, user_id)
 
     # 更新双方 has_couple 标记

@@ -40,6 +40,9 @@ interface CoupleApiService {
     @POST("api/v1/couples/unbind")
     suspend fun requestUnbind(): ApiResponse<Unit>
 
+    @POST("api/v1/couples/unbind/cancel")
+    suspend fun cancelUnbind(): ApiResponse<Unit>
+
     @POST("api/v1/couples/unbind/confirm")
     suspend fun confirmUnbind(): ApiResponse<Unit>
 

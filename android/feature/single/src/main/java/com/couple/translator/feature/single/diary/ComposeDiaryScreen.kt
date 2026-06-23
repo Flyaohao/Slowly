@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,14 +26,21 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.theme.Accent
@@ -52,6 +60,11 @@ fun ComposeDiaryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    // 使用 TextFieldValue 来跟踪光标/选区
+    var contentFieldValue by remember { mutableStateOf(TextFieldValue("")) }
+    // 用于同步 ViewModel 状态到 TextFieldValue（仅在初始加载或外部变化时）
+    var lastSyncedContent by remember { mutableStateOf("") }
+
     // 如果传入了 diaryId，加载编辑模式
     LaunchedEffect(diaryId) {
         if (diaryId != null && diaryId > 0) {
@@ -62,6 +75,17 @@ fun ComposeDiaryScreen(
     LaunchedEffect(uiState.isSaved) {
         if (uiState.isSaved) {
             onNavigateBack()
+        }
+    }
+
+    // 同步 ViewModel 的 content 到 TextFieldValue（初始加载编辑内容时）
+    LaunchedEffect(uiState.content) {
+        if (uiState.content != lastSyncedContent) {
+            lastSyncedContent = uiState.content
+            contentFieldValue = TextFieldValue(
+                text = uiState.content,
+                selection = TextRange(uiState.content.length),
+            )
         }
     }
 
@@ -109,17 +133,34 @@ fun ComposeDiaryScreen(
                 singleLine = true,
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Markdown 格式工具栏
+            MarkdownToolbar(
+                onFormatAction = { action ->
+                    val current = contentFieldValue
+                    val result = applyMarkdownAction(current, action)
+                    contentFieldValue = result
+                    lastSyncedContent = result.text
+                    viewModel.updateContent(result.text)
+                },
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
 
             // 内容
             OutlinedTextField(
-                value = uiState.content,
-                onValueChange = viewModel::updateContent,
+                value = contentFieldValue,
+                onValueChange = { newValue ->
+                    contentFieldValue = newValue
+                    lastSyncedContent = newValue.text
+                    viewModel.updateContent(newValue.text)
+                },
                 label = { Text("内容") },
-                placeholder = { Text("记录今天的心情...") },
+                placeholder = { Text("支持 Markdown 格式...") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp),
+                    .height(240.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Accent,
                     focusedLabelColor = Accent,
@@ -222,4 +263,172 @@ fun ComposeDiaryScreen(
             Spacer(modifier = Modifier.height(40.dp))
         }
     }
+}
+
+// ==================== Markdown 格式工具栏 ====================
+
+/** Markdown 格式操作类型 */
+enum class MarkdownAction {
+    BOLD,
+    ITALIC,
+    H1,
+    H2,
+    LIST,
+    LINK,
+}
+
+@Composable
+private fun MarkdownToolbar(
+    onFormatAction: (MarkdownAction) -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = AppSurface,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            MarkdownToolbarButton(label = "B", action = MarkdownAction.BOLD, onFormatAction = onFormatAction)
+            MarkdownToolbarButton(label = "I", action = MarkdownAction.ITALIC, onFormatAction = onFormatAction)
+            MarkdownToolbarButton(label = "H1", action = MarkdownAction.H1, onFormatAction = onFormatAction)
+            MarkdownToolbarButton(label = "H2", action = MarkdownAction.H2, onFormatAction = onFormatAction)
+            MarkdownToolbarButton(label = "•", action = MarkdownAction.LIST, onFormatAction = onFormatAction)
+            MarkdownToolbarButton(label = "🔗", action = MarkdownAction.LINK, onFormatAction = onFormatAction)
+        }
+    }
+}
+
+@Composable
+private fun MarkdownToolbarButton(
+    label: String,
+    action: MarkdownAction,
+    onFormatAction: (MarkdownAction) -> Unit,
+) {
+    TextButton(
+        onClick = { onFormatAction(action) },
+        modifier = Modifier.padding(horizontal = 2.dp),
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = AppTextPrimary,
+        )
+    }
+}
+
+// ==================== Markdown 格式化逻辑 ====================
+
+/**
+ * 对 TextFieldValue 应用 Markdown 格式操作。
+ * 根据操作类型修改文本并更新光标/选区。
+ */
+private fun applyMarkdownAction(
+    fieldValue: TextFieldValue,
+    action: MarkdownAction,
+): TextFieldValue {
+    val text = fieldValue.text
+    val selection = fieldValue.selection
+
+    return when (action) {
+        MarkdownAction.BOLD -> wrapSelection(text, selection, "**")
+        MarkdownAction.ITALIC -> wrapSelection(text, selection, "*")
+        MarkdownAction.H1 -> insertAtLineStart(text, selection, "# ")
+        MarkdownAction.H2 -> insertAtLineStart(text, selection, "## ")
+        MarkdownAction.LIST -> insertAtLineStart(text, selection, "- ")
+        MarkdownAction.LINK -> insertLink(text, selection)
+    }
+}
+
+/**
+ * 用指定的 marker 包裹选中的文本。
+ * 如果没有选中文本，则包裹并在光标处插入 marker。
+ */
+private fun wrapSelection(
+    text: String,
+    selection: TextRange,
+    marker: String,
+): TextFieldValue {
+    val start = selection.min
+    val end = selection.max
+    val selectedText = text.substring(start, end)
+    val before = text.substring(0, start)
+    val after = text.substring(end)
+
+    if (start == end) {
+        // 没有选中文本，插入 marker 对，光标放在中间
+        val newText = "$before$marker$marker$after"
+        val newCursorPos = start + marker.length
+        return TextFieldValue(
+            text = newText,
+            selection = TextRange(newCursorPos),
+        )
+    }
+
+    // 有选中文本，用 marker 包裹
+    val newText = "$before$marker$selectedText$marker$after"
+    val newStart = start + marker.length
+    val newEnd = newStart + selectedText.length
+    return TextFieldValue(
+        text = newText,
+        selection = TextRange(newStart, newEnd),
+    )
+}
+
+/**
+ * 在当前行的开头插入指定的前缀（如 "# "、"## "、"- "）。
+ */
+private fun insertAtLineStart(
+    text: String,
+    selection: TextRange,
+    prefix: String,
+): TextFieldValue {
+    val cursorPos = selection.min
+    // 找到当前行的起始位置
+    val lineStart = text.lastIndexOf('\n', cursorPos - 1) + 1
+
+    val newText = text.substring(0, lineStart) + prefix + text.substring(lineStart)
+    val newCursorPos = cursorPos + prefix.length
+
+    return TextFieldValue(
+        text = newText,
+        selection = TextRange(newCursorPos),
+    )
+}
+
+/**
+ * 在光标位置插入 Markdown 链接模板 [text](url)。
+ * 如果有选中文本，将其作为 link text。
+ */
+private fun insertLink(
+    text: String,
+    selection: TextRange,
+): TextFieldValue {
+    val start = selection.min
+    val end = selection.max
+    val selectedText = text.substring(start, end)
+
+    val linkTemplate = if (selectedText.isNotEmpty()) {
+        "[$selectedText](url)"
+    } else {
+        "[text](url)"
+    }
+
+    val newText = text.substring(0, start) + linkTemplate + text.substring(end)
+
+    // 选中 "url" 部分方便用户替换
+    val urlStart = if (selectedText.isNotEmpty()) {
+        start + selectedText.length + 2 // after "[selectedText]("
+    } else {
+        start + 6 // after "[text]("
+    }
+    val urlEnd = urlStart + 3 // "url".length
+
+    return TextFieldValue(
+        text = newText,
+        selection = TextRange(urlStart, urlEnd),
+    )
 }

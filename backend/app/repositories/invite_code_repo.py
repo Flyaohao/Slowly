@@ -12,8 +12,8 @@ def _generate_code() -> str:
 
 
 def create_code(db: Session, user_id: int) -> InviteCode:
-    """为用户生成邀请码，同时使旧邀请码失效"""
-    # 使该用户所有未使用的邀请码失效
+    """为用户生成恋爱码，同时使旧恋爱码失效"""
+    # 使该用户所有未使用的恋爱码失效
     db.query(InviteCode).filter(
         InviteCode.user_id == user_id,
         InviteCode.is_used == False,
@@ -32,7 +32,7 @@ def create_code(db: Session, user_id: int) -> InviteCode:
 
 
 def get_valid_code(db: Session, code_str: str) -> Optional[InviteCode]:
-    """获取有效的邀请码"""
+    """获取有效的恋爱码"""
     code = (
         db.query(InviteCode)
         .filter(
@@ -46,7 +46,7 @@ def get_valid_code(db: Session, code_str: str) -> Optional[InviteCode]:
 
 
 def mark_used(db: Session, code_id: int, used_by: int) -> None:
-    """标记邀请码为已使用"""
+    """标记恋爱码为已使用"""
     code = db.query(InviteCode).filter(InviteCode.id == code_id).first()
     if code:
         code.is_used = True
@@ -56,7 +56,7 @@ def mark_used(db: Session, code_id: int, used_by: int) -> None:
 
 
 def get_user_active_code(db: Session, user_id: int) -> Optional[InviteCode]:
-    """获取用户当前有效的邀请码"""
+    """获取用户当前有效的恋爱码"""
     return (
         db.query(InviteCode)
         .filter(

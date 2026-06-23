@@ -76,6 +76,10 @@ fun NavGraph(
 
     LaunchedEffect(Unit) {
         val hasToken = tokenStore?.isLoggedIn() == true
+        if (hasToken) {
+            // 启动时立即刷新情侣状态，确保显示正确的模式
+            coupleStateManager?.refresh()
+        }
         startDest = if (hasToken) Screen.Main.route else Screen.Login.route
     }
 
@@ -181,12 +185,19 @@ fun NavGraph(
                         popUpTo(Screen.CoupleBind.route) { inclusive = true }
                     }
                 },
+                coupleStateManager = coupleStateManager!!,
             )
         }
 
         composable(Screen.CoupleInfo.route) {
             CoupleInfoScreen(
                 onNavigateBack = { navController.popBackStack() },
+                onNavigateToMain = {
+                    navController.navigate(Screen.Main.route) {
+                        popUpTo(Screen.CoupleInfo.route) { inclusive = true }
+                    }
+                },
+                coupleStateManager = coupleStateManager!!,
             )
         }
 

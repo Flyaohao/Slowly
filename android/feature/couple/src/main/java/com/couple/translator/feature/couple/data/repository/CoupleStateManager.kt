@@ -46,15 +46,11 @@ class CoupleStateManager @Inject constructor(
                 _state.update {
                     it.copy(mode = mode, coupleInfo = info, isLoading = false)
                 }
-            } else {
-                _state.update {
-                    it.copy(mode = AppMode.SINGLE, coupleInfo = null, isLoading = false)
-                }
             }
+            // API 返回成功但 data 为 null，保持当前状态不清除
         } catch (e: Exception) {
-            _state.update {
-                it.copy(mode = AppMode.SINGLE, coupleInfo = null, isLoading = false)
-            }
+            // 网络错误时保持当前状态，不回退到 SINGLE
+            _state.update { it.copy(isLoading = false) }
         }
 
         // 加载用户昵称（单身/情侣模式通用）

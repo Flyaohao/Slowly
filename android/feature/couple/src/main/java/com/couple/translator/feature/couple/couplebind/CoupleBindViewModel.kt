@@ -22,6 +22,8 @@ data class CoupleBindUiState(
     val codeExpiresAt: String = "",
     val isLoading: Boolean = false,
     val error: String = "",
+    val showUnbindDialog: Boolean = false,
+    val unbindMessage: String = "",
 )
 
 sealed class CoupleBindUiEvent {
@@ -76,7 +78,7 @@ class CoupleBindViewModel @Inject constructor(
     fun bindCouple() {
         val code = _uiState.value.inputCode.trim()
         if (code.isBlank()) {
-            _uiState.update { it.copy(error = "请输入邀请码") }
+            _uiState.update { it.copy(error = "请输入恋爱码") }
             return
         }
 
@@ -85,13 +87,63 @@ class CoupleBindViewModel @Inject constructor(
             coupleRepository.bindCouple(code).fold(
                 onSuccess = { response ->
                     _uiState.update { it.copy(isLoading = false) }
-                    // 刷新情侣状态
+                    // 立即设置情侣模式（用绑定响应数据）
+                    if (response != null) {
+                        coupleStateManager.setCoupleBound(response)
+                    }
+                    // 后台刷新获取完整信息（含空间等）
                     coupleStateManager.refresh()
                     _event.emit(CoupleBindUiEvent.BindSuccess)
                 },
                 onFailure = { error ->
                     _uiState.update {
                         it.copy(isLoading = false, error = error.message ?: "绑定失败")
+                    }
+                },
+            )
+        }
+    }
+
+    fun showUnbindDialog() {
+        _uiState.update { it.copy(showUnbindDialog = true) }
+    }
+
+    fun dismissUnbindDialog() {
+        _uiState.update { it.copy(showUnbindDialog = false) }
+    }
+
+    fun requestUnbind() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = "", showUnbindDialog = false) }
+            coupleRepository.requestUnbind().fold(
+                onSuccess = {
+                    _uiState.update {
+                        it.copy(isLoading = false, unbindMessage = "解绑申请已发送，等待对方确认")
+                    }
+                    coupleStateManager.refresh()
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isLoading = false, error = error.message ?: "解绑申请失败")
+                    }
+                },
+            )
+        }
+    }
+
+    fun cancelUnbind() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = "") }
+            coupleRepository.cancelUnbind().fold(
+                onSuccess = {
+                    _uiState.update {
+                        it.copy(isLoading = false, unbindMessage = "已取消解绑申请")
+                    }
+                    coupleStateManager.refresh()
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isLoading = false, error = error.message ?: "取消解绑失败")
                     }
                 },
             )

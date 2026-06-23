@@ -75,6 +75,13 @@ class ComposeDiaryViewModel @Inject constructor(
         _uiState.update { it.copy(content = content) }
     }
 
+    /**
+     * 更新内容并保持光标/选区位置
+     */
+    fun updateContentWithSelection(newContent: String) {
+        _uiState.update { it.copy(content = newContent) }
+    }
+
     fun updateMood(mood: String?) {
         _uiState.update { it.copy(mood = mood) }
     }
