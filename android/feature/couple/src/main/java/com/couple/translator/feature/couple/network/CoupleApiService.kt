@@ -1,5 +1,6 @@
 package com.couple.translator.feature.couple.network
 
+import com.couple.translator.core.data.model.AiDto
 import com.couple.translator.core.data.model.CoupleDto
 import com.couple.translator.core.network.ApiResponse
 import com.couple.translator.feature.couple.data.model.AnniversaryDto
@@ -10,6 +11,8 @@ import com.couple.translator.feature.couple.data.model.MemoryDto
 import com.couple.translator.feature.couple.data.model.MuseumDto
 import com.couple.translator.feature.couple.data.model.PracticeDto
 import com.couple.translator.feature.couple.data.model.WishlistDto
+import okhttp3.ResponseBody
+import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -17,6 +20,7 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 
 /**
  * 情侣模式 API 服务
@@ -239,4 +243,38 @@ interface CoupleApiService {
 
     @DELETE("api/v1/couple/wishlists/{id}")
     suspend fun deleteWishlist(@Path("id") id: Long): ApiResponse<Unit>
+
+    // ---------- AI 翻译官 ----------
+    // 2026-09-14：这 6 个接口此前留在 core/SharedApiService 里，路径仍是旧的
+    // `api/v1/ai/...`，而后端 v2.0 只注册 `api/v1/couple/ai/...`，线上实测 404。
+    // AI 翻译官只存在于情侣模式，因此按 v2.0 分层迁到本接口。
+
+    @POST("api/v1/couple/ai/chat")
+    suspend fun aiChat(@Body body: AiDto.ChatRequest): ApiResponse<AiDto.ChatResponse>
+
+    /**
+     * SSE 流式对话。`@Streaming` 是必需的：否则 Retrofit 会把整个响应体缓冲完
+     * 才交给调用方，打字机效果直接失效。
+     */
+    @Streaming
+    @POST("api/v1/couple/ai/chat/stream")
+    suspend fun aiChatStream(@Body body: AiDto.ChatRequest): Response<ResponseBody>
+
+    @GET("api/v1/couple/ai/sessions")
+    suspend fun getAiSessions(): ApiResponse<List<AiDto.SessionResponse>>
+
+    @GET("api/v1/couple/ai/sessions/{id}/messages")
+    suspend fun getSessionMessages(@Path("id") sessionId: Long): ApiResponse<List<AiDto.MessageResponse>>
+
+    @POST("api/v1/couple/ai/sessions/{id}/feedback")
+    suspend fun submitFeedback(
+        @Path("id") sessionId: Long,
+        @Body body: AiDto.FeedbackRequest,
+    ): ApiResponse<Unit>
+
+    @DELETE("api/v1/couple/ai/sessions/{id}")
+    suspend fun deleteSession(@Path("id") sessionId: Long): ApiResponse<Unit>
+
+    @POST("api/v1/couple/ai/rewrite")
+    suspend fun rewriteExpression(@Body body: AiDto.RewriteRequest): ApiResponse<AiDto.RewriteResponse>
 }

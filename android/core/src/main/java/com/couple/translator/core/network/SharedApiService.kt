@@ -1,6 +1,5 @@
 package com.couple.translator.core.network
 
-import com.couple.translator.core.data.model.AiDto
 import com.couple.translator.core.data.model.HomeDto
 import com.couple.translator.core.data.model.AuthDto
 import com.couple.translator.core.data.model.ProfileDto
@@ -16,7 +15,8 @@ import retrofit2.http.Query
 
 /**
  * 共享 API 服务
- * 包含 Auth、User、Home、Questionnaire、Profile、AI 等共享接口
+ * 包含 Auth、User、Home、Couple、Questionnaire、Profile 等两种模式共用的接口。
+ * AI 翻译官是情侣模式专属，其接口见 feature/couple 的 CoupleApiService。
  */
 interface SharedApiService {
 
@@ -114,27 +114,4 @@ interface SharedApiService {
 
     @GET("api/v1/profiles/me/ai-report")
     suspend fun getAiReport(): ApiResponse<ProfileDto.AiReportResponse>
-
-    // AI
-    @POST("api/v1/ai/chat")
-    suspend fun aiChat(@Body body: AiDto.ChatRequest): ApiResponse<AiDto.ChatResponse>
-
-    @GET("api/v1/ai/sessions")
-    suspend fun getAiSessions(): ApiResponse<List<AiDto.SessionResponse>>
-
-    @GET("api/v1/ai/sessions/{id}/messages")
-    suspend fun getSessionMessages(@Path("id") sessionId: Long): ApiResponse<List<AiDto.MessageResponse>>
-
-    @POST("api/v1/ai/sessions/{id}/feedback")
-    suspend fun submitFeedback(
-        @Path("id") sessionId: Long,
-        @Body body: AiDto.FeedbackRequest,
-    ): ApiResponse<Unit>
-
-    @DELETE("api/v1/ai/sessions/{id}")
-    suspend fun deleteSession(@Path("id") sessionId: Long): ApiResponse<Unit>
-
-    // AI Expression Rewrite
-    @POST("api/v1/ai/rewrite")
-    suspend fun rewriteExpression(@Body body: AiDto.RewriteRequest): ApiResponse<AiDto.RewriteResponse>
 }

@@ -77,9 +77,11 @@ fun NewAiChatScreen(
     val listState = rememberLazyListState()
     var showModeSheet by remember { mutableStateOf(false) }
 
-    LaunchedEffect(uiState.messages.size) {
-        if (uiState.messages.isNotEmpty()) {
-            listState.animateScrollToItem(uiState.messages.size - 1)
+    LaunchedEffect(uiState.messages.size, uiState.streamingContent) {
+        val extra = if (uiState.streamingContent.isNotEmpty()) 1 else 0
+        val last = uiState.messages.size + extra - 1
+        if (last >= 0) {
+            listState.animateScrollToItem(last)
         }
     }
 
@@ -130,7 +132,13 @@ fun NewAiChatScreen(
                 }
             }
 
-            if (uiState.isLoading) {
+            // 流式增量：边收边显示，这是 SSE 相对一次性返回的唯一观感差异
+            if (uiState.streamingContent.isNotEmpty()) {
+                item {
+                    AiReplyBubble(content = uiState.streamingContent, isStreaming = true)
+                }
+            } else if (uiState.isLoading || uiState.isStreaming) {
+                // 请求已发出但首字还没到（首帧前）
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -160,7 +168,7 @@ fun NewAiChatScreen(
             onValueChange = viewModel::onInputChange,
             onSend = viewModel::sendMessage,
             onRewrite = viewModel::rewriteExpression,
-            isLoading = uiState.isLoading,
+            isLoading = uiState.isBusy,
             onOpenModeSheet = { showModeSheet = true },
             onOpenQuote = {},
             showRewriteButton = uiState.sceneKey == "expression_rewrite",
@@ -266,7 +274,7 @@ private fun UserBubble(content: String) {
 }
 
 @Composable
-private fun AiReplyBubble(content: String) {
+private fun AiReplyBubble(content: String, isStreaming: Boolean = false) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Start,
@@ -279,7 +287,8 @@ private fun AiReplyBubble(content: String) {
                 .padding(12.dp),
         ) {
             Text(
-                text = content,
+                // 流式过程中补一个光标，让"还在写"这件事可见
+                text = if (isStreaming) "$content▍" else content,
                 style = MaterialTheme.typography.bodyLarge,
                 color = TextPrimary,
             )

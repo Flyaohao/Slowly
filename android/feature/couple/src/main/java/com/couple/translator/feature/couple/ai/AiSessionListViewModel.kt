@@ -3,7 +3,7 @@ package com.couple.translator.feature.couple.ai
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.couple.translator.core.data.model.AiDto
-import com.couple.translator.core.data.repository.AiRepository
+import com.couple.translator.feature.couple.data.repository.AiRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

@@ -3,7 +3,7 @@ package com.couple.translator.feature.couple.ai
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.couple.translator.core.data.model.AiDto
-import com.couple.translator.core.data.repository.AiRepository
+import com.couple.translator.feature.couple.data.repository.AiRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -82,7 +82,7 @@ class ColdWarViewModel @Inject constructor(
         viewModelScope.launch {
             val request = AiDto.ChatRequest(
                 sceneKey = "cold_war",
-                content = "我的冷战目标：$input",
+                message = "我的冷战目标：$input",
             )
             aiRepository.chat(request).fold(
                 onSuccess = { response ->
@@ -109,7 +109,7 @@ class ColdWarViewModel @Inject constructor(
         viewModelScope.launch {
             val request = AiDto.ChatRequest(
                 sceneKey = "cold_war",
-                content = "面子与需求分析：$input",
+                message = "面子与需求分析：$input",
             )
             aiRepository.chat(request).fold(
                 onSuccess = { response ->
@@ -136,7 +136,7 @@ class ColdWarViewModel @Inject constructor(
         viewModelScope.launch {
             val request = AiDto.ChatRequest(
                 sceneKey = "cold_war",
-                content = "生成开场白，用户选择：$input",
+                message = "生成开场白，用户选择：$input",
             )
             aiRepository.chat(request).fold(
                 onSuccess = { response ->
