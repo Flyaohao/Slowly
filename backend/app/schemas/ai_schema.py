@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Any, List, Dict
+from typing import Optional, Any, List, Dict, Literal
 from datetime import datetime
 
 
@@ -103,3 +103,23 @@ class LetterReplyOut(BaseModel):
     replies: Optional[List[Dict[str, str]]] = None
     do_not_say: Optional[str] = None
     risk_level: Optional[str] = None
+
+
+class AgentHistoryItem(BaseModel):
+    """Agent 多轮上下文中的一条。只允许 user / assistant，避免客户端伪造 system 提示"""
+
+    role: Literal["user", "assistant"]
+    content: str = Field(..., min_length=1, max_length=4000)
+
+
+class AgentRequest(BaseModel):
+    """Agent 问答请求。
+
+    与 `/chat` 的区别：`/chat` 是"单轮进、结构化出"，Agent 会自行决定
+    要不要先查画像 / 检索理论，并可能连续调用多个工具，最后才给答复。
+    """
+
+    question: str = Field(..., min_length=1, max_length=2000, description="用户提问")
+    history: Optional[List[AgentHistoryItem]] = Field(
+        None, max_length=10, description="最近几轮对话，用于多轮追问"
+    )

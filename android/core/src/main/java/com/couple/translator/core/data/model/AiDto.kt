@@ -38,6 +38,19 @@ object AiDto {
 
     // ---------- 响应 ----------
 
+    /**
+     * `GET /api/v1/couple/ai/scenes` 的单条场景。
+     *
+     * 这是场景清单的**唯一权威来源**：客户端此前有 5 份互相不同步的硬编码清单，
+     * 后端加了场景客户端也不知道（`letter_understand` 就是这样变成不可达的）。
+     */
+    @JsonClass(generateAdapter = true)
+    data class SceneResponse(
+        @Json(name = "scene_key") val sceneKey: String,
+        @Json(name = "name") val name: String,
+        @Json(name = "description") val description: String? = null,
+    )
+
     @JsonClass(generateAdapter = true)
     data class ChatResponse(
         @Json(name = "session_id") val sessionId: Long,
@@ -68,7 +81,6 @@ object AiDto {
         @Json(name = "do_not_say") val doNotSay: String? = null,
         @Json(name = "next_step") val nextStep: String? = null,
         @Json(name = "risk_level") val riskLevel: String? = null,
-        @Json(name = "suggested_actions") val suggestedActions: List<String>? = null,
         @Json(name = "rewrites") val rewrites: List<RewriteItem>? = null,
         @Json(name = "theory_refs") val theoryRefs: List<String>? = null,
         // ---- 冷战开解（scene_key = cold_war）专属字段 ----
@@ -78,6 +90,18 @@ object AiDto {
         @Json(name = "approach_reason") val approachReason: String? = null,
         @Json(name = "opening_lines") val openingLines: List<String>? = null,
         @Json(name = "avoid_reminders") val avoidReminders: List<String>? = null,
+        // ---- 信件解读（scene_key = letter_understand）专属字段 ----
+        // 注意别和信件页的 letter_analysis 场景搞混：那个走 LetterDto.LetterUnderstanding
+        @Json(name = "surface_meaning") val surfaceMeaning: String? = null,
+        @Json(name = "underlying_need") val underlyingNeed: String? = null,
+        @Json(name = "emotion_tone") val emotionTone: String? = null,
+        // ---- 非场景业务字段 ----
+        /**
+         * 推理模型的思考过程（后端 `structured_output.thinking`）。
+         * 流式期间通过 `thinking` 事件实时下发，落库时随 structured_output 一并保存。
+         * 不是所有场景都有（非推理模型 / 非流式链路为 null）。
+         */
+        @Json(name = "thinking") val thinking: String? = null,
     )
 
     @JsonClass(generateAdapter = true)
@@ -136,6 +160,20 @@ object AiDto {
         @Json(name = "content") val content: String,
     )
 
+    /**
+     * `thinking` 帧：推理模型的思考过程增量。
+     *
+     * 与 [StreamDeltaPayload] 分开成一个事件类型，是因为两者用途完全不同：
+     * delta 是**回答正文**（要落库、要当答案读），thinking 只是**过程的可见化**
+     * （不落正文，只喂给「深度思考」面板）。混在一起会让正文被思考污染。
+     *
+     * 推理模型实测思考首帧约 0.5s、正文首帧 18s+，这个通道是消除空屏的关键。
+     */
+    @JsonClass(generateAdapter = true)
+    data class StreamThinkingPayload(
+        @Json(name = "content") val content: String,
+    )
+
     @JsonClass(generateAdapter = true)
     data class StreamDonePayload(
         @Json(name = "session_id") val sessionId: Long = 0,
@@ -155,6 +193,9 @@ object AiDto {
     sealed interface ChatStreamEvent {
         data class Meta(val sessionId: Long, val sceneKey: String, val ragHit: Int) : ChatStreamEvent
         data class Delta(val content: String) : ChatStreamEvent
+
+        /** 思考过程增量，喂给「深度思考」面板；不参与正文拼接 */
+        data class Thinking(val content: String) : ChatStreamEvent
         data class Done(
             val sessionId: Long,
             val messageId: Long,

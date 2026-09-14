@@ -156,6 +156,39 @@ fun AiMessageCard(
                 }
             }
 
+            // 信件解读（letter_understand）：这是聊天场景，与信件页的
+            // letter_analysis 场景不是一回事——后者由 LetterDto 承接。
+            // 此前客户端完全没有这三个字段，选中"信件解读"会渲染出空卡片。
+            structuredOutput.surfaceMeaning?.let { surface ->
+                CollapsibleSection(title = "字面意思") {
+                    Text(
+                        text = surface,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextSecondary,
+                    )
+                }
+            }
+
+            structuredOutput.underlyingNeed?.let { need ->
+                CollapsibleSection(title = "背后的需求") {
+                    Text(
+                        text = need,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextSecondary,
+                    )
+                }
+            }
+
+            structuredOutput.emotionTone?.let { tone ->
+                CollapsibleSection(title = "情绪基调") {
+                    Text(
+                        text = tone,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextSecondary,
+                    )
+                }
+            }
+
             structuredOutput.rewrites?.let { rewrites ->
                 if (rewrites.isNotEmpty()) {
                     CollapsibleSection(title = "改写版本") {

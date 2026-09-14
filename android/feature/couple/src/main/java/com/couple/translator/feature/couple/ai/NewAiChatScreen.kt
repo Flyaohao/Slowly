@@ -77,8 +77,12 @@ fun NewAiChatScreen(
     val listState = rememberLazyListState()
     var showModeSheet by remember { mutableStateOf(false) }
 
-    LaunchedEffect(uiState.messages.size, uiState.streamingContent) {
-        val extra = if (uiState.streamingContent.isNotEmpty()) 1 else 0
+    // 场景清单统一来自 AiSceneCatalog（远端拉取，collectAsState 保证拉到后会重组）
+    val scenes by AiSceneCatalog.scenes.collectAsState()
+    val quickChips = scenes.filter { it.showInQuickChips }
+
+    LaunchedEffect(uiState.messages.size, uiState.streamingContent, uiState.thinkingContent) {
+        val extra = if (uiState.streamingContent.isNotEmpty() || uiState.thinkingContent.isNotEmpty()) 1 else 0
         val last = uiState.messages.size + extra - 1
         if (last >= 0) {
             listState.animateScrollToItem(last)
@@ -118,8 +122,9 @@ fun NewAiChatScreen(
                 }
                 item {
                     QuickSceneChips(
+                        scenes = quickChips,
                         currentScene = uiState.sceneKey,
-                        onSceneSelected = { viewModel.setSceneKey(it) },
+                        onSceneSelected = viewModel::selectScene,
                     )
                 }
             }
@@ -128,36 +133,35 @@ fun NewAiChatScreen(
                 if (message.role == "user") {
                     UserBubble(content = message.content)
                 } else {
-                    AiReplyBubble(content = message.content)
+                    AiReplyBubble(
+                        content = message.content,
+                        thinking = message.structuredOutput?.thinking,
+                    )
                 }
             }
 
-            // 流式增量：边收边显示，这是 SSE 相对一次性返回的唯一观感差异
-            if (uiState.streamingContent.isNotEmpty()) {
+            // 流式增量：边收边显示，这是 SSE 相对一次性返回的唯一观感差异。
+            // 思考过程与正文分开渲染：正文还没来时先显示思考面板，
+            // 这样用户 0.5s 左右就能看到"模型在动"，而不是空白 20 多秒。
+            if (uiState.thinkingContent.isNotEmpty() || uiState.streamingContent.isNotEmpty()) {
                 item {
-                    AiReplyBubble(content = uiState.streamingContent, isStreaming = true)
-                }
-            } else if (uiState.isLoading || uiState.isStreaming) {
-                // 请求已发出但首字还没到（首帧前）
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Start,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp))
-                                .background(Surface)
-                                .padding(16.dp),
-                        ) {
-                            Text(
-                                text = "正在整理...",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = TextTertiary,
-                            )
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        AiThinkingPanel(
+                            thinking = uiState.thinkingContent,
+                            isLive = uiState.isThinking,
+                            seconds = uiState.thinkingSeconds,
+                        )
+                        if (uiState.streamingContent.isNotEmpty()) {
+                            if (uiState.thinkingContent.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+                            AiReplyBubble(content = uiState.streamingContent, isStreaming = true)
                         }
                     }
                 }
+            } else if (uiState.isLoading || uiState.isStreaming) {
+                // 请求已发出但连思考增量都还没到（0.5s 内的极短窗口）
+                item { AiWaitingBubble() }
             }
 
             item { Spacer(modifier = Modifier.height(8.dp)) }
@@ -177,10 +181,16 @@ fun NewAiChatScreen(
 
     if (showModeSheet) {
         ModeDrawerSheet(
+            // 只列出用户可选的场景：信件改写的入口在信件页，不在这里
+            scenes = scenes.filter { it.showInDrawer },
             onDismiss = { showModeSheet = false },
-            onModeSelected = { mode ->
-                viewModel.setSceneKey(mode)
+            onModeSelected = { scene ->
                 showModeSheet = false
+                // 有专属页面的场景跳转过去，其余作为聊天场景切换
+                when (scene.target) {
+                    AiSceneTarget.MEDIATION -> onNavigateToMediation()
+                    AiSceneTarget.CHAT -> viewModel.selectScene(scene)
+                }
             },
         )
     }
@@ -202,14 +212,8 @@ private fun AiTopBar(
     onOpenDrawer: () -> Unit,
     onOpenHistory: () -> Unit,
 ) {
-    val modeLabel = when (currentMode) {
-        "private_advisor" -> "日常"
-        "partner_translate" -> "听懂 TA"
-        "expression_rewrite" -> "帮我表达"
-        "cold_war" -> "冷静一下"
-        "mediation" -> "双人调解"
-        else -> "日常"
-    }
+    // 文案统一来自 AiSceneCatalog，不再在界面里写 when 硬编码
+    val modeLabel = AiSceneCatalog.labelOf(currentMode)
 
     Row(
         modifier = Modifier
@@ -273,25 +277,42 @@ private fun UserBubble(content: String) {
     }
 }
 
+/**
+ * AI 回复气泡。
+ *
+ * [thinking] 是**历史消息**里落库的思考过程（`structured_output.thinking`）：
+ * 流式期间它由 [AiThinkingPanel] 实时渲染，重新进入会话时则从这里回读，
+ * 这样"深度思考过程可展开查看"在事后依然成立。
+ */
 @Composable
-private fun AiReplyBubble(content: String, isStreaming: Boolean = false) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Start,
-    ) {
-        Box(
-            modifier = Modifier
-                .widthIn(max = 280.dp)
-                .clip(RoundedCornerShape(4.dp, 16.dp, 16.dp, 16.dp))
-                .background(Surface)
-                .padding(12.dp),
+private fun AiReplyBubble(
+    content: String,
+    isStreaming: Boolean = false,
+    thinking: String? = null,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (!thinking.isNullOrBlank()) {
+            AiThinkingPanel(thinking = thinking, isLive = false)
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start,
         ) {
-            Text(
-                // 流式过程中补一个光标，让"还在写"这件事可见
-                text = if (isStreaming) "$content▍" else content,
-                style = MaterialTheme.typography.bodyLarge,
-                color = TextPrimary,
-            )
+            Box(
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .clip(RoundedCornerShape(4.dp, 16.dp, 16.dp, 16.dp))
+                    .background(Surface)
+                    .padding(12.dp),
+            ) {
+                Text(
+                    // 流式过程中补一个光标，让"还在写"这件事可见
+                    text = if (isStreaming) "$content▍" else content,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = TextPrimary,
+                )
+            }
         }
     }
 }
@@ -384,22 +405,11 @@ private fun AiInputBar(
     }
 }
 
-private data class QuickScene(
-    val key: String,
-    val label: String,
-)
-
-private val quickScenes = listOf(
-    QuickScene("private_advisor", "帮我理清"),
-    QuickScene("partner_translate", "听懂 TA"),
-    QuickScene("expression_rewrite", "帮我表达"),
-    QuickScene("cold_war", "冷静一下"),
-)
-
 @Composable
 private fun QuickSceneChips(
+    scenes: List<AiScene>,
     currentScene: String,
-    onSceneSelected: (String) -> Unit,
+    onSceneSelected: (AiScene) -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -409,13 +419,13 @@ private fun QuickSceneChips(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Spacer(modifier = Modifier.width(4.dp))
-        quickScenes.forEach { scene ->
+        scenes.forEach { scene ->
             FilterChip(
                 selected = currentScene == scene.key,
-                onClick = { onSceneSelected(scene.key) },
+                onClick = { onSceneSelected(scene) },
                 label = {
                     Text(
-                        text = scene.label,
+                        text = scene.chipLabel,
                         style = MaterialTheme.typography.labelMedium,
                     )
                 },

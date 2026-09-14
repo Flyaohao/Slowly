@@ -26,8 +26,29 @@ class AiRepository @Inject constructor(
 
     private val metaAdapter by lazy { moshi.adapter(AiDto.StreamMetaPayload::class.java) }
     private val deltaAdapter by lazy { moshi.adapter(AiDto.StreamDeltaPayload::class.java) }
+    private val thinkingAdapter by lazy { moshi.adapter(AiDto.StreamThinkingPayload::class.java) }
     private val doneAdapter by lazy { moshi.adapter(AiDto.StreamDonePayload::class.java) }
     private val errorAdapter by lazy { moshi.adapter(AiDto.StreamErrorPayload::class.java) }
+
+    /**
+     * 拉取后端场景清单。
+     *
+     * 场景清单过去是客户端硬编码的（且散落 5 处、彼此不同步），
+     * 导致后端新增场景客户端永远不知道。现改为以后端 `GET /ai/scenes` 为准。
+     */
+    suspend fun getScenes(): Result<List<AiDto.SceneResponse>> {
+        return try {
+            val response = apiService.getAiScenes()
+            val data = response.data
+            if (response.isSuccess && data != null) {
+                Result.success(data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     suspend fun chat(request: AiDto.ChatRequest): Result<AiDto.ChatResponse> {
         return try {
@@ -85,7 +106,8 @@ class AiRepository @Inject constructor(
                     line.isEmpty() -> {
                         val name = eventName
                         if (name != null) {
-                            emit(decode(name, dataBuf.toString()))
+                            // decode 可能返回 null（该帧无需派发），此时静默跳过
+                            decode(name, dataBuf.toString())?.let { emit(it) }
                         }
                         eventName = null
                         dataBuf.setLength(0)
@@ -175,7 +197,13 @@ class AiRepository @Inject constructor(
         }
     }
 
-    private fun decode(event: String, json: String): AiDto.ChatStreamEvent {
+    /**
+     * 把一帧 SSE 报文解码成客户端事件。
+     *
+     * 返回 `null` 表示该帧**不需要派发给 UI**（目前只有解析失败的 thinking 帧，
+     * 它只是过程展示，丢了不影响正确性，没必要因此中断整条流）。
+     */
+    private fun decode(event: String, json: String): AiDto.ChatStreamEvent? {
         return try {
             when (event) {
                 "meta" -> {
@@ -188,6 +216,12 @@ class AiRepository @Inject constructor(
                     val p = deltaAdapter.fromJson(json)
                     if (p == null) AiDto.ChatStreamEvent.Failure(50000, "delta 帧解析失败")
                     else AiDto.ChatStreamEvent.Delta(p.content)
+                }
+
+                "thinking" -> {
+                    val p = thinkingAdapter.fromJson(json)
+                    // 思考帧解析失败不该中断整条流：它只是过程展示，丢掉即可
+                    if (p == null) null else AiDto.ChatStreamEvent.Thinking(p.content)
                 }
 
                 "done" -> {

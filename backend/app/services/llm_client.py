@@ -18,7 +18,7 @@ import json
 import logging
 import re
 import time
-from typing import Any, Dict, Iterator, List, Optional, Type
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Type
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -35,6 +35,10 @@ FALLBACK_MODELS: List[str] = ["qwen-plus", "deepseek-v3", "qwen-turbo"]
 #: 实测单次结构化调用约 30s，长 prompt 更久，故留足余量。
 _REQUEST_TIMEOUT = 120.0
 _TOOL_NAME = "submit_structured_answer"
+
+#: 流式增量的两种类型标签，见 `LlmClient.stream_events`
+_KIND_THINKING = "thinking"  #: 模型的推理过程（reasoning_content），只给用户看，不落正文
+_KIND_CONTENT = "content"    #: 面向用户的正文
 
 #: 命中这些错误码说明是模型侧不可用，应降级到下一个模型
 _MODEL_UNAVAILABLE_CODES = (
@@ -53,6 +57,10 @@ class LlmError(RuntimeError):
 
 class LlmClient:
     """大模型统一客户端。模块级单例见文件底部 `llm`。"""
+
+    #: 流式增量类型标签，方便调用方写 `llm.KIND_THINKING`
+    KIND_THINKING = _KIND_THINKING
+    KIND_CONTENT = _KIND_CONTENT
 
     def __init__(
         self,
@@ -95,14 +103,42 @@ class LlmClient:
         max_tokens: int = 2000,
         scene: str = "unknown",
     ) -> Iterator[str]:
-        """流式调用，逐块产出文本增量（供 SSE 使用）。
+        """流式调用，**只**产出面向用户的正文增量。
+
+        这是 `stream_events()` 的正文投影，供不关心推理过程的调用方使用。
+        需要把模型的思考过程也下推（做"正在深度思考"体验）时用 `stream_events()`。
+        """
+        for kind, text in self.stream_events(
+            messages, temperature=temperature, max_tokens=max_tokens, scene=scene
+        ):
+            if kind == self.KIND_CONTENT:
+                yield text
+
+    def stream_events(
+        self,
+        messages: List[Dict[str, Any]],
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+        scene: str = "unknown",
+    ) -> Iterator[Tuple[str, str]]:
+        """流式调用，逐块产出 `(kind, text)`。
+
+        `kind` 取 `KIND_THINKING`（模型的推理过程，来自 `reasoning_content`）
+        或 `KIND_CONTENT`（面向用户的正文，来自 `content`）。
+
+        **为什么必须分成两个通道**：推理模型（qwen3.7-flash）会先流式产出
+        `reasoning_content`，此时 `delta.content` 恒为空串。实测同一次调用中
+        推理帧首个约 **0.5s** 抵达，正文首个却要 **18s 以上**——只取 content
+        意味着前端要空屏近半分钟。把推理增量单独下推，用户 0.5 秒就能看到
+        模型"在想什么"，而正文通道依然保持纯净（推理不会混进落库正文）。
 
         与 `invoke()` 的差异：
-        - `stream()` 走的是 `client.stream()`，无法复用 `_request()` 的请求封装，
+        - 走 `client.stream()`，无法复用 `_request()` 的请求封装，
           因此**模型降级逻辑必须在这里再实现一遍**（曾经漏掉 `model` 字段，
           线上会直接 400 "you must provide a model parameter"）。
         - 只有在**尚未吐出任何增量**时才允许切换模型；一旦有内容发给前端了，
           再换模型会导致前缀重复，此时只能报错。
+          注意判据是"推理或正文任一已下发"，推理也算已下发。
         """
         last_error: Optional[str] = None
 
@@ -115,7 +151,8 @@ class LlmClient:
                 "stream": True,
             }
             started = time.time()
-            chunks = 0
+            thinking_chunks = 0
+            content_chunks = 0
             try:
                 with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:
                     with client.stream(
@@ -143,20 +180,26 @@ class LlmClient:
                                 event = json.loads(line)
                             except ValueError:
                                 continue
+
+                            reasoning = self._extract_reasoning(event)
+                            if reasoning:
+                                thinking_chunks += 1
+                                yield self.KIND_THINKING, reasoning
+
                             delta = self._extract_delta(event)
                             if delta:
-                                chunks += 1
-                                yield delta
+                                content_chunks += 1
+                                yield self.KIND_CONTENT, delta
             except httpx.HTTPError as exc:
                 last_error = "网络异常: %s" % exc
-                if chunks == 0:
+                if thinking_chunks == 0 and content_chunks == 0:
                     logger.warning("[LLM] 流式 %s 请求异常，尝试下一个模型: %s", model, exc)
                     continue
                 raise LlmError("流式中断且已推送部分内容: %s" % exc) from exc
             finally:
                 logger.info(
-                    "[LLM-STREAM] scene=%s model=%s chunks=%d cost=%.2fs",
-                    scene, model, chunks, time.time() - started,
+                    "[LLM-STREAM] scene=%s model=%s thinking=%d content=%d cost=%.2fs",
+                    scene, model, thinking_chunks, content_chunks, time.time() - started,
                 )
             return
 
@@ -347,10 +390,26 @@ class LlmClient:
 
     @staticmethod
     def _extract_delta(event: Dict[str, Any]) -> str:
+        """取面向用户的正文增量（`delta.content`）。"""
         try:
             return event["choices"][0].get("delta", {}).get("content") or ""
         except (KeyError, IndexError):
             return ""
+
+    @staticmethod
+    def _extract_reasoning(event: Dict[str, Any]) -> str:
+        """取推理模型的思考增量（`delta.reasoning_content`）。
+
+        非推理模型的响应里没有这个字段，恒返回空串，因此对普通模型无副作用。
+        部分兼容端点也见过 `delta.reasoning` 的写法，一并兼容。
+        """
+        try:
+            delta = event["choices"][0].get("delta") or {}
+        except (KeyError, IndexError):
+            return ""
+        if not isinstance(delta, dict):
+            return ""
+        return delta.get("reasoning_content") or delta.get("reasoning") or ""
 
     @staticmethod
     def _arm_tool_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

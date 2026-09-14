@@ -3,7 +3,7 @@ import queue
 import threading
 
 from sqlalchemy.orm import Session
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from app.core.database import SessionLocal
 from app.repositories import (
@@ -258,14 +258,18 @@ _HEARTBEAT_INTERVAL = 8.0
 
 def _stream_with_heartbeat(
     prompt: str, scene_key: str, interval: float = _HEARTBEAT_INTERVAL
-) -> Iterator[Optional[str]]:
-    """产出模型增量，静默期产出 `None` 作为心跳信号。
+) -> Iterator[Optional[Tuple[str, str]]]:
+    """产出 `(kind, text)` 增量，静默期产出 `None` 作为心跳信号。
 
-    **为什么需要它**：qwen3.7-flash 这类推理模型会先流式产出 reasoning_content，
-    再产出正文。心跳层的 `_extract_delta` 只取 `delta.content`（思考过程不应污染
-    用户可见正文），于是思考期间 SSE 一个字节都不下发——实测首字可达 14s，
-    长 prompt 更久。而 SSE 连接恰恰在静默期最脆弱：客户端 okhttp readTimeout
-    与 Nginx proxy_read_timeout 都会把「长时间无数据」判定为断连。
+    `kind` 为 `llm.KIND_THINKING`（模型推理过程）或 `llm.KIND_CONTENT`（正文）。
+
+    **为什么需要心跳**：推理模型的思考期不产出正文，而 SSE 连接恰恰在静默期
+    最脆弱——客户端 okhttp readTimeout 与 Nginx proxy_read_timeout 都会把
+    「长时间无数据」判定为断连。
+
+    2026-09-14 起思考增量本身也会下推（`event: thinking`），首帧实测约 0.5s，
+    静默期从近 20s 缩短到毫秒级；心跳遂退化为**兜底**：模型连推理都不吐
+    （例如纯文本模型或网络卡顿）时，仍保证连接有字节流动。
 
     做法：把真正的调用丢到后台线程，主生成器只在队列上等待；超时即产出 `None`，
     由调用方翻译成 SSE 注释帧。这样连接始终有字节流动，而协议语义不变。
@@ -275,13 +279,13 @@ def _stream_with_heartbeat(
 
     def _worker() -> None:
         try:
-            for delta in llm.stream(
+            for item in llm.stream_events(
                 [{"role": "system", "content": prompt}],
                 temperature=0.7,
                 max_tokens=1200,
                 scene=scene_key,
             ):
-                q.put(delta)
+                q.put(item)
         except BaseException as exc:  # noqa: BLE001 —— 原样抛回主线程处理
             q.put(exc)
         finally:
@@ -303,13 +307,17 @@ def _stream_with_heartbeat(
 
 
 def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
-    """把一次聊天拆成 SSE 事件序列：meta → delta* → done / error。
+    """把一次聊天拆成 SSE 事件序列：meta → thinking* / delta* → done / error。
 
     事件协议（前端按 `event:` 名分发）：
-    - `meta`  首帧，携带 session_id / scene_key / RAG 命中数，客户端据此绑定会话
-    - `delta` 文本增量，逐块追加即得打字机效果
-    - `done`  终帧，携带 message_id 与最终风险等级，客户端据此刷新消息列表
-    - `error` 模型侧失败，客户端应提示重试
+    - `meta`     首帧，携带 session_id / scene_key / RAG 命中数，客户端据此绑定会话
+    - `thinking` 推理模型的思考过程增量。**不是给用户当正文读的**，而是让前端
+                 渲染一个「正在深度思考」的可展开面板——推理模型正文首字实测
+                 要 18s 以上，而思考增量首个约 0.5s，这是消除空屏的关键通道。
+                 非推理模型不产生该事件，前端需容忍它完全缺席。
+    - `delta`    正文文本增量，逐块追加即得打字机效果
+    - `done`     终帧，携带 message_id 与最终风险等级，客户端据此刷新消息列表
+    - `error`    模型侧失败，客户端应提示重试
 
     另有 `comment` 类型的心跳帧（编码为 SSE 注释行 `: keep-alive`），
     仅用于保活，客户端解析器会忽略，不属于上述事件协议。
@@ -342,14 +350,22 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
         return
 
     buffer: List[str] = []
+    thinking_buffer: List[str] = []
     try:
-        for delta in _stream_with_heartbeat(prepared["stream_prompt"], prepared["scene_key"]):
-            if delta is None:
-                # 模型思考中：发一个注释帧保活，客户端解析器会忽略它
+        for item in _stream_with_heartbeat(prepared["stream_prompt"], prepared["scene_key"]):
+            if item is None:
+                # 兜底保活：模型连推理都不吐时，用注释帧证明连接还活着
                 yield {"comment": "keep-alive"}
                 continue
-            buffer.append(delta)
-            yield {"event": "delta", "data": {"content": delta}}
+
+            kind, text = item
+            if kind == llm.KIND_THINKING:
+                thinking_buffer.append(text)
+                yield {"event": "thinking", "data": {"content": text}}
+                continue
+
+            buffer.append(text)
+            yield {"event": "delta", "data": {"content": text}}
     except LlmError as exc:
         logger.error("[AI] 流式调用失败 scene=%s: %s", prepared["scene_key"], exc)
         yield {
@@ -372,6 +388,9 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
         "streamed": True,
         "risk_level": output_risk,
     }
+    thinking = _trim_thinking("".join(thinking_buffer))
+    if thinking:
+        structured["thinking"] = thinking
     if output_risk != "normal":
         structured["safety_notice"] = get_safety_response(output_risk)
 
@@ -397,6 +416,22 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
             "finish_reason": "stop",
         },
     }
+
+
+#: 落库的思考过程上限（字符）。推理模型的思考常为正文字数的 5~10 倍，
+#: 无上限会明显撑大 ai_chat_message.structured_output。
+_THINKING_MAX_CHARS = 4000
+
+
+def _trim_thinking(text: str) -> str:
+    """裁剪思考过程用于落库，超长时保留开头并标注被截断。
+
+    保留开头而非结尾：思考的开头是"怎么理解这个问题"，信息密度高于末尾的收尾复述。
+    """
+    text = text.strip()
+    if len(text) <= _THINKING_MAX_CHARS:
+        return text
+    return text[:_THINKING_MAX_CHARS] + "\n…（思考过程过长，已截断）"
 
 
 def _persist_streamed_message(

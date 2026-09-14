@@ -47,12 +47,9 @@ import com.couple.translator.core.ui.theme.TextPrimary
 import com.couple.translator.core.ui.theme.TextSecondary
 import com.couple.translator.core.ui.theme.TextTertiary
 
-private val sceneNames = mapOf(
-    "private_advisor" to "私人军师",
-    "partner_translate" to "对方翻译",
-    "expression_rewrite" to "表达改写",
-)
-
+// 场景名不再本地硬编码：此前这里只有 3 个，比后端少一半，
+// 陌生场景的会话就退化成显示原始 scene_key。改由 AiSceneCatalog 统一提供
+// （页面上额外包一层 collectAsState，是为了远端目录拉到后能自动重组）。
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AiSessionListScreen(
@@ -61,6 +58,11 @@ fun AiSessionListScreen(
     viewModel: AiSessionListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    // 订阅场景目录：远端拉到后自动重组，会话标题才会用上新场景名
+    val scenes by AiSceneCatalog.scenes.collectAsState()
+    val sceneLabel: (String) -> String = { key ->
+        scenes.firstOrNull { it.key == key }?.label ?: key
+    }
 
     if (uiState.error.isNotEmpty()) {
         ErrorDialog(
@@ -121,6 +123,7 @@ fun AiSessionListScreen(
             items(uiState.sessions) { session ->
                 SessionItem(
                     session = session,
+                    sceneLabel = sceneLabel,
                     onClick = { onNavigateToSession(session.id, session.sceneKey) },
                     onDelete = { viewModel.deleteSession(session.id) },
                 )
@@ -135,6 +138,7 @@ fun AiSessionListScreen(
 @Composable
 private fun SessionItem(
     session: AiDto.SessionResponse,
+    sceneLabel: (String) -> String,
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -154,7 +158,7 @@ private fun SessionItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = session.title ?: sceneNames[session.sceneKey] ?: "会话",
+                    text = session.title ?: sceneLabel(session.sceneKey),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
@@ -165,7 +169,7 @@ private fun SessionItem(
 
                 Row {
                     Text(
-                        text = sceneNames[session.sceneKey] ?: session.sceneKey,
+                        text = sceneLabel(session.sceneKey),
                         style = MaterialTheme.typography.bodySmall,
                         color = Accent,
                     )

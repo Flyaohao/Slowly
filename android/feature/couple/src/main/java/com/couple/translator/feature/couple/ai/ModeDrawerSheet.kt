@@ -5,17 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.Hearing
-import androidx.compose.material.icons.outlined.Icecream
-import androidx.compose.material.icons.outlined.MailOutline
-import androidx.compose.material.icons.outlined.People
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -26,34 +20,28 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.Background
 import com.couple.translator.core.ui.theme.BorderLight
 import com.couple.translator.core.ui.theme.TextPrimary
 import com.couple.translator.core.ui.theme.TextSecondary
 
-private data class AiMode(
-    val key: String,
-    val label: String,
-    val icon: ImageVector,
-)
-
-private val aiModes = listOf(
-    AiMode("expression_rewrite", "帮我表达", Icons.Outlined.AutoAwesome),
-    AiMode("partner_translate", "听懂 TA", Icons.Outlined.Hearing),
-    AiMode("reply", "回信", Icons.Outlined.MailOutline),
-    AiMode("apologize", "道歉", Icons.Outlined.FavoriteBorder),
-    AiMode("cold_war", "冷静一下", Icons.Outlined.Icecream),
-    AiMode("mediation", "双人调解", Icons.Outlined.People),
-)
-
+/**
+ * 模式选择抽屉。
+ *
+ * [scenes] 由 [AiSceneCatalog] 提供（最终来自后端 `GET /ai/scenes`）。
+ *
+ * 此前这里的 `aiModes` 是一份独立硬编码清单，里面塞了 `reply` / `apologize`
+ * 两个 key，而**后端根本没有这两个 scene**：选中后请求照常发出，服务端按
+ * 未知 scene 静默回退到 `TranslateOutput`，用户拿到一段通用回答却看不出哪里不对。
+ * 场景集合既有唯一来源（[AiSceneCatalog]）后，这类"前端凭空造场景"不可能再发生。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModeDrawerSheet(
+    scenes: List<AiScene>,
     onDismiss: () -> Unit,
-    onModeSelected: (String) -> Unit,
+    onModeSelected: (AiScene) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
 
@@ -75,12 +63,12 @@ fun ModeDrawerSheet(
                 modifier = Modifier.padding(bottom = 10.dp),
             )
 
-            aiModes.forEachIndexed { index, mode ->
+            scenes.forEachIndexed { index, scene ->
                 ModeItem(
-                    mode = mode,
-                    onClick = { onModeSelected(mode.key) },
+                    scene = scene,
+                    onClick = { onModeSelected(scene) },
                 )
-                if (index < aiModes.lastIndex) {
+                if (index < scenes.lastIndex) {
                     HorizontalDivider(color = BorderLight)
                 }
             }
@@ -90,7 +78,7 @@ fun ModeDrawerSheet(
 
 @Composable
 private fun ModeItem(
-    mode: AiMode,
+    scene: AiScene,
     onClick: () -> Unit,
 ) {
     Row(
@@ -101,14 +89,15 @@ private fun ModeItem(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            imageVector = mode.icon,
+            // 目录里没配图标的场景（后端新加、客户端还没补样式）用中性图标兜底
+            imageVector = scene.icon ?: Icons.Outlined.AutoAwesome,
             contentDescription = null,
             tint = TextSecondary,
             modifier = Modifier.size(20.dp),
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
-            text = mode.label,
+            text = scene.label,
             style = MaterialTheme.typography.bodyLarge,
             color = TextPrimary,
         )

@@ -269,6 +269,13 @@ interface CoupleApiService {
     @GET("api/v1/couple/ai/sessions")
     suspend fun getAiSessions(): ApiResponse<List<AiDto.SessionResponse>>
 
+    /**
+     * 场景清单。客户端不再硬编码场景，改为启动时拉一次。
+     * 这是「后端加了场景、客户端却不知道」这类问题的根治手段。
+     */
+    @GET("api/v1/couple/ai/scenes")
+    suspend fun getAiScenes(): ApiResponse<List<AiDto.SceneResponse>>
+
     @GET("api/v1/couple/ai/sessions/{id}/messages")
     suspend fun getSessionMessages(@Path("id") sessionId: Long): ApiResponse<List<AiDto.MessageResponse>>
 

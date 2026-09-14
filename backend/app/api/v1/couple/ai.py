@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Any, Dict, Iterator
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,9 +9,19 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.schemas.common import ApiResponse
-from app.schemas.ai_schema import ChatRequest, FeedbackRequest, LetterUnderstandRequest, LetterRewriteRequest, LetterReplyRequest, RewriteRequest
+from app.schemas.ai_schema import (
+    AgentRequest,
+    ChatRequest,
+    FeedbackRequest,
+    LetterUnderstandRequest,
+    LetterRewriteRequest,
+    LetterReplyRequest,
+    RewriteRequest,
+)
 from app.services import ai_service, letter_ai_service
 from app.repositories import couple_repo, ai_repo
+
+logger = logging.getLogger("couple.ai")
 
 router = APIRouter(prefix="/ai", tags=["AI 翻译官"])
 
@@ -325,4 +336,56 @@ def generate_reply(
             status_code=sc,
             detail={"code": int(code), "message": msg, "data": None},
         )
+    return ApiResponse(data=result)
+
+
+@router.post("/agent", response_model=ApiResponse)
+def agent_chat(
+    req: AgentRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Agent 路径：让模型自行决定要不要先查画像 / 检索理论，再给出答复。
+
+    与 `/chat` 的定位差异——`/chat` 是"一次调用、结构化输出"的问答；
+    这里是有工具调用循环的 Agent，返回体里额外带上 `tool_calls` 轨迹
+    （工具名 / 入参 / 结果摘要），客户端可以据此展示
+    「已查询关系画像 · 已检索依恋理论」这类过程提示，而不是只给一段文本。
+
+    此前 `run_agent` 只被 `tests/test_agent.py` 引用、没有任何端点暴露，
+    能力是真实存在的但在产品里用不到；这个端点把它接进主链路。
+    """
+    relation = couple_repo.get_active_relation_by_user(db, current_user.id)
+    if not relation:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 30005, "message": "请先绑定情侣关系", "data": None},
+        )
+
+    history = [item.model_dump() for item in (req.history or [])]
+
+    # Agent 依赖 LangChain，装了才可用；没装时明确告知而不是抛 500 堆栈
+    try:
+        from app.agent.executor import run_agent
+    except ImportError:
+        logger.exception("[AI] Agent 依赖缺失")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": 50001, "message": "Agent 服务未就绪（缺少 LangChain 依赖）", "data": None},
+        )
+
+    try:
+        result = run_agent(
+            req.question,
+            user_id=current_user.id,
+            relation_id=relation.id,
+            history=history or None,
+        )
+    except Exception:
+        logger.exception("[AI] Agent 执行失败 user=%s", current_user.id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": 50000, "message": "Agent 服务异常，请稍后重试", "data": None},
+        )
+
     return ApiResponse(data=result)
