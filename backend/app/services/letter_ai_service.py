@@ -108,7 +108,7 @@ def understand_letter(db: Session, user_id: int, letter_id: int) -> dict:
         letter_content=letter.content,
     )
 
-    ai_response = _call_llm(prompt, "letter_understand")
+    ai_response = _call_llm(prompt, "letter_analysis")
     return {
         "letter_id": letter_id,
         "analysis": {
@@ -190,7 +190,7 @@ def generate_reply(db: Session, user_id: int, letter_id: int) -> dict:
         letter_content=letter.content,
     )
 
-    ai_response = _call_llm(prompt, "letter_understand")
+    ai_response = _call_llm(prompt, "letter_reply")
     return {
         "letter_id": letter_id,
         "reply": {

@@ -128,6 +128,60 @@ class MediationSummaryOutput(BaseModel):
     risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
 
 
+class LetterMisunderstandableItem(BaseModel):
+    """信件里容易被误解的一句话"""
+
+    sentence: str = Field(..., description="原信中被引用的一句话")
+    note: str = Field(..., description="它可能被怎样误解，以及更可能的真实意思")
+
+
+class LetterAnalysisOutput(BaseModel):
+    """信件解读（长文深度版）。
+
+    注意与 `LetterUnderstandOutput` 的区别，二者服务于不同入口，不要合并：
+    - `LetterUnderstandOutput`（scene `letter_understand`）服务于 AI 对话里的
+      「信件/消息解读」场景，字段偏简；
+    - 本模型（scene `letter_analysis`）服务于信箱里的「解读这封信」功能，
+      字段更细，且必须与 `letter_ai_service.LETTER_UNDERSTAND_PROMPT` 的要求、
+      以及客户端 `LetterDto.LetterUnderstanding` 三者逐字一致。
+    """
+
+    summary: str = Field(..., description="一句话摘要")
+    key_concerns: List[str] = Field(
+        default_factory=list, description="对方在这封信里最在意的点"
+    )
+    emotion: str = Field("", description="对方写信时的情绪状态")
+    expected_response: str = Field("", description="对方期待的回应")
+    misunderstandable: List[LetterMisunderstandableItem] = Field(
+        default_factory=list, description="可能被误解的句子及说明"
+    )
+    reply_suggestions: List[str] = Field(
+        default_factory=list, description="建议的回信方向"
+    )
+    risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
+
+
+class LetterRewriteOutput(BaseModel):
+    """信件改写：把一封信改写成更合适的表达方式"""
+
+    summary: str = Field("", description="一句话摘要")
+    rewritten_title: str = Field("", description="改写后的标题")
+    rewritten_content: str = Field("", description="改写后的正文，可直接复制")
+    changes: str = Field("", description="相比原文做了哪些调整")
+    risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
+
+
+class LetterReplyOutput(BaseModel):
+    """信件回信建议：给出多个风格的回信版本"""
+
+    summary: str = Field("", description="一句话摘要")
+    replies: List[RewriteItem] = Field(
+        default_factory=list, description="回信版本列表，每项含 style 与 content"
+    )
+    do_not_say: str = Field("", description="回信时应避免说的话")
+    risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
+
+
 #: 场景 → 输出模型。未登记的 scene_key 统一回退到 TranslateOutput。
 SCENE_OUTPUT_MODELS: Dict[str, Any] = {
     "private_advisor": TranslateOutput,
@@ -135,6 +189,12 @@ SCENE_OUTPUT_MODELS: Dict[str, Any] = {
     "cold_war": ColdWarOutput,
     "expression_rewrite": RewriteOutput,
     "letter_understand": LetterUnderstandOutput,
+    # 信箱里的三个信件功能各自独立成 scene。此前 letter_ai_service 借用
+    # letter_understand 这个聊天场景，导致它读取的字段模型一个都不产；
+    # letter_rewrite 则根本没登记、静默回退到 TranslateOutput。
+    "letter_analysis": LetterAnalysisOutput,
+    "letter_rewrite": LetterRewriteOutput,
+    "letter_reply": LetterReplyOutput,
     "mediation_rewrite": MediationRewriteOutput,
     "mediation_summary": MediationSummaryOutput,
 }

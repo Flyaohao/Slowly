@@ -409,19 +409,24 @@ def rewrite_expression(
 
     ai_response = _call_llm(prompt, "expression_rewrite")
 
-    # 解析5个版本
-    versions = ai_response.get("versions", [
-        {"style": "温柔版", "content": f"[温柔版] {original_text}"},
-        {"style": "直接版", "content": f"[直接版] {original_text}"},
-        {"style": "道歉版", "content": f"[道歉版] {original_text}"},
-        {"style": "解释版", "content": f"[解释版] {original_text}"},
-        {"style": "想和好版", "content": f"[想和好版] {original_text}"},
-    ])
+    # 模型按 RewriteOutput schema 返回的字段是 rewrites（每项含 style / content），
+    # 而不是 prompt 里口头描述的 versions。此前读 versions 永远命中不到，
+    # 于是每次都白白返回 5 条硬编码占位文案（"[温柔版] 原文"），
+    # 看起来"有结果"，实则与用户输入无关。
+    versions = [
+        {"style": r.get("style", ""), "content": r.get("content", "")}
+        for r in (ai_response.get("rewrites") or [])
+        if isinstance(r, dict) and r.get("content")
+    ]
+    if not versions:
+        # 模型不可用（如未配置 AI_API_KEY）时如实告知，不再编造 5 条假版本
+        reason = ai_response.get("raw_text") or "未能生成改写版本，请稍后重试。"
+        versions = [{"style": "提示", "content": reason}]
 
     return {
         "original": original_text,
         "versions": versions,
-        "summary": ai_response.get("summary", "已为你生成5种改写版本"),
+        "summary": ai_response.get("summary") or "已为你生成改写版本",
     }
 
 
@@ -629,6 +634,38 @@ def _compose_raw_text(data: dict, scene_key: str) -> str:
             parts.append("【情绪基调】" + data["emotion_tone"])
         if data.get("suggested_reply"):
             parts.append("【建议回复】" + data["suggested_reply"])
+
+    elif scene_key == "letter_analysis":
+        if data.get("summary"):
+            parts.append(data["summary"])
+        if data.get("emotion"):
+            parts.append("【对方的情绪】" + data["emotion"])
+        for concern in data.get("key_concerns") or []:
+            parts.append("【在意的点】" + concern)
+        if data.get("expected_response"):
+            parts.append("【期待的回应】" + data["expected_response"])
+        for item in data.get("misunderstandable") or []:
+            parts.append("【可能被误解】%s —— %s" % (item.get("sentence", ""), item.get("note", "")))
+        for suggestion in data.get("reply_suggestions") or []:
+            parts.append("【回信建议】" + suggestion)
+
+    elif scene_key == "letter_rewrite":
+        if data.get("summary"):
+            parts.append(data["summary"])
+        if data.get("rewritten_title"):
+            parts.append("【改写后的标题】" + data["rewritten_title"])
+        if data.get("rewritten_content"):
+            parts.append("【改写后的正文】" + data["rewritten_content"])
+        if data.get("changes"):
+            parts.append("【改动说明】" + data["changes"])
+
+    elif scene_key == "letter_reply":
+        if data.get("summary"):
+            parts.append(data["summary"])
+        for item in data.get("replies") or []:
+            parts.append("【%s】%s" % (item.get("style", ""), item.get("content", "")))
+        if data.get("do_not_say"):
+            parts.append("【避免说】" + data["do_not_say"])
 
     elif scene_key == "mediation_rewrite":
         if data.get("rewrite_a"):
