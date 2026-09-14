@@ -1,4 +1,6 @@
 import logging
+import queue
+import threading
 
 from sqlalchemy.orm import Session
 from typing import Any, Dict, Iterator, List, Optional
@@ -250,6 +252,56 @@ def prepare_chat(
     }
 
 
+#: 流式心跳间隔（秒）。取值要明显小于客户端 readTimeout 与 Nginx proxy_read_timeout
+_HEARTBEAT_INTERVAL = 8.0
+
+
+def _stream_with_heartbeat(
+    prompt: str, scene_key: str, interval: float = _HEARTBEAT_INTERVAL
+) -> Iterator[Optional[str]]:
+    """产出模型增量，静默期产出 `None` 作为心跳信号。
+
+    **为什么需要它**：qwen3.7-flash 这类推理模型会先流式产出 reasoning_content，
+    再产出正文。心跳层的 `_extract_delta` 只取 `delta.content`（思考过程不应污染
+    用户可见正文），于是思考期间 SSE 一个字节都不下发——实测首字可达 14s，
+    长 prompt 更久。而 SSE 连接恰恰在静默期最脆弱：客户端 okhttp readTimeout
+    与 Nginx proxy_read_timeout 都会把「长时间无数据」判定为断连。
+
+    做法：把真正的调用丢到后台线程，主生成器只在队列上等待；超时即产出 `None`，
+    由调用方翻译成 SSE 注释帧。这样连接始终有字节流动，而协议语义不变。
+    """
+    q: "queue.Queue[Any]" = queue.Queue()
+    _END = object()
+
+    def _worker() -> None:
+        try:
+            for delta in llm.stream(
+                [{"role": "system", "content": prompt}],
+                temperature=0.7,
+                max_tokens=1200,
+                scene=scene_key,
+            ):
+                q.put(delta)
+        except BaseException as exc:  # noqa: BLE001 —— 原样抛回主线程处理
+            q.put(exc)
+        finally:
+            q.put(_END)
+
+    threading.Thread(target=_worker, daemon=True, name="llm-stream").start()
+
+    while True:
+        try:
+            item = q.get(timeout=interval)
+        except queue.Empty:
+            yield None
+            continue
+        if item is _END:
+            return
+        if isinstance(item, BaseException):
+            raise item
+        yield item
+
+
 def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
     """把一次聊天拆成 SSE 事件序列：meta → delta* → done / error。
 
@@ -258,6 +310,9 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
     - `delta` 文本增量，逐块追加即得打字机效果
     - `done`  终帧，携带 message_id 与最终风险等级，客户端据此刷新消息列表
     - `error` 模型侧失败，客户端应提示重试
+
+    另有 `comment` 类型的心跳帧（编码为 SSE 注释行 `: keep-alive`），
+    仅用于保活，客户端解析器会忽略，不属于上述事件协议。
 
     生成器全程自行开闭 DB 会话（见 `_persist_streamed_message`），
     不持有请求级 session，因此可以安全地在响应体阶段运行。
@@ -288,12 +343,11 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
 
     buffer: List[str] = []
     try:
-        for delta in llm.stream(
-            [{"role": "system", "content": prepared["stream_prompt"]}],
-            temperature=0.7,
-            max_tokens=1200,
-            scene=prepared["scene_key"],
-        ):
+        for delta in _stream_with_heartbeat(prepared["stream_prompt"], prepared["scene_key"]):
+            if delta is None:
+                # 模型思考中：发一个注释帧保活，客户端解析器会忽略它
+                yield {"comment": "keep-alive"}
+                continue
             buffer.append(delta)
             yield {"event": "delta", "data": {"content": delta}}
     except LlmError as exc:

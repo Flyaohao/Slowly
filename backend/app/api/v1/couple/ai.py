@@ -71,8 +71,15 @@ def _sse_encode(events: Iterator[Dict[str, Any]]) -> Iterator[str]:
 
     每帧格式：`event: <name>\\ndata: <json>\\n\\n`（空行结尾是 SSE 协议的帧分隔符）。
     用 `ensure_ascii=False` 保持中文原样传输，`default=str` 兜底 datetime 等类型。
+
+    另支持 `{"comment": "..."}` 形式的心跳帧，输出为 SSE 注释行（以 `:` 开头）。
+    按协议注释行不属于任何事件，客户端解析器会忽略；模型思考期间用它保持
+    连接活跃，避免 readTimeout 把静默误判为断连（见 ai_service._stream_with_heartbeat）。
     """
     for ev in events:
+        if "comment" in ev:
+            yield ": %s\n\n" % ev["comment"]
+            continue
         payload = json.dumps(ev["data"], ensure_ascii=False, default=str)
         yield "event: %s\ndata: %s\n\n" % (ev["event"], payload)
 

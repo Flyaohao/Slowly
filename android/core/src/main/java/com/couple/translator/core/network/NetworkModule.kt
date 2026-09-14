@@ -54,7 +54,10 @@ object NetworkModule {
             .addInterceptor(tokenInterceptor)
             .addInterceptor(logging)
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            // readTimeout 衡量的是「两次数据到达之间的间隔」，不是整次请求耗时。
+            // AI 侧主模型是推理模型，思考期间 SSE 无字节下发（实测首字约 14s，
+            // 长 prompt 更久），沿用 30s 会在模型思考时把连接判为超时断开。
+            .readTimeout(180, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
     }

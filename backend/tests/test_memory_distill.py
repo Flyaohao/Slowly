@@ -88,15 +88,17 @@ class FakeLlm:
 
 
 def run_case(name, *, db, llm, user_input="我其实更希望他直接说，不要让我猜"):
-    original = memory_service.llm
-    memory_service.llm = llm
+    # 记忆沉淀走的是专用轻量客户端（memory_service.distill_llm），
+    # 不是主链路单例（llm），桩要打在同一个对象上。
+    original = memory_service.distill_llm
+    memory_service.distill_llm = llm
     try:
         result = memory_service.distill_and_save(
             db, user_id=1, relation_id=2, scene_key="private_advisor",
             user_input=user_input, assistant_text="AI 的回复内容",
         )
     finally:
-        memory_service.llm = original
+        memory_service.distill_llm = original
     cases.append(name)
     return result
 

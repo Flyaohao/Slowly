@@ -7,10 +7,18 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
 from app.models.ai import AiMemory
-from app.services.llm_client import llm, LlmError
+from app.core.config import AI_MEMORY_MODEL
+from app.services.llm_client import llm, LlmClient, LlmError
 from app.services.prompt_builder import MEMORY_DISTILL_PROMPT
 
 logger = logging.getLogger("couple.memory")
+
+#: 记忆抽取是每轮对话都要跑一次的后台任务，本质是「二分类 + 一句话抽取」。
+#: 用主模型（推理模型）实测单次约 10s / 2000+ token；换轻量模型后判断结果
+#: 与主模型一致，但快约 20 倍。故这一条链路单独指定模型，不跟随主模型。
+#: 注意：模型只影响速度与成本，输出结构仍由 scene=memory_distill 的
+#: Pydantic 模型约束，因此换模型不会改变落库字段契约。
+distill_llm = LlmClient(model=AI_MEMORY_MODEL, fallbacks=[])
 
 #: LLM 可能自由发挥，落库前收口到这几类
 MEMORY_TYPES = ("偏好", "关系事实", "沟通雷区", "核心诉求")
@@ -151,7 +159,7 @@ def distill_and_save(
         return None
 
     try:
-        result = llm.invoke_structured(
+        result = distill_llm.invoke_structured(
             [
                 {"role": "system", "content": MEMORY_DISTILL_PROMPT},
                 {
