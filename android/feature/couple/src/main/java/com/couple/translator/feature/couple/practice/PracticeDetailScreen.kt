@@ -165,7 +165,7 @@ fun PracticeDetailScreen(
                 }
             } else {
                 Button(
-                    onClick = { viewModel.submitPractice(record.practiceId, recordId) },
+                    onClick = { viewModel.submitPractice(recordId) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = Accent),
                     shape = RoundedCornerShape(12.dp),

@@ -53,7 +53,7 @@ class PracticeDetailViewModel @Inject constructor(
         _uiState.update { it.copy(currentStep = it.currentStep + 1, content = "") }
     }
 
-    fun submitPractice(practiceId: Long, recordId: Long) {
+    fun submitPractice(recordId: Long) {
         if (_uiState.value.content.isBlank()) {
             _uiState.update { it.copy(error = "请输入内容") }
             return
@@ -61,7 +61,6 @@ class PracticeDetailViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true, error = "") }
         viewModelScope.launch {
             repository.submitPractice(
-                practiceId,
                 recordId,
                 PracticeDto.SubmitPracticeRequest(content = _uiState.value.content),
             ).fold(

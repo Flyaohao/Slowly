@@ -52,6 +52,7 @@ app.include_router(v1_router)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception(f"Unhandled exception: {exc}")
     return JSONResponse(
         status_code=500,
         content={"code": 10000, "message": "服务器内部错误", "data": None},

@@ -47,197 +47,196 @@ interface CoupleApiService {
     suspend fun confirmUnbind(): ApiResponse<Unit>
 
     // Letter
-    @POST("api/v1/letters")
+    @POST("api/v1/couple/letters")
     suspend fun createLetter(@Body body: LetterDto.LetterRequest): ApiResponse<LetterDto.LetterResponse>
 
-    @GET("api/v1/letters")
+    @GET("api/v1/couple/letters")
     suspend fun getLetters(
         @Query("letter_type") type: String? = null,
         @Query("status") status: String? = null,
         @Query("direction") direction: String? = null,
     ): ApiResponse<LetterDto.LetterListResponse>
 
-    @GET("api/v1/letters/{id}")
+    @GET("api/v1/couple/letters/{id}")
     suspend fun getLetter(@Path("id") id: Long): ApiResponse<LetterDto.LetterResponse>
 
-    @PUT("api/v1/letters/{id}")
+    @PUT("api/v1/couple/letters/{id}")
     suspend fun updateLetter(
         @Path("id") id: Long,
         @Body body: LetterDto.LetterRequest,
     ): ApiResponse<LetterDto.LetterResponse>
 
-    @DELETE("api/v1/letters/{id}")
+    @DELETE("api/v1/couple/letters/{id}")
     suspend fun deleteLetter(@Path("id") id: Long): ApiResponse<Unit>
 
-    @POST("api/v1/letters/batch-delete")
+    @POST("api/v1/couple/letters/batch-delete")
     suspend fun batchDeleteLetters(@Body body: LetterDto.BatchDeleteRequest): ApiResponse<LetterDto.BatchDeleteResponse>
 
-    @POST("api/v1/letters/{id}/send")
+    @POST("api/v1/couple/letters/{id}/send")
     suspend fun sendLetter(@Path("id") id: Long): ApiResponse<LetterDto.LetterResponse>
 
-    @POST("api/v1/letters/{id}/favorite")
+    @POST("api/v1/couple/letters/{id}/favorite")
     suspend fun toggleFavorite(@Path("id") id: Long): ApiResponse<LetterDto.LetterResponse>
 
-    @GET("api/v1/letters/inbox")
+    @GET("api/v1/couple/letters/inbox")
     suspend fun getInbox(): ApiResponse<LetterDto.LetterListResponse>
 
-    @GET("api/v1/letters/drafts")
+    @GET("api/v1/couple/letters/drafts")
     suspend fun getDrafts(): ApiResponse<LetterDto.LetterListResponse>
 
     // AI Letter
-    @POST("api/v1/ai/understand-letter")
+    @POST("api/v1/couple/ai/understand-letter")
     suspend fun understandLetter(@Body body: LetterDto.UnderstandLetterRequest): ApiResponse<LetterDto.LetterUnderstanding>
 
-    @POST("api/v1/ai/rewrite-letter")
+    @POST("api/v1/couple/ai/rewrite-letter")
     suspend fun rewriteLetter(@Body body: LetterDto.RewriteLetterRequest): ApiResponse<LetterDto.RewriteLetterResponse>
 
-    @POST("api/v1/ai/generate-reply")
+    @POST("api/v1/couple/ai/generate-reply")
     suspend fun generateReply(@Body body: LetterDto.GenerateReplyRequest): ApiResponse<LetterDto.GenerateReplyResponse>
 
     // Mediation
-    @POST("api/v1/ai/mediation/start")
+    @POST("api/v1/couple/ai/mediation/start")
     suspend fun startMediation(@Body body: MediationDto.MediationStartRequest): ApiResponse<MediationDto.MediationSessionResponse>
 
-    @POST("api/v1/ai/mediation/{id}/accept")
+    @POST("api/v1/couple/ai/mediation/{id}/accept")
     suspend fun acceptMediation(@Path("id") sessionId: Long): ApiResponse<MediationDto.MediationSessionResponse>
 
-    @POST("api/v1/ai/mediation/{id}/reject")
+    @POST("api/v1/couple/ai/mediation/{id}/reject")
     suspend fun rejectMediation(@Path("id") sessionId: Long): ApiResponse<Unit>
 
-    @POST("api/v1/ai/mediation/{id}/input")
+    @POST("api/v1/couple/ai/mediation/{id}/input")
     suspend fun submitMediationInput(
         @Path("id") sessionId: Long,
         @Body body: MediationDto.MediationInputRequest,
     ): ApiResponse<MediationDto.MediationSessionResponse>
 
-    @POST("api/v1/ai/mediation/{id}/confirm")
+    @POST("api/v1/couple/ai/mediation/{id}/confirm")
     suspend fun confirmMediation(
         @Path("id") sessionId: Long,
         @Body body: MediationDto.MediationConfirmRequest,
     ): ApiResponse<MediationDto.MediationSessionResponse>
 
-    @GET("api/v1/ai/mediation/{id}")
+    @GET("api/v1/couple/ai/mediation/{id}")
     suspend fun getMediation(@Path("id") sessionId: Long): ApiResponse<MediationDto.MediationDetailResponse>
 
-    @POST("api/v1/ai/mediation/{id}/next")
+    @POST("api/v1/couple/ai/mediation/{id}/next")
     suspend fun mediationNext(
         @Path("id") sessionId: Long,
         @Body body: MediationDto.MediationNextRequest,
     ): ApiResponse<MediationDto.MediationSessionResponse>
 
     // Memory
-    @GET("api/v1/ai/memory")
+    @GET("api/v1/couple/ai/memory")
     suspend fun getMemories(): ApiResponse<MemoryDto.MemoryListResponse>
 
-    @DELETE("api/v1/ai/memory/{id}")
+    @DELETE("api/v1/couple/ai/memory/{id}")
     suspend fun deleteMemory(@Path("id") memoryId: Long): ApiResponse<Unit>
 
-    @PUT("api/v1/ai/memory/{id}/visibility")
+    @PUT("api/v1/couple/ai/memory/{id}/visibility")
     suspend fun updateMemoryVisibility(
         @Path("id") memoryId: Long,
         @Body body: MemoryDto.VisibilityUpdateRequest,
     ): ApiResponse<Unit>
 
     // Dual Perspective
-    @POST("api/v1/dual-perspectives")
+    @POST("api/v1/couple/dual-perspectives")
     suspend fun createDualEvent(@Body body: DualPerspectiveDto.CreateEventRequest): ApiResponse<DualPerspectiveDto.DualEventResponse>
 
-    @GET("api/v1/dual-perspectives")
+    @GET("api/v1/couple/dual-perspectives")
     suspend fun getDualEvents(): ApiResponse<DualPerspectiveDto.DualEventListResponse>
 
-    @GET("api/v1/dual-perspectives/{id}")
+    @GET("api/v1/couple/dual-perspectives/{id}")
     suspend fun getDualEventDetail(@Path("id") eventId: Long): ApiResponse<DualPerspectiveDto.DualEventDetailResponse>
 
-    @POST("api/v1/dual-perspectives/{id}/records")
+    @POST("api/v1/couple/dual-perspectives/{id}/records")
     suspend fun submitDualRecord(
         @Path("id") eventId: Long,
         @Body body: DualPerspectiveDto.SubmitRecordRequest,
     ): ApiResponse<DualPerspectiveDto.DualRecordResponse>
 
-    @PUT("api/v1/dual-perspectives/{id}/records/{rid}")
+    @PUT("api/v1/couple/dual-perspectives/{id}/records/{rid}")
     suspend fun updateDualRecord(
         @Path("id") eventId: Long,
         @Path("rid") recordId: Long,
         @Body body: DualPerspectiveDto.UpdateRecordRequest,
     ): ApiResponse<DualPerspectiveDto.DualRecordResponse>
 
-    @POST("api/v1/dual-perspectives/{id}/reveal")
+    @POST("api/v1/couple/dual-perspectives/{id}/reveal")
     suspend fun revealDualRecords(@Path("id") eventId: Long): ApiResponse<DualPerspectiveDto.DualEventDetailResponse>
 
     // Museum
-    @POST("api/v1/museum")
+    @POST("api/v1/couple/museum")
     suspend fun createMuseumItem(@Body body: MuseumDto.CreateMuseumItemRequest): ApiResponse<MuseumDto.MuseumItemResponse>
 
-    @GET("api/v1/museum")
+    @GET("api/v1/couple/museum")
     suspend fun getMuseumItems(@Query("type") type: String? = null): ApiResponse<MuseumDto.MuseumListResponse>
 
-    @GET("api/v1/museum/{id}")
+    @GET("api/v1/couple/museum/{id}")
     suspend fun getMuseumItemDetail(@Path("id") itemId: Long): ApiResponse<MuseumDto.MuseumItemResponse>
 
-    @PUT("api/v1/museum/{id}")
+    @PUT("api/v1/couple/museum/{id}")
     suspend fun updateMuseumItem(
         @Path("id") itemId: Long,
         @Body body: MuseumDto.UpdateMuseumItemRequest,
     ): ApiResponse<MuseumDto.MuseumItemResponse>
 
-    @DELETE("api/v1/museum/{id}")
+    @DELETE("api/v1/couple/museum/{id}")
     suspend fun deleteMuseumItem(@Path("id") itemId: Long): ApiResponse<Unit>
 
-    @POST("api/v1/museum/{id}/pin")
+    @POST("api/v1/couple/museum/{id}/pin")
     suspend fun toggleMuseumPin(@Path("id") itemId: Long): ApiResponse<MuseumDto.MuseumItemResponse>
 
     // Practice
-    @GET("api/v1/practices")
+    @GET("api/v1/couple/practices")
     suspend fun getPractices(): ApiResponse<List<PracticeDto.PracticeResponse>>
 
-    @POST("api/v1/practices/{id}/start")
+    @POST("api/v1/couple/practices/{id}/start")
     suspend fun startPractice(@Path("id") practiceId: Long): ApiResponse<PracticeDto.PracticeRecordResponse>
 
-    @POST("api/v1/practices/{id}/records/{rid}/submit")
+    @POST("api/v1/couple/practices/records/{rid}/submit")
     suspend fun submitPractice(
-        @Path("id") practiceId: Long,
         @Path("rid") recordId: Long,
         @Body body: PracticeDto.SubmitPracticeRequest,
     ): ApiResponse<PracticeDto.PracticeRecordResponse>
 
-    @GET("api/v1/practices/records")
+    @GET("api/v1/couple/practices/records")
     suspend fun getPracticeRecords(): ApiResponse<PracticeDto.PracticeRecordListResponse>
 
-    @GET("api/v1/practices/records/{rid}")
+    @GET("api/v1/couple/practices/records/{rid}")
     suspend fun getPracticeRecordDetail(@Path("rid") recordId: Long): ApiResponse<PracticeDto.PracticeRecordDetailResponse>
 
     // Anniversary
-    @POST("api/v1/anniversaries")
+    @POST("api/v1/couple/anniversaries")
     suspend fun createAnniversary(@Body body: AnniversaryDto.CreateAnniversaryRequest): ApiResponse<AnniversaryDto.AnniversaryResponse>
 
-    @GET("api/v1/anniversaries")
+    @GET("api/v1/couple/anniversaries")
     suspend fun getAnniversaries(): ApiResponse<AnniversaryDto.AnniversaryListResponse>
 
-    @PUT("api/v1/anniversaries/{id}")
+    @PUT("api/v1/couple/anniversaries/{id}")
     suspend fun updateAnniversary(
         @Path("id") id: Long,
         @Body body: AnniversaryDto.UpdateAnniversaryRequest,
     ): ApiResponse<AnniversaryDto.AnniversaryResponse>
 
-    @DELETE("api/v1/anniversaries/{id}")
+    @DELETE("api/v1/couple/anniversaries/{id}")
     suspend fun deleteAnniversary(@Path("id") id: Long): ApiResponse<Unit>
 
     // Wishlist
-    @POST("api/v1/wishlists")
+    @POST("api/v1/couple/wishlists")
     suspend fun createWishlist(@Body body: WishlistDto.CreateWishlistRequest): ApiResponse<WishlistDto.WishlistResponse>
 
-    @GET("api/v1/wishlists")
+    @GET("api/v1/couple/wishlists")
     suspend fun getWishlists(): ApiResponse<WishlistDto.WishlistListResponse>
 
-    @PUT("api/v1/wishlists/{id}")
+    @PUT("api/v1/couple/wishlists/{id}")
     suspend fun updateWishlist(
         @Path("id") id: Long,
         @Body body: WishlistDto.UpdateWishlistRequest,
     ): ApiResponse<WishlistDto.WishlistResponse>
 
-    @POST("api/v1/wishlists/{id}/complete")
+    @POST("api/v1/couple/wishlists/{id}/complete")
     suspend fun completeWishlist(@Path("id") id: Long): ApiResponse<WishlistDto.WishlistResponse>
 
-    @DELETE("api/v1/wishlists/{id}")
+    @DELETE("api/v1/couple/wishlists/{id}")
     suspend fun deleteWishlist(@Path("id") id: Long): ApiResponse<Unit>
 }

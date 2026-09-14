@@ -56,7 +56,7 @@ class AddAnniversaryViewModel @Inject constructor(
             repository.createAnniversary(
                 AnniversaryDto.CreateAnniversaryRequest(
                     title = state.title,
-                    date = state.date,
+                    anniversaryDate = state.date,
                     description = state.description.ifBlank { null },
                 ),
             ).fold(

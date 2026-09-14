@@ -10,7 +10,7 @@ object AnniversaryDto {
         @Json(name = "id") val id: Long,
         @Json(name = "relation_id") val relationId: Long,
         @Json(name = "title") val title: String,
-        @Json(name = "date") val date: String,
+        @Json(name = "anniversary_date") val anniversaryDate: String,
         @Json(name = "description") val description: String? = null,
         @Json(name = "created_at") val createdAt: String? = null,
     )
@@ -18,14 +18,14 @@ object AnniversaryDto {
     @JsonClass(generateAdapter = true)
     data class CreateAnniversaryRequest(
         @Json(name = "title") val title: String,
-        @Json(name = "date") val date: String,
+        @Json(name = "anniversary_date") val anniversaryDate: String,
         @Json(name = "description") val description: String? = null,
     )
 
     @JsonClass(generateAdapter = true)
     data class UpdateAnniversaryRequest(
         @Json(name = "title") val title: String? = null,
-        @Json(name = "date") val date: String? = null,
+        @Json(name = "anniversary_date") val anniversaryDate: String? = null,
         @Json(name = "description") val description: String? = null,
     )
 

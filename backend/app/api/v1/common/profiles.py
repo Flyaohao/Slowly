@@ -153,3 +153,5 @@ def get_ai_report(
         if code == "40001":
             return ApiResponse(code=40001, message="请先完成问卷", data=None)
         return ApiResponse(code=50001, message="报告生成失败", data=None)
+    except Exception:
+        return ApiResponse(code=50001, message="报告生成失败", data=None)

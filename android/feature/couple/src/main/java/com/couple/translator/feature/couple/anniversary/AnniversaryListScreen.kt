@@ -156,7 +156,7 @@ private fun AnniversaryListItem(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = anniversary.date,
+                    text = anniversary.anniversaryDate,
                     style = MaterialTheme.typography.bodySmall,
                     color = Accent,
                 )

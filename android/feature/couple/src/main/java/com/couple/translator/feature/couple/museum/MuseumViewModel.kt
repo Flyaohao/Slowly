@@ -42,6 +42,8 @@ class MuseumViewModel @Inject constructor(
                         _uiState.update { state ->
                             state.copy(items = it.items, isRefreshing = false)
                         }
+                    } ?: run {
+                        _uiState.update { it.copy(isRefreshing = false) }
                     }
                 },
                 onFailure = { error ->
@@ -66,6 +68,8 @@ class MuseumViewModel @Inject constructor(
                         _uiState.update { state ->
                             state.copy(items = it.items, isLoading = false)
                         }
+                    } ?: run {
+                        _uiState.update { it.copy(isLoading = false) }
                     }
                 },
                 onFailure = { error ->

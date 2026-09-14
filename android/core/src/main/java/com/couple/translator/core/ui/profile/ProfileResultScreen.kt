@@ -57,7 +57,7 @@ import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.AccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
-import com.couple.translator.cor0e.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary

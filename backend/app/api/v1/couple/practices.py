@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.schemas.common import ApiResponse
-from app.schemas.practice_schema import PracticeOut, PracticeRecordOut, PracticeRecordSubmit
+from app.schemas.practice_schema import PracticeOut, PracticeRecordOut, PracticeRecordSubmit, PracticeRecordDetailOut
 from app.services import practice_service
 
 router = APIRouter(prefix="/practices", tags=["关系练习"])
@@ -89,4 +89,5 @@ def get_record(
         if code == "90003":
             return ApiResponse(code=90003, message="无权访问", data=None)
         return ApiResponse(code=int(code), message="获取失败", data=None)
-    return ApiResponse(data=PracticeRecordOut.model_validate(record).model_dump())
+    # record 现在是 dict，直接返回
+    return ApiResponse(data=record)

@@ -36,12 +36,11 @@ class PracticeRepository @Inject constructor(
     }
 
     suspend fun submitPractice(
-        practiceId: Long,
         recordId: Long,
         request: PracticeDto.SubmitPracticeRequest,
     ): Result<PracticeDto.PracticeRecordResponse?> {
         return try {
-            val response = apiService.submitPractice(practiceId, recordId, request)
+            val response = apiService.submitPractice(recordId, request)
             if (response.isSuccess) {
                 Result.success(response.data)
             } else {
