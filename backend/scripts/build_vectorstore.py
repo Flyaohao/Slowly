@@ -23,10 +23,11 @@ import sys
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
 
+from app.core import config  # noqa: E402
 from app.services.embedding import embeddings  # noqa: E402
 
-#: 向量库持久化目录
-CHROMA_DIR = os.path.join(BASE_DIR, "data", "chroma")
+#: 向量库持久化目录（与 rag_service 保持一致：优先取配置项）
+CHROMA_DIR = config.CHROMA_DIR or os.path.join(BASE_DIR, "data", "chroma")
 COLLECTION_NAME = "couple_theory"
 
 #: 中文友好的切片配置（面试要点：中文不能只按空格切）

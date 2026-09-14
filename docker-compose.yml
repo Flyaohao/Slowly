@@ -1,0 +1,76 @@
+# 一键起 后端 + （可选）MySQL + 向量库卷
+#
+# 为什么需要容器：线上服务器是 Python 3.8，
+# 而 AI 链路依赖的 langchain 1.x / chromadb 都要求 >= 3.9。
+# 容器把 Python 版本这一层隔离掉，不必动服务器系统环境。
+#
+# ── 用法 ────────────────────────────────────────────────────────────
+# 在仓库根目录创建 .env（compose 会自动读取，已被 gitignore）：
+#     JWT_SECRET=...
+#     AI_API_KEY=...                 # 阿里云百炼 DashScope 的 key
+#     DB_URL=mysql+pymysql://root:<密码>@host.docker.internal:3306/couple_translator?charset=utf8mb4
+#
+# 【生产：沿用宿主机已有的 MySQL】—— 推荐，不会丢数据
+#     docker compose up -d --build
+#
+# 【本地/全新环境：用内置 MySQL】
+#     # .env 里不要设 DB_URL，另需 MYSQL_ROOT_PASSWORD
+#     docker compose --profile local-db up -d --build
+#
+# 首次启动会自动跑 alembic 迁移、灌种子数据、构建向量库
+# （顺序与幂等性见 backend/docker-entrypoint.sh）。
+
+name: couple-translator
+
+services:
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      # 配了 DB_URL 就用外部库；没配则用下面 local-db 起的内置库
+      DB_URL: ${DB_URL:-mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-root}@db:3306/${MYSQL_DATABASE:-couple_translator}?charset=utf8mb4}
+      DB_CHARSET: utf8mb4
+      JWT_SECRET: ${JWT_SECRET:?请在仓库根目录的 .env 里设置 JWT_SECRET}
+      AI_API_KEY: ${AI_API_KEY:?请在仓库根目录的 .env 里设置 AI_API_KEY}
+      AI_MODEL: ${AI_MODEL:-qwen-plus}
+      AI_BASE_URL: ${AI_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      # 指向挂载卷，重建镜像不会丢向量
+      CHROMA_DIR: /app/data/chroma
+      # 空库首次启动时灌种子数据（脚本幂等，重复执行安全）
+      SEED_ON_START: ${SEED_ON_START:-1}
+    extra_hosts:
+      # 让容器内的 host.docker.internal 指向宿主机，
+      # 这样 DB_URL 可以直接连宿主机上原有的 MySQL
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - chroma_data:/app/data/chroma
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+
+  db:
+    # 只在显式启用 local-db profile 时启动，避免和宿主机已有 MySQL 抢 3306
+    profiles: ["local-db"]
+    image: mysql:8.0
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?启用 local-db profile 时必须设置 MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-couple_translator}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    ports:
+      # 默认映射到宿主 3307，避开宿主机自带的 MySQL
+      - "${MYSQL_HOST_PORT:-3307}:3306"
+
+volumes:
+  mysql_data:
+  chroma_data:

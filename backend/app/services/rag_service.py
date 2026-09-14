@@ -21,12 +21,14 @@ from typing import List, Optional
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.core import config
 from app.models.ai import AiKnowledgeChunk, AiKnowledgeDoc
 
 logger = logging.getLogger("couple.rag")
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-CHROMA_DIR = os.path.join(BASE_DIR, "data", "chroma")
+#: 优先取配置项，便于容器部署把向量库挂到卷上；未配置则用仓库内默认目录
+CHROMA_DIR = config.CHROMA_DIR or os.path.join(BASE_DIR, "data", "chroma")
 COLLECTION_NAME = "couple_theory"
 
 #: 向量库懒加载缓存。"loaded" 标记保证只尝试一次，避免每次请求都重试失败路径

@@ -1,21 +1,29 @@
-fastapi>=0.100.0
-uvicorn[standard]
-sqlalchemy>=2.0
-alembic
-pymysql
-python-dotenv
-pyjwt
-bcrypt
-pydantic[email]
-slowapi
-httpx
-python-multipart
+# 运行时依赖清单
+# 版本锁定为 2026-09-14 在本机 Python 3.13 虚拟环境中完整跑通
+# （含 tests/ 下 8 个验证脚本）的那一组，目的是让「本地验证通过」等价于「镜像里也能过」。
+
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+sqlalchemy==2.0.52
+alembic==1.20.0
+PyMySQL==1.2.0
+# PyMySQL 连接 MySQL 8 默认的 caching_sha2_password 认证插件时必须有 cryptography，
+# 否则报 "cryptography package is required"。本机与旧线上库用的是
+# mysql_native_password 所以一直没暴露，容器要连的库认证插件不确定，故预先装好。
+cryptography==50.0.1
+python-dotenv==1.2.3
+PyJWT==2.14.0
+bcrypt==5.0.0
+pydantic[email]==2.13.5
+slowapi==0.1.10
+httpx==0.28.1
+python-multipart==0.0.32
 
 # ---- RAG / LLM 编排 ----
 # 注意：langchain 1.x 与 chromadb 均要求 Python >= 3.9。
-# 生产服务器当前为 Python 3.8，部署前需升级 Python 或改用容器化（见 Dockerfile）。
-langchain
-langchain-openai
-langchain-chroma
-langchain-text-splitters
-chromadb
+# 线上服务器原是 Python 3.8，装不上这批依赖，因此改为容器部署（见 Dockerfile）。
+langchain==1.4.0
+langchain-openai==1.6.2
+langchain-chroma==1.1.0
+langchain-text-splitters==1.1.2
+chromadb==1.5.9
