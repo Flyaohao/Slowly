@@ -17,11 +17,6 @@ object MemoryDto {
     )
 
     @JsonClass(generateAdapter = true)
-    data class MemoryListResponse(
-        @Json(name = "items") val items: List<MemoryItem> = emptyList(),
-    )
-
-    @JsonClass(generateAdapter = true)
     data class VisibilityUpdateRequest(
         @Json(name = "visibility") val visibility: String,
     )

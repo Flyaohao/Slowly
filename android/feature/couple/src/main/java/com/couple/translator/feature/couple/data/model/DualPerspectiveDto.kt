@@ -19,7 +19,11 @@ object DualPerspectiveDto {
     @JsonClass(generateAdapter = true)
     data class CreateEventRequest(
         @Json(name = "title") val title: String,
-        @Json(name = "event_time") val eventTime: String? = null,
+        /**
+         * 后端 schema `DualPerspectiveEventCreate.event_time` 是**必填的 datetime**，
+         * 传 null 会直接 422。UI 里虽是选填输入框，但由 ViewModel 归一化后兜底为当前时间。
+         */
+        @Json(name = "event_time") val eventTime: String,
     )
 
     @JsonClass(generateAdapter = true)

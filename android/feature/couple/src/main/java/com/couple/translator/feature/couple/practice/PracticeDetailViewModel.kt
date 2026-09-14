@@ -29,6 +29,11 @@ class PracticeDetailViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(PracticeDetailUiState())
     val uiState: StateFlow<PracticeDetailUiState> = _uiState.asStateFlow()
 
+    /** 关闭错误弹窗（B-05：此前 Screen 传空的 onDismiss，弹窗无法关闭） */
+    fun clearError() {
+        _uiState.update { it.copy(error = "") }
+    }
+
     fun loadRecord(recordId: Long) {
         _uiState.update { it.copy(isLoading = true, error = "") }
         viewModelScope.launch {

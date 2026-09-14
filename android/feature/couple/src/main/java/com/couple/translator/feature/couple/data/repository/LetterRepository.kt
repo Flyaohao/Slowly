@@ -147,8 +147,9 @@ class LetterRepository @Inject constructor(
     suspend fun understandLetter(letterId: Long): Result<LetterDto.LetterUnderstanding?> {
         return try {
             val response = apiService.understandLetter(LetterDto.UnderstandLetterRequest(letterId))
-            if (response.isSuccess) {
-                Result.success(response.data)
+            val data = response.data
+            if (response.isSuccess && data != null) {
+                Result.success(data.analysis)
             } else {
                 Result.failure(Exception(response.message))
             }

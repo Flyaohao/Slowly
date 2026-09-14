@@ -3,6 +3,7 @@ package com.couple.translator.feature.couple.mediation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.couple.translator.feature.couple.data.model.MediationDto
+import com.couple.translator.feature.couple.data.model.myRewrite
 import com.couple.translator.feature.couple.data.repository.MediationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow

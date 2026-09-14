@@ -51,7 +51,7 @@ class MediationInviteViewModel @Inject constructor(
                 onSuccess = { session ->
                     session?.let {
                         _uiState.update { state ->
-                            state.copy(sessionId = it.id, status = it.mediationStatus, isLoading = false)
+                            state.copy(sessionId = it.sessionId, status = it.mediationStatus, isLoading = false)
                         }
                     }
                 },

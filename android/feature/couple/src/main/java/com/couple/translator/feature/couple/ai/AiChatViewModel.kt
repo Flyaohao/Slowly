@@ -46,6 +46,12 @@ class AiChatViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AiChatUiState())
     val uiState: StateFlow<AiChatUiState> = _uiState.asStateFlow()
 
+    /** 关闭错误弹窗（B-05：此前 Screen 传空的 onDismiss，弹窗无法关闭） */
+    fun clearError() {
+        _uiState.update { it.copy(error = "") }
+    }
+
+
     private val _event = MutableSharedFlow<AiChatUiEvent>()
     val event: SharedFlow<AiChatUiEvent> = _event.asSharedFlow()
 

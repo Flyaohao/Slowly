@@ -89,8 +89,12 @@ interface CoupleApiService {
     suspend fun getDrafts(): ApiResponse<LetterDto.LetterListResponse>
 
     // AI Letter
+    // 注意：后端这三个接口返回的是**嵌套结构**，不是扁平字段
+    //   understand-letter -> {letter_id, analysis:{...}}
+    //   rewrite-letter    -> {letter_id, rewrite:{...}}
+    //   generate-reply    -> {letter_id, reply:{...}}
     @POST("api/v1/couple/ai/understand-letter")
-    suspend fun understandLetter(@Body body: LetterDto.UnderstandLetterRequest): ApiResponse<LetterDto.LetterUnderstanding>
+    suspend fun understandLetter(@Body body: LetterDto.UnderstandLetterRequest): ApiResponse<LetterDto.UnderstandLetterResponse>
 
     @POST("api/v1/couple/ai/rewrite-letter")
     suspend fun rewriteLetter(@Body body: LetterDto.RewriteLetterRequest): ApiResponse<LetterDto.RewriteLetterResponse>
@@ -106,7 +110,7 @@ interface CoupleApiService {
     suspend fun acceptMediation(@Path("id") sessionId: Long): ApiResponse<MediationDto.MediationSessionResponse>
 
     @POST("api/v1/couple/ai/mediation/{id}/reject")
-    suspend fun rejectMediation(@Path("id") sessionId: Long): ApiResponse<Unit>
+    suspend fun rejectMediation(@Path("id") sessionId: Long): ApiResponse<MediationDto.MediationSessionResponse>
 
     @POST("api/v1/couple/ai/mediation/{id}/input")
     suspend fun submitMediationInput(
@@ -130,8 +134,9 @@ interface CoupleApiService {
     ): ApiResponse<MediationDto.MediationSessionResponse>
 
     // Memory
+    // 注意：后端 `GET /ai/memory` 的 data 直接是数组，不是 {items:[...]} 包装对象
     @GET("api/v1/couple/ai/memory")
-    suspend fun getMemories(): ApiResponse<MemoryDto.MemoryListResponse>
+    suspend fun getMemories(): ApiResponse<List<MemoryDto.MemoryItem>>
 
     @DELETE("api/v1/couple/ai/memory/{id}")
     suspend fun deleteMemory(@Path("id") memoryId: Long): ApiResponse<Unit>
@@ -172,8 +177,9 @@ interface CoupleApiService {
     @POST("api/v1/couple/museum")
     suspend fun createMuseumItem(@Body body: MuseumDto.CreateMuseumItemRequest): ApiResponse<MuseumDto.MuseumItemResponse>
 
+    // 后端查询参数名是 item_type，不是 type（此前传 type 等于不筛选）
     @GET("api/v1/couple/museum")
-    suspend fun getMuseumItems(@Query("type") type: String? = null): ApiResponse<MuseumDto.MuseumListResponse>
+    suspend fun getMuseumItems(@Query("item_type") type: String? = null): ApiResponse<MuseumDto.MuseumListResponse>
 
     @GET("api/v1/couple/museum/{id}")
     suspend fun getMuseumItemDetail(@Path("id") itemId: Long): ApiResponse<MuseumDto.MuseumItemResponse>

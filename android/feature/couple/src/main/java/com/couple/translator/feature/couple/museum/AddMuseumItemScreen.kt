@@ -67,7 +67,7 @@ fun AddMuseumItemScreen(
     }
 
     if (uiState.error.isNotEmpty()) {
-        ErrorDialog(message = uiState.error, onDismiss = {})
+        ErrorDialog(message = uiState.error, onDismiss = { viewModel.clearError() })
     }
 
     Scaffold(

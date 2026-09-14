@@ -14,7 +14,7 @@ class MemoryRepository @Inject constructor(
             val response = apiService.getMemories()
             val data = response.data
             if (response.isSuccess && data != null) {
-                Result.success(data.items)
+                Result.success(data)
             } else {
                 Result.failure(Exception(response.message))
             }

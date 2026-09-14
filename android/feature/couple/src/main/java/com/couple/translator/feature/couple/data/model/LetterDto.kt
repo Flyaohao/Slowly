@@ -42,6 +42,7 @@ object LetterDto {
 
     @JsonClass(generateAdapter = true)
     data class LetterUnderstanding(
+        @Json(name = "summary") val summary: String = "",
         @Json(name = "key_concerns") val keyConcerns: List<String> = emptyList(),
         @Json(name = "emotion") val emotion: String = "",
         @Json(name = "expected_response") val expectedResponse: String = "",
@@ -54,6 +55,35 @@ object LetterDto {
     data class MisunderstandableItem(
         @Json(name = "sentence") val sentence: String,
         @Json(name = "note") val note: String,
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class UnderstandLetterResponse(
+        @Json(name = "letter_id") val letterId: Long = 0,
+        @Json(name = "analysis") val analysis: LetterUnderstanding? = null,
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class RewriteResult(
+        @Json(name = "summary") val summary: String = "",
+        @Json(name = "rewritten_title") val rewrittenTitle: String = "",
+        @Json(name = "rewritten_content") val rewrittenContent: String = "",
+        @Json(name = "changes") val changes: String = "",
+        @Json(name = "risk_level") val riskLevel: String = "normal",
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class ReplyVariant(
+        @Json(name = "style") val style: String = "",
+        @Json(name = "content") val content: String = "",
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class ReplyResult(
+        @Json(name = "summary") val summary: String = "",
+        @Json(name = "replies") val replies: List<ReplyVariant> = emptyList(),
+        @Json(name = "do_not_say") val doNotSay: String = "",
+        @Json(name = "risk_level") val riskLevel: String = "normal",
     )
 
     @JsonClass(generateAdapter = true)
@@ -70,8 +100,15 @@ object LetterDto {
 
     @JsonClass(generateAdapter = true)
     data class RewriteLetterResponse(
-        @Json(name = "rewritten_content") val rewrittenContent: String,
-    )
+        @Json(name = "letter_id") val letterId: Long = 0,
+        @Json(name = "rewrite") val rewrite: RewriteResult? = null,
+    ) {
+        val summary: String get() = rewrite?.summary ?: ""
+        val rewrittenTitle: String get() = rewrite?.rewrittenTitle ?: ""
+        val rewrittenContent: String get() = rewrite?.rewrittenContent ?: ""
+        val changes: String get() = rewrite?.changes ?: ""
+        val riskLevel: String get() = rewrite?.riskLevel ?: "normal"
+    }
 
     @JsonClass(generateAdapter = true)
     data class GenerateReplyRequest(
@@ -80,8 +117,16 @@ object LetterDto {
 
     @JsonClass(generateAdapter = true)
     data class GenerateReplyResponse(
-        @Json(name = "suggested_reply") val suggestedReply: String,
-    )
+        @Json(name = "letter_id") val letterId: Long = 0,
+        @Json(name = "reply") val reply: ReplyResult? = null,
+    ) {
+        val summary: String get() = reply?.summary ?: ""
+        val replies: List<ReplyVariant> get() = reply?.replies ?: emptyList()
+        val doNotSay: String get() = reply?.doNotSay ?: ""
+        val riskLevel: String get() = reply?.riskLevel ?: "normal"
+        /** 首条回信建议正文，兼容旧调用方 */
+        val suggestedReply: String get() = reply?.replies?.firstOrNull()?.content ?: ""
+    }
 
     @JsonClass(generateAdapter = true)
     data class BatchDeleteRequest(

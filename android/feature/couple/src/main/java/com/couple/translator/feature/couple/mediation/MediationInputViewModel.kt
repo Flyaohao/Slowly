@@ -67,10 +67,12 @@ class MediationInputViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true, error = "") }
         viewModelScope.launch {
             val request = MediationDto.MediationInputRequest(
-                feeling = state.feeling,
-                trigger = state.trigger,
-                wishUnderstood = state.wishUnderstood,
-                wishNext = state.wishNext,
+                content = buildString {
+                    appendLine("我的感受：${state.feeling}")
+                    appendLine("触发的事件：${state.trigger}")
+                    appendLine("希望被理解的是：${state.wishUnderstood}")
+                    appendLine("希望接下来：${state.wishNext}")
+                }.trim(),
             )
             mediationRepository.submitInput(state.sessionId, request).fold(
                 onSuccess = {

@@ -29,6 +29,11 @@ class AddMuseumItemViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AddMuseumItemUiState())
     val uiState: StateFlow<AddMuseumItemUiState> = _uiState.asStateFlow()
 
+    /** 关闭错误弹窗（B-05：此前 Screen 传空的 onDismiss，弹窗无法关闭） */
+    fun clearError() {
+        _uiState.update { it.copy(error = "") }
+    }
+
     fun updateTitle(title: String) {
         _uiState.update { it.copy(title = title) }
     }

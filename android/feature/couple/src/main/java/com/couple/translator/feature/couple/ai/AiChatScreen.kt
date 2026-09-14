@@ -98,7 +98,7 @@ fun AiChatScreen(
     if (uiState.error.isNotEmpty()) {
         ErrorDialog(
             message = uiState.error,
-            onDismiss = {},
+            onDismiss = { viewModel.clearError() },
         )
     }
 
