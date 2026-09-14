@@ -3,27 +3,48 @@ from typing import Optional, Dict
 
 logger = logging.getLogger(__name__)
 
+#: 弱信号词的触发阈值：单独出现不算，需共现多个才判定为高风险。
+#: 设计理由：像「你总是」「每次都」这类泛化表达在正常抱怨中极其常见
+#: （"你总是忘记我们的纪念日，我有点难过"），若按强信号处理会造成大量误报，
+#: 用户会把安全提示当成干扰。共现多个才说明冲突确实在升级。
+WEAK_SIGNAL_THRESHOLD = 2
+
+#: 每个风险等级分「强信号」与「弱信号」两组。
+#:   强信号：单独出现即判定，是明确的高危特征
+#:   弱信号：口语中常见的泛化表达，需与同等级其它弱信号共现才判定
 SAFETY_KEYWORDS = {
-    "heated_conflict": [
-        "吵架", "大吵", "吼", "骂", "摔东西", "气死", "受不了了",
-        "滚", "闭嘴", "你总是", "你从来", "每次都", "废物",
-        "离婚", "分手", "不过了", "受够了",
-    ],
-    "manipulation_risk": [
-        "威胁", "如果不…就", "你敢", "你试试", "报复",
-        "让你后悔", "控制", "不许", "不准", "监控你",
-        "查手机", "跟踪", "逼迫", "要挟", "自杀威胁",
-    ],
-    "abuse_risk": [
-        "打你", "家暴", "暴力", "动手", "掐", "推搡",
-        "囚禁", "锁门", "不许出门", "没收手机",
-        "恐吓", "人身威胁", "伤害你", "打死",
-    ],
-    "self_harm_risk": [
-        "不想活", "自杀", "割腕", "跳楼", "吃药",
-        "活不下去", "死了算了", "结束生命", "轻生",
-        "自残", "伤害自己", "没有意义", "不如死",
-    ],
+    "heated_conflict": {
+        "strong": [
+            "吵架", "大吵", "吼", "骂", "摔东西", "气死",
+            "滚", "闭嘴", "废物",
+            "离婚", "分手", "不过了", "受够了",
+        ],
+        "weak": ["你总是", "你从来", "每次都", "受不了了"],
+    },
+    "manipulation_risk": {
+        "strong": [
+            "威胁", "如果不…就", "你敢", "你试试", "报复",
+            "让你后悔", "控制", "不许", "不准", "监控你",
+            "查手机", "跟踪", "逼迫", "要挟", "自杀威胁",
+        ],
+        "weak": [],
+    },
+    "abuse_risk": {
+        "strong": [
+            "打你", "家暴", "暴力", "动手", "掐", "推搡",
+            "囚禁", "锁门", "不许出门", "没收手机",
+            "恐吓", "人身威胁", "伤害你", "打死",
+        ],
+        "weak": [],
+    },
+    "self_harm_risk": {
+        "strong": [
+            "不想活", "自杀", "割腕", "跳楼", "吃药",
+            "活不下去", "死了算了", "结束生命", "轻生",
+            "自残", "伤害自己", "没有意义", "不如死",
+        ],
+        "weak": [],
+    },
 }
 
 SAFETY_RESPONSES = {
@@ -55,16 +76,21 @@ def get_safety_response(risk_level: str) -> Optional[str]:
 
 
 def _keyword_check(text: str) -> str:
-    text_lower = text.lower()
+    """基于强弱信号分级的风险判定，返回命中的最高风险等级。"""
+    text_lower = (text or "").lower()
     highest_risk = "normal"
     highest_idx = 0
-    for level, keywords in SAFETY_KEYWORDS.items():
+
+    for level, groups in SAFETY_KEYWORDS.items():
         idx = RISK_LEVEL_ORDER.index(level)
-        for kw in keywords:
-            if kw in text_lower:
-                if idx > highest_idx:
-                    highest_risk = level
-                    highest_idx = idx
+
+        strong_hit = any(kw in text_lower for kw in groups.get("strong", []))
+        weak_hits = sum(1 for kw in groups.get("weak", []) if kw in text_lower)
+
+        if (strong_hit or weak_hits >= WEAK_SIGNAL_THRESHOLD) and idx > highest_idx:
+            highest_risk = level
+            highest_idx = idx
+
     return highest_risk
 
 

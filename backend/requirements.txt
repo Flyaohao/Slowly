@@ -10,3 +10,12 @@ pydantic[email]
 slowapi
 httpx
 python-multipart
+
+# ---- RAG / LLM 编排 ----
+# 注意：langchain 1.x 与 chromadb 均要求 Python >= 3.9。
+# 生产服务器当前为 Python 3.8，部署前需升级 Python 或改用容器化（见 Dockerfile）。
+langchain
+langchain-openai
+langchain-chroma
+langchain-text-splitters
+chromadb

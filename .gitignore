@@ -382,3 +382,7 @@ backend/「
 
 # Alembic
 alembic/versions/*.pyc
+
+# RAG 向量库持久化数据（可由 scripts/build_vectorstore.py 重建，不入库）
+backend/data/
+backend/pip_install.log
