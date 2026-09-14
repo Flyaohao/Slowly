@@ -11,7 +11,6 @@ from app.repositories import (
 )
 from app.services.prompt_builder import build_prompt, build_stream_prompt
 from app.services.scene_router import get_scene_config
-from app.services.output_validator import validate_structured_output
 from app.services.safety_service import (
     check_input_safety,
     check_output_safety,
@@ -19,7 +18,7 @@ from app.services.safety_service import (
     merge_risk_levels,
 )
 from app.services.rag_service import retrieve_chunks, build_rag_context
-from app.services.memory_service import get_memory_context
+from app.services.memory_service import get_memory_context, distill_in_background
 from app.services.llm_client import llm, LlmError
 
 logger = logging.getLogger("couple.ai")
@@ -164,7 +163,12 @@ def chat(
 
     ai_response = _call_llm(ctx["prompt"], scene_key)
 
-    structured = validate_structured_output(ai_response, scene_key)
+    # `_call_llm` 已经过 `llm.invoke_structured()` 的 Pydantic 强校验
+    # （字段名、类型、枚举都在那里定死），因此这里直接落库即可。
+    # 此前还额外过了一道 `output_validator.validate_structured_output` 的手写白名单，
+    # 它不做任何校验、只按另一份 schema 裁剪字段，导致 model 真实产出的
+    # theory_refs / scene / scene_key 被静默丢弃——两份 schema 并存且互相矛盾。
+    structured = ai_response
 
     output_risk = check_output_safety(str(ai_response))
     if output_risk != "normal":
@@ -185,6 +189,12 @@ def chat(
 
     session.title = session.title or scene.name
     db.commit()
+
+    # 记忆沉淀：由模型判断本轮是否含值得长期记住的信息，写进 AiMemory。
+    # 放后台线程 + 独立会话，既不占用本次响应时间，也不受请求级会话销毁影响。
+    distill_in_background(
+        user_id, relation_id, scene_key, ctx["user_input"], assistant_msg.content
+    )
 
     return {
         "session_id": session_id,
@@ -232,6 +242,11 @@ def prepare_chat(
         "scene_name": ctx["scene"].name,
         "stream_prompt": ctx["stream_prompt"],
         "rag_hit": len(ctx["rag_chunks"]),
+        # 记忆沉淀需要在响应体阶段（请求级 db 已销毁）用独立会话写库，
+        # 故这里把落库所需的三个基本类型一并拍平带过去。
+        "user_id": user_id,
+        "relation_id": relation_id,
+        "user_input": user_input,
     }
 
 
@@ -307,7 +322,14 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
         structured["safety_notice"] = get_safety_response(output_risk)
 
     message_id = _persist_streamed_message(
-        prepared["session_id"], full_text, structured, output_risk
+        session_id=prepared["session_id"],
+        content=full_text,
+        structured=structured,
+        risk_level=output_risk,
+        user_id=prepared.get("user_id"),
+        relation_id=prepared.get("relation_id"),
+        scene_key=prepared["scene_key"],
+        user_input=prepared.get("user_input", ""),
     )
 
     yield {
@@ -324,7 +346,14 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
 
 
 def _persist_streamed_message(
-    session_id: int, content: str, structured: dict, risk_level: str
+    session_id: int,
+    content: str,
+    structured: dict,
+    risk_level: str,
+    user_id: Optional[int] = None,
+    relation_id: Optional[int] = None,
+    scene_key: str = "unknown",
+    user_input: str = "",
 ) -> int:
     """流式结束后落库。
 
@@ -342,6 +371,12 @@ def _persist_streamed_message(
             risk_level=risk_level,
         )
         db.commit()
+        # 记忆沉淀同样走后台线程 + 独立会话：本函数所在阶段请求级 db 已经销毁，
+        # 不能复用这里的 db 之外的任何会话。
+        if user_id and relation_id:
+            distill_in_background(
+                user_id, relation_id, scene_key, user_input, content
+            )
         return msg.id
     except Exception:
         db.rollback()
@@ -403,8 +438,9 @@ def rewrite_expression(
 
 ## 输出格式
 请以JSON格式输出，包含以下字段：
-- versions: 数组，包含5个对象，每个对象有 style（风格名称）和 content（改写内容）
 - summary: 改写总结（一句话说明主要调整）
+- rewrites: 数组，包含5个对象，每个对象有 style（风格名称）和 content（改写内容）
+- risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk
 """
 
     ai_response = _call_llm(prompt, "expression_rewrite")

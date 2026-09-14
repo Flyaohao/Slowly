@@ -291,6 +291,14 @@ private fun OpeningLineStep(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             if (uiState.approachReason.isNotBlank()) {
+                // 策略由模型给出（approach / give_space），此前该字段落库了却无处显示，
+                // 界面永远按硬编码分支走。这里把它显式呈现出来。
+                Text(
+                    text = if (uiState.approach == "give_space") "建议策略：先给彼此空间" else "建议策略：主动破冰",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Accent,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(text = uiState.approachReason, style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(16.dp))
             }

@@ -89,7 +89,10 @@ class ColdWarViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             currentStep = 1,
-                            goalAnalysis = response.structuredOutput?.summary ?: response.content,
+                            // cold_war 场景由 ColdWarOutput 产出，字段是 goal_analysis；
+                            // 此前误读 summary（TranslateOutput 才有），永远拿不到值。
+                            goalAnalysis = response.structuredOutput?.goalAnalysis
+                                ?: response.content,
                             userInput = "",
                             isLoading = false,
                         )
@@ -116,7 +119,8 @@ class ColdWarViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             currentStep = 2,
-                            faceVsNeed = response.structuredOutput?.summary ?: response.content,
+                            faceVsNeed = response.structuredOutput?.faceVsNeed
+                                ?: response.content,
                             userInput = "",
                             isLoading = false,
                         )
@@ -140,14 +144,19 @@ class ColdWarViewModel @Inject constructor(
             )
             aiRepository.chat(request).fold(
                 onSuccess = { response ->
+                    // 本步用的仍是 cold_war 场景（ColdWarOutput），不是 TranslateOutput：
+                    // 策略=approach、理由=approach_reason、开场白=opening_lines、
+                    // 雷区=avoid_reminders。此前这几处分别误读了
+                    // nextStep / summary / suggestedActions / doNotSay，全部落空。
                     val output = response.structuredOutput
+                    val lines = output?.openingLines.orEmpty()
                     _uiState.update {
                         it.copy(
                             currentStep = 3,
-                            approach = output?.nextStep ?: "approach",
-                            approachReason = output?.summary ?: "",
-                            openingLines = output?.suggestedActions ?: listOf(response.content),
-                            avoidReminders = output?.doNotSay?.let { d -> listOf(d) } ?: emptyList(),
+                            approach = output?.approach ?: "approach",
+                            approachReason = output?.approachReason.orEmpty(),
+                            openingLines = lines.ifEmpty { listOf(response.content) },
+                            avoidReminders = output?.avoidReminders.orEmpty(),
                             userInput = "",
                             isLoading = false,
                         )

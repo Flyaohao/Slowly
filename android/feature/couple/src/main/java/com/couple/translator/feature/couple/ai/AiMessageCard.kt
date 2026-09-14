@@ -156,31 +156,6 @@ fun AiMessageCard(
                 }
             }
 
-            structuredOutput.suggestedActions?.let { actions ->
-                if (actions.isNotEmpty()) {
-                    CollapsibleSection(title = "建议操作") {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            actions.forEach { action ->
-                                Surface(
-                                    color = AccentLight,
-                                    shape = RoundedCornerShape(20.dp),
-                                ) {
-                                    Text(
-                                        text = action,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Accent,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             structuredOutput.rewrites?.let { rewrites ->
                 if (rewrites.isNotEmpty()) {
                     CollapsibleSection(title = "改写版本") {
@@ -210,6 +185,37 @@ fun AiMessageCard(
                                 }
                             }
                             Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+                }
+            }
+
+            // 理论溯源：模型在 private_advisor / partner_translate 场景会给出本建议
+            // 参考的心理学理论（如 Gottman 四骑士、依恋理论）。此前该字段被后端的
+            // 二次白名单裁掉、客户端也没有对应字段，整条链路丢失；现已打通。
+            structuredOutput.theoryRefs?.let { refs ->
+                if (refs.isNotEmpty()) {
+                    CollapsibleSection(title = "参考理论") {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            refs.forEach { ref ->
+                                Surface(
+                                    color = BorderLight,
+                                    shape = RoundedCornerShape(20.dp),
+                                ) {
+                                    Text(
+                                        text = ref,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary,
+                                        modifier = Modifier.padding(
+                                            horizontal = 12.dp,
+                                            vertical = 6.dp,
+                                        ),
+                                    )
+                                }
+                            }
                         }
                     }
                 }

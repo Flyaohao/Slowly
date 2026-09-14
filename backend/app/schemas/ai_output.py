@@ -182,6 +182,31 @@ class LetterReplyOutput(BaseModel):
     risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
 
 
+class MemoryDistillOutput(BaseModel):
+    """对话记忆沉淀：从一轮对话里抽取值得长期记住的信息。
+
+    这是一个**内部辅助场景**（scene_key = `memory_distill`），不出现在客户端的
+    场景选择列表里，也不由用户直接触发：由对话链路在助手消息落库后调用，
+    用来填充「AI 记忆」页与后续轮次的 `get_memory_context()`。
+
+    为什么要有 `should_remember` 这道闸：
+    如果每轮对话都无条件写一条记忆，记忆页会被噪音淹没，
+    更糟的是这些噪音会通过 `get_memory_context()` 进入后续每一轮的 prompt，
+    反而污染模型。所以宁可漏记，不要滥记。
+    """
+
+    should_remember: bool = Field(
+        ..., description="本轮对话是否包含值得长期记住的信息（偏好、关系事实、雷区、诉求）"
+    )
+    memory_type: Literal["偏好", "关系事实", "沟通雷区", "核心诉求"] = Field(
+        "关系事实", description="记忆类别"
+    )
+    memory_text: str = Field(
+        "",
+        description="用一句话陈述该信息，20-40 字，第三人称，不要包含姓名、联系方式等隐私信息",
+    )
+
+
 #: 场景 → 输出模型。未登记的 scene_key 统一回退到 TranslateOutput。
 SCENE_OUTPUT_MODELS: Dict[str, Any] = {
     "private_advisor": TranslateOutput,
@@ -197,6 +222,8 @@ SCENE_OUTPUT_MODELS: Dict[str, Any] = {
     "letter_reply": LetterReplyOutput,
     "mediation_rewrite": MediationRewriteOutput,
     "mediation_summary": MediationSummaryOutput,
+    # 内部辅助场景：不属于用户可选场景，由对话链路后台调用
+    "memory_distill": MemoryDistillOutput,
 }
 
 #: 输出纯文本、不走结构化解析的场景

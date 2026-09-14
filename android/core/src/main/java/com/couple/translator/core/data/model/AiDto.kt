@@ -51,6 +51,14 @@ object AiDto {
         val riskLevel: String? get() = message.riskLevel
     }
 
+    /**
+     * 结构化输出（各场景共用的一张宽表）。
+     *
+     * 后端每个 scene 有独立的 Pydantic 输出模型，序列化后落到同一个
+     * `structured_output` 字段里，因此这里必须覆盖**所有场景的并集**——
+     * 少一个字段，对应页面就会静默拿不到值（2026-09-14 冷战页即因此全空）。
+     * 与后端 `app/schemas/ai_output.py` 的 `SCENE_OUTPUT_MODELS` 保持一一对应。
+     */
     @JsonClass(generateAdapter = true)
     data class StructuredOutput(
         @Json(name = "summary") val summary: String? = null,
@@ -62,6 +70,14 @@ object AiDto {
         @Json(name = "risk_level") val riskLevel: String? = null,
         @Json(name = "suggested_actions") val suggestedActions: List<String>? = null,
         @Json(name = "rewrites") val rewrites: List<RewriteItem>? = null,
+        @Json(name = "theory_refs") val theoryRefs: List<String>? = null,
+        // ---- 冷战开解（scene_key = cold_war）专属字段 ----
+        @Json(name = "goal_analysis") val goalAnalysis: String? = null,
+        @Json(name = "face_vs_need") val faceVsNeed: String? = null,
+        @Json(name = "approach") val approach: String? = null,
+        @Json(name = "approach_reason") val approachReason: String? = null,
+        @Json(name = "opening_lines") val openingLines: List<String>? = null,
+        @Json(name = "avoid_reminders") val avoidReminders: List<String>? = null,
     )
 
     @JsonClass(generateAdapter = true)
