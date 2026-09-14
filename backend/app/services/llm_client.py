@@ -93,45 +93,72 @@ class LlmClient:
         max_tokens: int = 2000,
         scene: str = "unknown",
     ) -> Iterator[str]:
-        """流式调用，逐块产出文本增量（供 SSE 使用）。"""
-        payload = {
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "stream": True,
-        }
-        url = self._url()
-        headers = self._headers()
-        started = time.time()
-        chunks = 0
-        try:
-            with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:
-                with client.stream("POST", url, headers=headers, json=payload) as resp:
-                    if resp.status_code != 200:
-                        body = resp.read().decode("utf-8", errors="replace")
-                        raise LlmError("流式调用失败 HTTP %s: %s" % (resp.status_code, body[:300]))
-                    for line in resp.iter_lines():
-                        if not line:
-                            continue
-                        if line.startswith("data:"):
-                            line = line[5:].strip()
-                        if line == "[DONE]":
-                            break
-                        try:
-                            event = json.loads(line)
-                        except ValueError:
-                            continue
-                        delta = self._extract_delta(event)
-                        if delta:
-                            chunks += 1
-                            yield delta
-        except httpx.HTTPError as exc:
-            raise LlmError("流式请求异常: %s" % exc) from exc
-        finally:
-            logger.info(
-                "[LLM-STREAM] scene=%s model=%s chunks=%d cost=%.2fs",
-                scene, self.model, chunks, time.time() - started,
-            )
+        """流式调用，逐块产出文本增量（供 SSE 使用）。
+
+        与 `invoke()` 的差异：
+        - `stream()` 走的是 `client.stream()`，无法复用 `_request()` 的请求封装，
+          因此**模型降级逻辑必须在这里再实现一遍**（曾经漏掉 `model` 字段，
+          线上会直接 400 "you must provide a model parameter"）。
+        - 只有在**尚未吐出任何增量**时才允许切换模型；一旦有内容发给前端了，
+          再换模型会导致前缀重复，此时只能报错。
+        """
+        last_error: Optional[str] = None
+
+        for model in self._candidates():
+            payload = {
+                "messages": messages,
+                "model": model,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "stream": True,
+            }
+            started = time.time()
+            chunks = 0
+            try:
+                with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:
+                    with client.stream(
+                        "POST", self._url(), headers=self._headers(), json=payload
+                    ) as resp:
+                        if resp.status_code != 200:
+                            body = resp.read().decode("utf-8", errors="replace")
+                            code = self._stream_error_code(body)
+                            last_error = "HTTP %s: %s" % (resp.status_code, body[:200])
+                            if code in _MODEL_UNAVAILABLE_CODES or resp.status_code in (429, 503):
+                                logger.warning(
+                                    "[LLM] 流式模型 %s 不可用[%s]，降级到下一个模型", model, code
+                                )
+                                continue
+                            raise LlmError("流式调用失败 HTTP %s: %s" % (resp.status_code, last_error))
+
+                        for line in resp.iter_lines():
+                            if not line:
+                                continue
+                            if line.startswith("data:"):
+                                line = line[5:].strip()
+                            if line == "[DONE]":
+                                break
+                            try:
+                                event = json.loads(line)
+                            except ValueError:
+                                continue
+                            delta = self._extract_delta(event)
+                            if delta:
+                                chunks += 1
+                                yield delta
+            except httpx.HTTPError as exc:
+                last_error = "网络异常: %s" % exc
+                if chunks == 0:
+                    logger.warning("[LLM] 流式 %s 请求异常，尝试下一个模型: %s", model, exc)
+                    continue
+                raise LlmError("流式中断且已推送部分内容: %s" % exc) from exc
+            finally:
+                logger.info(
+                    "[LLM-STREAM] scene=%s model=%s chunks=%d cost=%.2fs",
+                    scene, model, chunks, time.time() - started,
+                )
+            return
+
+        raise LlmError("所有候选模型均不可用(流式): %s" % last_error)
 
     def invoke_with_tools(
         self,
@@ -289,6 +316,15 @@ class LlmClient:
             return err.get("code") or "", err.get("message") or resp.text[:200]
         except Exception:
             return "", resp.text[:200]
+
+    @staticmethod
+    def _stream_error_code(body: str) -> str:
+        """流式失败时响应体是普通字符串，单独解析出错误码用于判断是否降级。"""
+        try:
+            err = (json.loads(body).get("error") or {})
+            return err.get("code") or ""
+        except Exception:
+            return ""
 
     @staticmethod
     def _log_usage(scene: str, model: str, data: Dict[str, Any], elapsed: float) -> None:

@@ -229,6 +229,61 @@ def build_prompt(
     return prompt
 
 
+#: "请以 JSON 格式回复" 是结构化场景模板的统一分界点，
+#: 流式变体直接在此处截断，把结构化字段说明替换成自然语言要求。
+_JSON_MARKER = "请以 JSON 格式回复"
+
+_STREAM_INSTRUCTION = """## 输出格式（重要）
+请直接用简体中文、以 Markdown 分段的形式回复用户，像面对面咨询那样自然表达。
+不要输出 JSON、不要输出字段名、不要提及"结构化输出"。
+把上述各要点融合成连贯的建议：先共情安抚，再分析对方可能的心态，然后给出可以直接使用的回复话术，最后提醒要避免的表达。
+控制在 300 字以内，段落之间换行分隔，"可以直接说的话"用短横线列出。"""
+
+
+def build_stream_prompt(
+    scene_key: str,
+    user_profile: str,
+    partner_profile: str,
+    conflict_pattern: str,
+    user_input: str,
+    history: str,
+    rag_context: str = "",
+    memory_context: str = "",
+) -> str:
+    """流式变体 Prompt：与 `build_prompt` 同源，仅把结构化 JSON 要求换成自然语言要求。
+
+    为什么需要两个版本：
+    - 结构化输出依赖 Function Calling，模型必须一次性回填完整 JSON，
+      天然无法逐 token 流式返回（半截 JSON 对前端没有意义）。
+    - 因此流式链路走"自然语言正文"这条通道，让用户先看到字；
+      落库时再把正文与风险等级一起写入 structured_output，
+      保证流式与非流式的历史记录结构一致。
+    """
+    base = SYSTEM_PROMPTS.get(scene_key, SYSTEM_PROMPTS["private_advisor"])
+
+    cut = base.find(_JSON_MARKER)
+    if cut != -1:
+        base = base[:cut].rstrip()
+
+    prompt = base.format(
+        user_profile=user_profile,
+        partner_profile=partner_profile,
+        conflict_pattern=conflict_pattern,
+        history=history,
+    )
+
+    if memory_context:
+        prompt += "\n\n" + memory_context
+
+    if rag_context:
+        prompt += "\n\n" + rag_context
+
+    prompt += f"\n\n## 用户输入\n{user_input}"
+    prompt += "\n\n" + _STREAM_INSTRUCTION
+
+    return prompt
+
+
 def build_profile_report_prompt(
     profile_type: str,
     confidence: float,

@@ -1,14 +1,15 @@
 import logging
 
 from sqlalchemy.orm import Session
-from typing import Optional, List, Dict
+from typing import Any, Dict, Iterator, List, Optional
 
+from app.core.database import SessionLocal
 from app.repositories import (
     ai_repo,
     profile_repo,
     couple_repo,
 )
-from app.services.prompt_builder import build_prompt
+from app.services.prompt_builder import build_prompt, build_stream_prompt
 from app.services.scene_router import get_scene_config
 from app.services.output_validator import validate_structured_output
 from app.services.safety_service import (
@@ -24,32 +25,33 @@ from app.services.llm_client import llm, LlmError
 logger = logging.getLogger("couple.ai")
 
 
-def chat(
+def _preprocess(
     db: Session,
     user_id: int,
     relation_id: int,
     session_id: Optional[int],
     scene_key: str,
     user_input: str,
-) -> dict:
+) -> Dict[str, Any]:
+    """聊天链路共享前处理（13 步里的 1~9 步）。
+
+    `chat()`（阻塞）与 `prepare_chat()`（流式）共用这一份实现，避免两条路径各写一遍。
+    返回值中 `blocked` 非空表示输入被安全护栏拦截，此时不创建会话、不调用模型。
+
+    注意：返回的 `session` 是 ORM 实例，只在请求级 `db` 存活期间可用，
+    流式端点不要持有它（见 `prepare_chat`）。
+    """
     scene = ai_repo.get_scene_by_key(db, scene_key)
     if not scene:
         raise ValueError("50001")
 
     input_risk = check_input_safety(user_input)
     if input_risk != "normal":
-        safety_resp = get_safety_response(input_risk)
         return {
+            "blocked": get_safety_response(input_risk),
+            "risk_level": input_risk,
             "session_id": session_id or 0,
-            "message": {
-                "id": 0,
-                "role": "assistant",
-                "content": safety_resp,
-                "structured_output": {"risk_level": input_risk},
-                "risk_level": input_risk,
-                "created_at": None,
-            },
-            "blocked": True,
+            "scene": scene,
         }
 
     user_profile = profile_repo.get_latest_profile(db, user_id)
@@ -98,7 +100,7 @@ def chat(
 
     memory_context = get_memory_context(db, user_id, relation_id)
 
-    prompt = build_prompt(
+    prompt_args = dict(
         scene_key=scene_key,
         user_profile=user_profile_text,
         partner_profile=partner_profile_text,
@@ -108,11 +110,59 @@ def chat(
         rag_context=rag_context,
         memory_context=memory_context,
     )
+    # 同一份上下文，两种出口：结构化 JSON 版 / 自然语言流式版
+    prompt = build_prompt(**prompt_args)
+    stream_prompt = build_stream_prompt(**prompt_args)
 
     ai_repo.create_message(db, session_id, "user", user_input)
     ai_repo.save_prompt_version(db, user_id, relation_id, scene_key, prompt)
 
-    ai_response = _call_llm(prompt, scene_key)
+    # 必须在此提交，不能留到调用方：
+    # 流式端点会先带着这份数据返回 StreamingResponse，请求级 db 随即被销毁，
+    # 未提交的会话行与用户消息会被回滚，导致随后独立会话落库助手消息时外键失败。
+    db.commit()
+
+    return {
+        "blocked": None,
+        "session": session,
+        "session_id": session_id,
+        "scene": scene,
+        "prompt": prompt,
+        "stream_prompt": stream_prompt,
+        "user_input": user_input,
+        "rag_chunks": rag_chunks,
+    }
+
+
+def chat(
+    db: Session,
+    user_id: int,
+    relation_id: int,
+    session_id: Optional[int],
+    scene_key: str,
+    user_input: str,
+) -> dict:
+    ctx = _preprocess(db, user_id, relation_id, session_id, scene_key, user_input)
+
+    if ctx["blocked"]:
+        return {
+            "session_id": ctx["session_id"],
+            "message": {
+                "id": 0,
+                "role": "assistant",
+                "content": ctx["blocked"],
+                "structured_output": {"risk_level": ctx["risk_level"]},
+                "risk_level": ctx["risk_level"],
+                "created_at": None,
+            },
+            "blocked": True,
+        }
+
+    scene = ctx["scene"]
+    session = ctx["session"]
+    session_id = ctx["session_id"]
+
+    ai_response = _call_llm(ctx["prompt"], scene_key)
 
     structured = validate_structured_output(ai_response, scene_key)
 
@@ -147,6 +197,158 @@ def chat(
             "created_at": assistant_msg.created_at,
         },
     }
+
+
+def prepare_chat(
+    db: Session,
+    user_id: int,
+    relation_id: int,
+    session_id: Optional[int],
+    scene_key: str,
+    user_input: str,
+) -> dict:
+    """SSE 端点专用：只做前处理，返回**纯数据**（不含 ORM 对象）。
+
+    为什么不能直接把 `_preprocess` 的结果交给生成器：
+    `StreamingResponse` 的响应体是在请求级 `db` 会话之后才被消费的，
+    此时 `ctx["session"]` 已经 Detached，再访问属性会抛异常。
+    所以这里立刻把需要的信息拍平成基本类型，生成器只认这些数据。
+    """
+    ctx = _preprocess(db, user_id, relation_id, session_id, scene_key, user_input)
+
+    if ctx["blocked"]:
+        return {
+            "blocked": True,
+            "content": ctx["blocked"],
+            "risk_level": ctx["risk_level"],
+            "session_id": ctx["session_id"],
+            "scene_key": scene_key,
+        }
+
+    return {
+        "blocked": False,
+        "session_id": ctx["session_id"],
+        "scene_key": scene_key,
+        "scene_name": ctx["scene"].name,
+        "stream_prompt": ctx["stream_prompt"],
+        "rag_hit": len(ctx["rag_chunks"]),
+    }
+
+
+def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
+    """把一次聊天拆成 SSE 事件序列：meta → delta* → done / error。
+
+    事件协议（前端按 `event:` 名分发）：
+    - `meta`  首帧，携带 session_id / scene_key / RAG 命中数，客户端据此绑定会话
+    - `delta` 文本增量，逐块追加即得打字机效果
+    - `done`  终帧，携带 message_id 与最终风险等级，客户端据此刷新消息列表
+    - `error` 模型侧失败，客户端应提示重试
+
+    生成器全程自行开闭 DB 会话（见 `_persist_streamed_message`），
+    不持有请求级 session，因此可以安全地在响应体阶段运行。
+    """
+    yield {
+        "event": "meta",
+        "data": {
+            "session_id": prepared["session_id"],
+            "scene_key": prepared["scene_key"],
+            "rag_hit": prepared.get("rag_hit", 0),
+        },
+    }
+
+    if prepared["blocked"]:
+        # 安全护栏命中：不调用模型，但保持同一套事件协议，前端无需特判
+        yield {"event": "delta", "data": {"content": prepared["content"]}}
+        yield {
+            "event": "done",
+            "data": {
+                "session_id": prepared["session_id"],
+                "message_id": 0,
+                "risk_level": prepared["risk_level"],
+                "blocked": True,
+                "content": prepared["content"],
+            },
+        }
+        return
+
+    buffer: List[str] = []
+    try:
+        for delta in llm.stream(
+            [{"role": "system", "content": prepared["stream_prompt"]}],
+            temperature=0.7,
+            max_tokens=1200,
+            scene=prepared["scene_key"],
+        ):
+            buffer.append(delta)
+            yield {"event": "delta", "data": {"content": delta}}
+    except LlmError as exc:
+        logger.error("[AI] 流式调用失败 scene=%s: %s", prepared["scene_key"], exc)
+        yield {
+            "event": "error",
+            "data": {"code": 50000, "message": "AI 服务异常，请稍后重试"},
+        }
+        return
+
+    full_text = "".join(buffer).strip()
+    if not full_text:
+        yield {
+            "event": "error",
+            "data": {"code": 50000, "message": "AI 未返回内容，请重试"},
+        }
+        return
+
+    output_risk = check_output_safety(full_text)
+    structured: Dict[str, Any] = {
+        "raw_text": full_text,
+        "streamed": True,
+        "risk_level": output_risk,
+    }
+    if output_risk != "normal":
+        structured["safety_notice"] = get_safety_response(output_risk)
+
+    message_id = _persist_streamed_message(
+        prepared["session_id"], full_text, structured, output_risk
+    )
+
+    yield {
+        "event": "done",
+        "data": {
+            "session_id": prepared["session_id"],
+            "message_id": message_id,
+            "risk_level": output_risk,
+            "blocked": False,
+            "content": full_text,
+            "finish_reason": "stop",
+        },
+    }
+
+
+def _persist_streamed_message(
+    session_id: int, content: str, structured: dict, risk_level: str
+) -> int:
+    """流式结束后落库。
+
+    用独立会话，且把异常吞掉只记日志：内容此刻已经推给用户了，
+    落库失败不应该反过来影响这次回答的观感。返回 0 表示落库失败。
+    """
+    db = SessionLocal()
+    try:
+        msg = ai_repo.create_message(
+            db,
+            session_id,
+            "assistant",
+            content,
+            structured_output=structured,
+            risk_level=risk_level,
+        )
+        db.commit()
+        return msg.id
+    except Exception:
+        db.rollback()
+        logger.exception("[AI] 流式消息落库失败 session=%s", session_id)
+        return 0
+    finally:
+        db.close()
 
 
 def rewrite_expression(
