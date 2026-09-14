@@ -24,12 +24,13 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False))
         batch_op.add_column(sa.Column('updated_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False))
 
-    with op.batch_alter_table('ai_knowledge_chunk', schema=None) as batch_op:
-        batch_op.drop_index('ix_ai_knowledge_chunk_doc_id')
-
-    with op.batch_alter_table('ai_memory', schema=None) as batch_op:
-        batch_op.drop_index('ix_ai_memory_relation_id')
-        batch_op.drop_index('ix_ai_memory_user_id')
+    # 注意：这里原本由 autogenerate 生成了三条 drop_index
+    #   ai_knowledge_chunk.ix_ai_knowledge_chunk_doc_id
+    #   ai_memory.ix_ai_memory_user_id / ix_ai_memory_relation_id
+    # 本意是"删掉模型里未声明的冗余索引"，但这三个索引是 MySQL 为外键自动依赖的，
+    # 删除会直接报 1553 (Cannot drop index ... needed in a foreign key constraint)，
+    # 导致全新环境执行 `alembic upgrade head` 直接失败。
+    # 正确做法是让模型显式声明这些索引（已补在 app/models/ai.py），此处不再删除。
 
     with op.batch_alter_table('couple_profile', schema=None) as batch_op:
         batch_op.add_column(sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False))

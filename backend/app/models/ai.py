@@ -1,4 +1,4 @@
-from sqlalchemy import String, Text, Integer, BigInteger, ForeignKey, JSON
+from sqlalchemy import String, Text, Integer, BigInteger, ForeignKey, Index, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional, List
 
@@ -92,6 +92,9 @@ class AiKnowledgeDoc(BigIntPKMixin, TimestampMixin, Base):
 
 class AiKnowledgeChunk(BigIntPKMixin, Base):
     __tablename__ = "ai_knowledge_chunk"
+    # doc_id 上的索引由外键约束隐式要求，MySQL 不允许在保留外键的情况下删除它。
+    # 这里显式声明，使模型与真实库结构一致，避免再次被 autogenerate 判定为"多余索引"。
+    __table_args__ = (Index("ix_ai_knowledge_chunk_doc_id", "doc_id"),)
 
     doc_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("ai_knowledge_doc.id"), nullable=False
@@ -105,6 +108,11 @@ class AiKnowledgeChunk(BigIntPKMixin, Base):
 
 class AiMemory(BigIntPKMixin, TimestampMixin, Base):
     __tablename__ = "ai_memory"
+    # 同上：user_id / relation_id 的索引为外键所必需，显式声明以对齐模型与库结构。
+    __table_args__ = (
+        Index("ix_ai_memory_user_id", "user_id"),
+        Index("ix_ai_memory_relation_id", "relation_id"),
+    )
 
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
     relation_id: Mapped[int] = mapped_column(

@@ -33,6 +33,9 @@ from app.models.museum import MuseumItem
 from app.models.practice import RelationshipPractice, PracticeRecord
 from app.models.anniversary import Anniversary, Wishlist
 from app.models.avatar import AiAvatar, AiAvatarAsset
+from app.models.diary_entry import DiaryEntry
+from app.models.invite_code import InviteCode
+from app.models.self_practice import SelfPractice, SelfPracticeRecord
 
 __all__ = [
     "User",
@@ -68,4 +71,8 @@ __all__ = [
     "Wishlist",
     "AiAvatar",
     "AiAvatarAsset",
+    "DiaryEntry",
+    "InviteCode",
+    "SelfPractice",
+    "SelfPracticeRecord",
 ]

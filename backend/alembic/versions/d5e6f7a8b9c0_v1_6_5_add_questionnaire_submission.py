@@ -19,6 +19,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # 幂等：见 c4d5e6f7a8b9 中的说明。
+    if sa.inspect(op.get_bind()).has_table('questionnaire_submission'):
+        return
     op.create_table(
         'questionnaire_submission',
         sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),

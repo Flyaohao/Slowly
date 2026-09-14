@@ -9,14 +9,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import DB_URL
 from app.core.database import Base
-from app.models import (  # noqa: F401
-    User, UserProfile, CoupleRelation, CoupleSpace,
-    Questionnaire, QuestionnaireQuestion, QuestionnaireOption, QuestionnaireAnswer,
-    PsychologyModel, RelationshipProfile, ProfileDimensionScore, CoupleProfile,
-    AiScene, AiPromptTemplate, AiPromptVersion, AiChatSession, AiChatMessage, AiOutputFeedback,
-    AiKnowledgeDoc, AiKnowledgeChunk, AiMemory,
-    Letter,
-)
+
+# 整体导入 app.models，确保其 __init__ 中登记的所有模型都注册进 Base.metadata。
+# 这里原本是一份手工维护的模型清单，漏掉了 v1.6.5 之后的模型（如 dual_perspective /
+# museum / practice / anniversary / avatar 以及 v2.0 的 diary_entry 等），
+# 导致 autogenerate 看不见这些表，会反过来提议把它们 DROP 掉。
+import app.models  # noqa: F401,E402
 
 config = context.config
 config.set_main_option("sqlalchemy.url", DB_URL)

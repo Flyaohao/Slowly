@@ -19,6 +19,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # 幂等：历史库中部分表是临时脚本直接建出来的，迁移链里没有记录，
+    # 先判断存在性，保证 `alembic upgrade head` 在新库与旧库上都能跑通。
+    if sa.inspect(op.get_bind()).has_table('questionnaire_progress'):
+        return
     op.create_table(
         'questionnaire_progress',
         sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),

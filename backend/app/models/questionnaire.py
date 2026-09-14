@@ -1,4 +1,4 @@
-from sqlalchemy import String, Text, Integer, Float, Boolean, BigInteger, ForeignKey, JSON, UniqueConstraint
+from sqlalchemy import String, Text, Integer, Float, Boolean, BigInteger, ForeignKey, Index, JSON, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional, List
 
@@ -78,6 +78,9 @@ class QuestionnaireProgress(BigIntPKMixin, TimestampMixin, Base):
 
 class QuestionnaireSubmission(BigIntPKMixin, TimestampMixin, Base):
     __tablename__ = "questionnaire_submission"
+    # 迁移 d5e6f7a8b9c0 已建出该索引，这里显式声明以免模型与库结构不一致
+    # （否则 autogenerate 会提议把它删掉）。
+    __table_args__ = (Index("ix_submission_user", "user_id"),)
 
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
     questionnaire_id: Mapped[int] = mapped_column(
