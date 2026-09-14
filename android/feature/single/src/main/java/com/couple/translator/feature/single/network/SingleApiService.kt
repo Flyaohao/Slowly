@@ -47,7 +47,7 @@ interface SingleApiService {
     @POST("api/v1/single/diary/batch-delete")
     suspend fun batchDeleteDiaries(@Body body: DiaryDto.BatchDeleteRequest): ApiResponse<DiaryDto.BatchDeleteResponse>
 
-    // Self Practice (保留接口以兼容现有代码，但前端不再导航到此功能)
+    // Self Practice（单身模式专属 — 路由前缀 /api/v1/single/self-practices）
     @GET("api/v1/single/self-practices")
     suspend fun getSelfPractices(): ApiResponse<List<SelfPracticeDto.SelfPracticeResponse>>
 
@@ -60,11 +60,12 @@ interface SingleApiService {
         @Body body: SelfPracticeDto.SubmitSelfPracticeRequest,
     ): ApiResponse<SelfPracticeDto.SelfPracticeRecordResponse>
 
+    // 后端返回的是分页包装 {total, items:[...]}，不是单条记录
     @GET("api/v1/single/self-practices/records")
     suspend fun getSelfPracticeRecords(
         @Query("page") page: Int = 1,
         @Query("page_size") pageSize: Int = 20,
-    ): ApiResponse<SelfPracticeDto.SelfPracticeRecordResponse>
+    ): ApiResponse<SelfPracticeDto.SelfPracticeRecordListResponse>
 
     @GET("api/v1/single/self-practices/records/{rid}")
     suspend fun getSelfPracticeRecordDetail(@Path("rid") recordId: Long): ApiResponse<SelfPracticeDto.SelfPracticeRecordResponse>

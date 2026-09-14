@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Quiz
+import androidx.compose.material.icons.outlined.SelfImprovement
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -70,6 +71,12 @@ fun SingleDrawerContent(
             icon = Icons.Outlined.Quiz,
             label = "了解自己",
             onClick = { onNavigateToRoute(Screen.QuestionnaireIntro.route) },
+        )
+
+        DrawerNavItem(
+            icon = Icons.Outlined.SelfImprovement,
+            label = "自我练习",
+            onClick = { onNavigateToRoute(Screen.SelfPracticeList.route) },
         )
 
         Spacer(modifier = Modifier.height(16.dp))

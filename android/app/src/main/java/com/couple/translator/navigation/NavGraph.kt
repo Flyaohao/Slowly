@@ -61,6 +61,7 @@ import com.couple.translator.feature.couple.wishlist.WishlistScreen
 import com.couple.translator.feature.single.diary.DiaryListScreen
 import com.couple.translator.feature.single.diary.DiaryDetailScreen
 import com.couple.translator.feature.single.diary.ComposeDiaryScreen
+import com.couple.translator.feature.single.practice.SelfPracticeListScreen
 import com.couple.translator.feature.single.SingleShell
 import com.couple.translator.feature.couple.CoupleShell
 
@@ -650,6 +651,13 @@ fun NavGraph(
             ComposeDiaryScreen(
                 onNavigateBack = { navController.popBackStack() },
                 diaryId = if (editId > 0) editId else null,
+            )
+        }
+
+        // Self Practice (单身模式专属)
+        composable(Screen.SelfPracticeList.route) {
+            SelfPracticeListScreen(
+                onNavigateBack = { navController.popBackStack() },
             )
         }
 

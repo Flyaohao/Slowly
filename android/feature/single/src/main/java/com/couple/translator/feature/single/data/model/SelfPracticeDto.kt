@@ -27,6 +27,12 @@ object SelfPracticeDto {
     )
 
     @JsonClass(generateAdapter = true)
+    data class SelfPracticeRecordListResponse(
+        @Json(name = "total") val total: Int = 0,
+        @Json(name = "items") val items: List<SelfPracticeRecordResponse> = emptyList(),
+    )
+
+    @JsonClass(generateAdapter = true)
     data class SubmitSelfPracticeRequest(
         @Json(name = "content") val content: String? = null,
         @Json(name = "reflection") val reflection: String? = null,
