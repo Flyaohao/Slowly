@@ -97,6 +97,37 @@ class LetterUnderstandOutput(BaseModel):
     risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
 
 
+class MediationRewriteOutput(BaseModel):
+    """双人调解 —— 双方表达改写。
+
+    字段名 `rewrite_a` / `rewrite_b` 是客户端已依赖的契约（见
+    `android/.../data/model/MediationDto.kt` 的 `MediationStructuredOutput`），
+    不可随意重命名。
+    """
+
+    rewrite_a: str = Field(..., description="A 方表达的温和化改写，只表达自身感受与需求，不带指责")
+    rewrite_b: str = Field(..., description="B 方表达的回应式改写，先承接对方感受再表达自己")
+    risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
+
+
+class MediationSummaryOutput(BaseModel):
+    """双人调解 —— 共识汇总。
+
+    字段名同样是客户端已依赖的契约，不可重命名。
+    """
+
+    common_points: List[str] = Field(
+        default_factory=list, description="双方真正的共同点，通常 2-4 条"
+    )
+    differences: List[str] = Field(
+        default_factory=list, description="双方尚未达成一致的差异点，通常 2-4 条"
+    )
+    next_actions: List[str] = Field(
+        default_factory=list, description="双方可以立刻执行的具体行动，通常 2-4 条"
+    )
+    risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
+
+
 #: 场景 → 输出模型。未登记的 scene_key 统一回退到 TranslateOutput。
 SCENE_OUTPUT_MODELS: Dict[str, Any] = {
     "private_advisor": TranslateOutput,
@@ -104,6 +135,8 @@ SCENE_OUTPUT_MODELS: Dict[str, Any] = {
     "cold_war": ColdWarOutput,
     "expression_rewrite": RewriteOutput,
     "letter_understand": LetterUnderstandOutput,
+    "mediation_rewrite": MediationRewriteOutput,
+    "mediation_summary": MediationSummaryOutput,
 }
 
 #: 输出纯文本、不走结构化解析的场景

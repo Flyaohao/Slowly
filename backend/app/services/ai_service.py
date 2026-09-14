@@ -630,6 +630,20 @@ def _compose_raw_text(data: dict, scene_key: str) -> str:
         if data.get("suggested_reply"):
             parts.append("【建议回复】" + data["suggested_reply"])
 
+    elif scene_key == "mediation_rewrite":
+        if data.get("rewrite_a"):
+            parts.append("【A 方的表达】" + data["rewrite_a"])
+        if data.get("rewrite_b"):
+            parts.append("【B 方的表达】" + data["rewrite_b"])
+
+    elif scene_key == "mediation_summary":
+        if data.get("common_points"):
+            parts.append("【你们的共同点】\n" + "\n".join("- " + x for x in data["common_points"]))
+        if data.get("differences"):
+            parts.append("【仍有分歧的地方】\n" + "\n".join("- " + x for x in data["differences"]))
+        if data.get("next_actions"):
+            parts.append("【接下来可以做】\n" + "\n".join("- " + x for x in data["next_actions"]))
+
     else:
         label_map = [
             ("summary", ""),
