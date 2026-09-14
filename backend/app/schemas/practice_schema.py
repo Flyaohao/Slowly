@@ -31,3 +31,22 @@ class PracticeRecordOut(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class PracticeRecordDetailOut(BaseModel):
+    """练习记录详情：在基础字段上补充练习信息与双方各自的提交内容。"""
+
+    id: int
+    practice_id: int
+    practice_title: str
+    practice_type: str
+    relation_id: int
+    initiator_id: int
+    status: str
+    summary: Optional[str] = None
+    my_submission: Optional[str] = None
+    partner_submission: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}

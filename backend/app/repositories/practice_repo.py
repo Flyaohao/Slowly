@@ -37,6 +37,20 @@ def list_records(
     return items, total
 
 
+def list_records_by_practice(
+    db: Session, practice_id: int, relation_id: int
+) -> List[PracticeRecord]:
+    """取出同一练习下、同一情侣关系内的全部提交记录（用于展示双方内容）。"""
+    return (
+        db.query(PracticeRecord)
+        .filter(
+            PracticeRecord.practice_id == practice_id,
+            PracticeRecord.relation_id == relation_id,
+        )
+        .all()
+    )
+
+
 def update_record(db: Session, record: PracticeRecord, data: dict) -> PracticeRecord:
     for key, value in data.items():
         if value is not None:

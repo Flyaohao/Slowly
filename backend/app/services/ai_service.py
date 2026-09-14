@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict
 
@@ -17,6 +19,9 @@ from app.services.safety_service import (
 )
 from app.services.rag_service import retrieve_chunks, build_rag_context
 from app.services.memory_service import get_memory_context
+from app.services.llm_client import llm, LlmError
+
+logger = logging.getLogger("couple.ai")
 
 
 def chat(
@@ -310,9 +315,17 @@ def generate_profile_report(db: Session, user_id: int) -> str:
         dimensions_data=dimensions_text,
     )
 
-    # 调用 LLM 生成报告
-    result = _call_llm(prompt, "profile_report")
-    return result.get("raw_text", "")
+    # 画像报告是长文本 Markdown，不适用结构化输出，直接取原始文本
+    try:
+        return llm.invoke(
+            [{"role": "system", "content": prompt}],
+            temperature=0.6,
+            max_tokens=2500,
+            scene="profile_report",
+        )
+    except LlmError as exc:
+        logger.error("[AI] 画像报告生成失败 user=%s: %s", user_id, exc)
+        raise ValueError("50003")
 
 
 def delete_session(db: Session, user_id: int, session_id: int) -> None:
@@ -348,13 +361,103 @@ def _format_profile(profile, scores: Dict[str, float]) -> str:
 
 
 def _call_llm(prompt: str, scene_key: str) -> dict:
+    """调用真实大模型，返回结构化结果字典。
+
+    函数签名与返回值结构保持与旧版占位实现完全一致，
+    因此 `letter_ai_service` / `mediation_service` 无需改动即可受益。
+
+    实现路径：
+        prompt → llm.invoke_structured()（Function Calling 承载 Pydantic Schema）
+              → 拿到强校验后的输出模型
+              → model_dump() 展平成 dict，并补一个人类可读的 raw_text 供会话历史展示
+
+    任何异常都不会向上抛，而是返回降级文案，保证对话不中断。
+    """
+    if not llm.api_key:
+        logger.warning("[AI] 未配置 AI_API_KEY，返回降级回复 scene=%s", scene_key)
+        return _degraded_response("AI 服务尚未配置，请联系管理员")
+
+    messages = [{"role": "system", "content": prompt}]
+    try:
+        result = llm.invoke_structured(messages, scene=scene_key)
+    except LlmError as exc:
+        logger.error("[AI] 大模型调用失败 scene=%s: %s", scene_key, exc)
+        return _degraded_response("AI 服务暂时不可用，请稍后重试")
+
+    data = result.model_dump(mode="json")
+    data["raw_text"] = _compose_raw_text(data, scene_key)
+    data["scene_key"] = scene_key
+    return data
+
+
+def _compose_raw_text(data: dict, scene_key: str) -> str:
+    """把结构化字段拼装成人类可读文本。
+
+    用途：会话历史、消息列表折叠态、以及不支持结构化卡片的老版本客户端。
+    """
+    parts: List[str] = []
+
+    if scene_key == "cold_war":
+        if data.get("goal_analysis"):
+            parts.append("【诉求分析】" + data["goal_analysis"])
+        if data.get("face_vs_need"):
+            parts.append("【面子 vs 需要】" + data["face_vs_need"])
+        if data.get("approach_reason"):
+            strategy = "主动破冰" if data.get("approach") == "approach" else "先给彼此空间"
+            parts.append("【建议策略】%s——%s" % (strategy, data["approach_reason"]))
+        openings = data.get("opening_lines") or []
+        if openings:
+            parts.append("【可以这样开口】\n" + "\n".join("- " + line for line in openings))
+        avoid = data.get("avoid_reminders") or []
+        if avoid:
+            parts.append("【暂时别提】\n" + "\n".join("- " + item for item in avoid))
+
+    elif scene_key == "expression_rewrite":
+        if data.get("summary"):
+            parts.append(data["summary"])
+        for item in data.get("rewrites") or []:
+            parts.append("【%s】%s" % (item.get("style", ""), item.get("content", "")))
+
+    elif scene_key == "letter_understand":
+        if data.get("surface_meaning"):
+            parts.append("【字面意思】" + data["surface_meaning"])
+        if data.get("underlying_need"):
+            parts.append("【背后的需求】" + data["underlying_need"])
+        if data.get("emotion_tone"):
+            parts.append("【情绪基调】" + data["emotion_tone"])
+        if data.get("suggested_reply"):
+            parts.append("【建议回复】" + data["suggested_reply"])
+
+    else:
+        label_map = [
+            ("summary", ""),
+            ("emotion_validation", "我理解你的感受："),
+            ("partner_possible_meaning", "对方可能的真实意思："),
+            ("suggested_reply", "建议这样回："),
+            ("do_not_say", "不建议说："),
+            ("next_step", "下一步："),
+        ]
+        for key, prefix in label_map:
+            value = data.get(key)
+            if value:
+                parts.append(prefix + value if prefix else value)
+        refs = data.get("theory_refs") or []
+        if refs:
+            parts.append("参考理论：" + "、".join(refs))
+
+    return "\n\n".join(parts)
+
+
+def _degraded_response(reason: str) -> dict:
+    """降级兜底：保证结构化字段齐全，避免前端渲染异常。"""
     return {
-        "raw_text": "AI 回复占位（需接入真实 LLM API）",
-        "summary": "这是一条测试回复",
-        "emotion_validation": "我理解你现在的感受",
-        "partner_possible_meaning": "对方可能想要一些空间",
-        "suggested_reply": "我理解你的感受，我们可以慢慢聊",
-        "do_not_say": "不要说'你想太多了'",
-        "next_step": "建议先冷静一下，稍后再沟通",
+        "raw_text": reason,
+        "summary": reason,
+        "emotion_validation": "我在这里，先陪你缓一缓。",
+        "partner_possible_meaning": "",
+        "suggested_reply": "",
+        "do_not_say": "",
+        "next_step": "稍后再试一次，或者先深呼吸，让自己平静下来。",
         "risk_level": "normal",
+        "scene_key": "degraded",
     }
