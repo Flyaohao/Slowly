@@ -62,18 +62,22 @@ def check_unbinding_timeout():
         db.close()
 
 
-def run_scheduler():
-    """运行定时调度器（用于独立进程）"""
+def run_scheduler(interval_seconds: int = 3600):
+    """常驻轮询（纯标准库，不引 schedule 依赖）。
+
+    每小时执行一次检查即可：超时判定本身就是「超过 72h 自动取消」，
+    每小时跑一次与每天定点跑效果一致（最多晚 1 小时处理）。
+    """
     import time
-    import schedule
 
-    # 每天凌晨 2 点检查
-    schedule.every().day.at("02:00").do(check_unbinding_timeout)
-
-    logger.info("Unbinding timeout scheduler started")
+    logger.info("Unbinding timeout scheduler started, interval=%ss", interval_seconds)
     while True:
-        schedule.run_pending()
-        time.sleep(60)
+        try:
+            check_unbinding_timeout()
+        except Exception as e:
+            # 主循环抗崩：单次检查失败不应让容器进入重启循环
+            logger.error("scheduler loop error: %s", e)
+        time.sleep(interval_seconds)
 
 
 if __name__ == "__main__":
