@@ -64,7 +64,9 @@ services:
       DB_CHARSET: utf8mb4
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: ["python", "-m", "app.tasks.unbinding_timeout"]
+    # 必须覆盖 entrypoint 而不是 command：镜像的 ENTRYPOINT 是 docker-entrypoint.sh，
+    # 它会无视传入的 CMD 参数强行起 uvicorn（部署时实测踩中，scheduler 变成了空转的 uvicorn）
+    entrypoint: ["python", "-m", "app.tasks.unbinding_timeout"]
     depends_on:
       - backend
 
