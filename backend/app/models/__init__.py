@@ -37,6 +37,7 @@ from app.models.diary_entry import DiaryEntry
 from app.models.invite_code import InviteCode
 from app.models.self_practice import SelfPractice, SelfPracticeRecord
 from app.models.email_verification import EmailVerificationCode
+from app.models.presence import PresenceMoment
 
 __all__ = [
     "User",
@@ -77,4 +78,5 @@ __all__ = [
     "SelfPractice",
     "SelfPracticeRecord",
     "EmailVerificationCode",
+    "PresenceMoment",
 ]

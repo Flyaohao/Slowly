@@ -1,9 +1,13 @@
 package com.couple.translator.feature.couple.museum
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +24,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -31,8 +36,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.theme.Accent
@@ -153,6 +160,50 @@ fun AddMuseumItemScreen(
                     unfocusedContainerColor = Surface,
                 ),
             )
+
+            val pickImageLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.PickVisualMedia(),
+            ) { uri ->
+                viewModel.updateImage(uri)
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 配图（照片类藏品可配图，其他类型选填）
+            if (uiState.imageUri != null) {
+                AsyncImage(
+                    model = uiState.imageUri,
+                    contentDescription = "藏品配图预览",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            pickImageLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("更换图片") }
+                    OutlinedButton(
+                        onClick = { viewModel.updateImage(null) },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("移除图片") }
+                }
+            } else {
+                OutlinedButton(
+                    onClick = {
+                        pickImageLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (uiState.itemType == "photo") "添加照片" else "添加配图（选填）") }
+            }
 
             Spacer(modifier = Modifier.height(32.dp))
 

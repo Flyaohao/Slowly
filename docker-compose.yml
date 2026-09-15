@@ -48,8 +48,25 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - chroma_data:/app/data/chroma
+      # 上传的图片（头像 / 纪念馆藏品配图）放挂载卷，重建镜像不丢
+      - uploads_data:/app/uploads
     ports:
       - "${BACKEND_PORT:-8000}:8000"
+
+  tasks-scheduler:
+    # 后台定时任务常驻进程（当前只有解绑冷静期超时检查，每天 02:00）。
+    # 与 backend 共用同一镜像，不监听端口；用 schedule 库自循环，无新依赖。
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      DB_URL: ${DB_URL:-mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-root}@db:3306/${MYSQL_DATABASE:-couple_translator}?charset=utf8mb4}
+      DB_CHARSET: utf8mb4
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["python", "-m", "app.tasks.unbinding_timeout"]
+    depends_on:
+      - backend
 
   db:
     # 只在显式启用 local-db profile 时启动，避免和宿主机已有 MySQL 抢 3306
@@ -84,3 +101,4 @@ services:
 volumes:
   mysql_data:
   chroma_data:
+  uploads_data:

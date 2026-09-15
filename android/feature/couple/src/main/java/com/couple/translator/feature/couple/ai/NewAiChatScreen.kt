@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,6 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.data.model.AiDto
 import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.AccentLight
 import com.couple.translator.core.ui.theme.Background
@@ -129,10 +132,17 @@ fun NewAiChatScreen(
                 }
             }
 
-            items(uiState.messages) { message ->
+            itemsIndexed(uiState.messages) { index, message ->
                 if (message.role == "user") {
                     UserBubble(content = message.content)
                 } else {
+                    // Agent 轨迹只挂在最后一条助手消息上（Agent 回答不入库，刷新后消失）
+                    val isLastAssistant = index == uiState.messages.lastIndex &&
+                        uiState.agentToolCalls.isNotEmpty()
+                    if (isLastAssistant) {
+                        AgentTraceCard(toolCalls = uiState.agentToolCalls, steps = uiState.agentSteps)
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
                     AiReplyBubble(
                         content = message.content,
                         thinking = message.structuredOutput?.thinking,
@@ -322,6 +332,7 @@ private fun AiInputBar(
     value: String,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
+    onAgent: () -> Unit = {},
     onRewrite: () -> Unit = {},
     isLoading: Boolean,
     onOpenModeSheet: () -> Unit,
@@ -376,6 +387,21 @@ private fun AiInputBar(
             }
         }
 
+        // Agent 模式：模型自主决定查画像 / 检索理论后再作答
+        if (value.isNotBlank()) {
+            IconButton(
+                onClick = onAgent,
+                enabled = !isLoading,
+                modifier = Modifier.size(38.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Psychology,
+                    contentDescription = "Agent 深度提问",
+                    tint = Accent,
+                )
+            }
+        }
+
         IconButton(
             onClick = onOpenQuote,
             modifier = Modifier.size(38.dp),
@@ -403,6 +429,46 @@ private fun AiInputBar(
             )
         }
     }
+}
+
+/** Agent 工具调用轨迹：让"查了画像、翻了理论"的过程可见。 */
+@Composable
+private fun AgentTraceCard(toolCalls: List<AiDto.AgentToolCall>, steps: Int) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = AccentLight),
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Text(
+                text = "Agent 深度提问 · " + (if (steps > 0) "$steps 轮" else "已完成"),
+                style = MaterialTheme.typography.labelSmall,
+                color = Accent,
+            )
+            if (toolCalls.isEmpty()) {
+                Text(
+                    text = "本轮未调用工具，直接作答",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary,
+                )
+            } else {
+                toolCalls.forEach { call ->
+                    Text(
+                        text = "· " + toolLabel(call.name),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun toolLabel(name: String): String = when (name) {
+    "get_relation_profile" -> "已查询关系画像"
+    "search_theory" -> "已检索依恋理论"
+    "get_ai_memory" -> "已查询 AI 记忆"
+    else -> "已调用工具 $name"
 }
 
 @Composable

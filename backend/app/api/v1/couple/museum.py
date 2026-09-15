@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+import os
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -9,6 +12,36 @@ from app.schemas.museum_schema import MuseumItemCreate, MuseumItemUpdate, Museum
 from app.services import museum_service
 
 router = APIRouter(prefix="/museum", tags=["关系博物馆"])
+
+_MAX_IMAGE_SIZE = 5 * 1024 * 1024
+_ALLOWED_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+
+
+@router.post("/upload-image", response_model=ApiResponse)
+async def upload_image(
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """上传藏品配图（照片类藏品），返回相对 URL，创建/更新藏品时放入 image_url。"""
+    try:
+        museum_service.ensure_relation(db, current_user.id)
+    except ValueError:
+        return ApiResponse(code=30005, message="请先绑定情侣关系", data=None)
+
+    content = await file.read()
+    if len(content) > _MAX_IMAGE_SIZE:
+        return ApiResponse(code=10003, message="文件大小超过限制", data=None)
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _ALLOWED_IMAGE_EXTS:
+        return ApiResponse(code=10003, message="不支持的文件类型", data=None)
+
+    upload_dir = os.path.join("uploads", "museum")
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}{ext}"
+    with open(os.path.join(upload_dir, filename), "wb") as f:
+        f.write(content)
+    return ApiResponse(data={"image_url": f"/uploads/museum/{filename}"})
 
 
 @router.post("", response_model=ApiResponse)

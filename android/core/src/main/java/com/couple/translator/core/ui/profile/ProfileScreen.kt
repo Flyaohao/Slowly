@@ -46,6 +46,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.couple.translator.core.network.toAbsoluteUrl
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PullToRefreshLayout
@@ -122,7 +123,7 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 AsyncImage(
-                    model = uiState.avatarUrl.ifBlank { null },
+                    model = uiState.avatarUrl.ifBlank { null }.toAbsoluteUrl(),
                     contentDescription = "头像",
                     modifier = Modifier.size(96.dp).clip(CircleShape),
                     contentScale = ContentScale.Crop,

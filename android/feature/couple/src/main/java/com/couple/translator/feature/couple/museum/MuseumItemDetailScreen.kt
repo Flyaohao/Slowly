@@ -33,8 +33,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
+import com.couple.translator.core.network.toAbsoluteUrl
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.theme.Accent
@@ -114,6 +117,17 @@ fun MuseumItemDetailScreen(
                 color = Accent,
             )
             Spacer(modifier = Modifier.height(8.dp))
+            if (item.imageUrl != null) {
+                AsyncImage(
+                    model = item.imageUrl.toAbsoluteUrl(),
+                    contentDescription = item.title,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
             Text(
                 text = item.title,
                 style = MaterialTheme.typography.headlineSmall,

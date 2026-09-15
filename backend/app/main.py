@@ -1,4 +1,5 @@
 import logging
+import os
 
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import (
@@ -11,6 +12,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.staticfiles import StaticFiles
 
 from app.core.limiter import limiter
 from app.api.v1.router import router as v1_router
@@ -54,6 +56,15 @@ app.add_middleware(
 )
 
 app.include_router(v1_router)
+
+# ---------------------------------------------------------------------------
+# 静态文件：/uploads 下存放上传的图片（头像、纪念馆藏品配图等）。
+# 此前 upload_avatar 把文件写到 uploads/avatars 并返回 /uploads/... URL，
+# 但没有任何东西服务这个路径 —— 头像一直是存了却加载不出来的。
+# ---------------------------------------------------------------------------
+_UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
+os.makedirs(_UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_UPLOAD_DIR), name="uploads")
 
 
 # ---------------------------------------------------------------------------

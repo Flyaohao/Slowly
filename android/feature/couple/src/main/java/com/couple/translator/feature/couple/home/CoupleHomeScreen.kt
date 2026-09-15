@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.outlined.StarOutline
 import com.couple.translator.core.data.model.HomeDto
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PullToRefreshLayout
+import com.couple.translator.feature.couple.data.model.PresenceDto
 import com.couple.translator.feature.couple.presence.MeetCountdown
 import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.AccentLight
@@ -120,6 +122,16 @@ fun NewHomeScreen(
                 HomeQuickInfoCards(homeData = uiState.homeData!!)
             }
 
+            // 在场感：对方最新动态卡片
+            uiState.partnerMoment?.let { moment ->
+                Spacer(modifier = Modifier.height(16.dp))
+                PartnerMomentCard(
+                    moment = moment,
+                    companionSent = uiState.companionSent,
+                    onSendCompanion = viewModel::sendCompanion,
+                )
+            }
+
             if (uiState.recentItems.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(24.dp))
                 HomeRecentSection(
@@ -154,6 +166,47 @@ fun NewHomeScreen(
 
         Spacer(modifier = Modifier.height(100.dp))
     }
+    }
+}
+
+/** 在场感卡片：对方最新一条动态（此刻状态 / 陪伴请求）+ 发陪伴请求按钮。 */
+@Composable
+private fun PartnerMomentCard(
+    moment: PresenceDto.MomentResponse,
+    companionSent: Boolean,
+    onSendCompanion: () -> Unit,
+) {
+    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+        androidx.compose.material3.Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = AccentLight),
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Text(
+                    text = if (moment.momentType == "companion_request") "TA 需要你的陪伴"
+                    else "TA 此刻",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Accent,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = moment.content,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextPrimary,
+                )
+                if (moment.momentType != "companion_request") {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(onClick = onSendCompanion, enabled = !companionSent) {
+                        Text(
+                            text = if (companionSent) "陪伴请求已发出" else "TA 需要我 · 发陪伴请求",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Accent,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

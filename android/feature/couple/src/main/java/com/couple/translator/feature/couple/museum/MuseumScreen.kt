@@ -38,8 +38,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
+import com.couple.translator.core.network.toAbsoluteUrl
 import com.couple.translator.feature.couple.data.model.MuseumDto
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PullToRefreshLayout
@@ -231,6 +234,16 @@ private fun TimelineItem(
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (item.imageUrl != null) {
+                    AsyncImage(
+                        model = item.imageUrl.toAbsoluteUrl(),
+                        contentDescription = item.title,
+                        modifier = Modifier
+                            .padding(end = 12.dp)
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                    )
+                }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = item.title,

@@ -206,4 +206,32 @@ object AiDto {
 
         data class Failure(val code: Int, val message: String) : ChatStreamEvent
     }
+
+    // ---------- Agent（/api/v1/couple/ai/agent）----------
+
+    /** 工具调用轨迹中的一条。args 是任意 JSON，客户端只展示工具名与结果摘要。 */
+    @JsonClass(generateAdapter = true)
+    data class AgentToolCall(
+        @Json(name = "name") val name: String,
+        @Json(name = "result") val result: String? = null,
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class AgentResponse(
+        @Json(name = "answer") val answer: String = "",
+        @Json(name = "tool_calls") val toolCalls: List<AgentToolCall> = emptyList(),
+        @Json(name = "steps") val steps: Int = 0,
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class AgentRequest(
+        @Json(name = "question") val question: String,
+        @Json(name = "history") val history: List<AgentHistoryItem>? = null,
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class AgentHistoryItem(
+        @Json(name = "role") val role: String,
+        @Json(name = "content") val content: String,
+    )
 }

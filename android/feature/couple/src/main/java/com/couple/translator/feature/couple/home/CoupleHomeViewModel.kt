@@ -5,9 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.couple.translator.core.data.model.CoupleDto
 import com.couple.translator.core.data.model.HomeDto
 import com.couple.translator.feature.couple.data.model.LetterDto
+import com.couple.translator.feature.couple.data.model.PresenceDto
 import com.couple.translator.feature.couple.data.repository.CoupleRepository
 import com.couple.translator.core.data.repository.HomeRepository
 import com.couple.translator.feature.couple.data.repository.LetterRepository
+import com.couple.translator.feature.couple.data.repository.PresenceRepository
 import com.couple.translator.core.data.repository.TokenStore
 import com.couple.translator.core.data.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -58,6 +60,9 @@ data class NewHomeUiState(
     val hasFutureLetter: Boolean = false,
     val upcomingAnniversaryDays: Int? = null,
     val spaceName: String = "我们的空间",
+    // 在场感：对方最新一条动态（此刻状态 / 陪伴请求）
+    val partnerMoment: PresenceDto.MomentResponse? = null,
+    val companionSent: Boolean = false,
 )
 
 @HiltViewModel
@@ -66,6 +71,7 @@ class NewHomeViewModel @Inject constructor(
     private val coupleRepository: CoupleRepository,
     private val letterRepository: LetterRepository,
     private val homeRepository: HomeRepository,
+    private val presenceRepository: PresenceRepository,
     private val tokenStore: TokenStore,
 ) : ViewModel() {
 
@@ -74,6 +80,31 @@ class NewHomeViewModel @Inject constructor(
 
     init {
         loadData()
+    }
+
+    /** 拉取在场感 feed，取对方最新一条动态展示在首页卡片。失败静默（不打扰首页）。 */
+    private fun loadPresence(userId: Long?) {
+        viewModelScope.launch {
+            presenceRepository.getFeed().onSuccess { feed ->
+                _uiState.update {
+                    it.copy(partnerMoment = feed.firstOrNull { m -> m.userId != userId })
+                }
+            }
+        }
+    }
+
+    /** 发送陪伴请求（对方首页可见）。 */
+    fun sendCompanion() {
+        viewModelScope.launch {
+            presenceRepository.sendCompanionRequest().fold(
+                onSuccess = {
+                    _uiState.update { it.copy(companionSent = true) }
+                },
+                onFailure = { error ->
+                    _uiState.update { it.copy(error = error.message ?: "发送失败") }
+                },
+            )
+        }
     }
 
     fun refresh() {
@@ -115,6 +146,9 @@ class NewHomeViewModel @Inject constructor(
                     }
                     return@launch
                 }
+
+                // 情侣模式已确认：拉在场感 feed（对方最新动态）
+                loadPresence(userResult.getOrNull()?.userId)
 
                 val relation = homeData.relation
                 val loveDays = relation?.loveDays ?: 0
@@ -252,6 +286,9 @@ class NewHomeViewModel @Inject constructor(
                 }
 
                 // 情侣模式：使用聚合数据
+                // 情侣模式已确认：拉在场感 feed（对方最新动态）
+                loadPresence(userResult.getOrNull()?.userId)
+
                 val relation = homeData.relation
                 val loveDays = relation?.loveDays ?: 0
                 val spaceName = homeData.space?.name ?: "我们的空间"

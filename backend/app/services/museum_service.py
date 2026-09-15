@@ -13,6 +13,11 @@ def _check_relation(db: Session, user_id: int) -> CoupleRelation:
     return relation
 
 
+def ensure_relation(db: Session, user_id: int) -> CoupleRelation:
+    """供上传等辅助端点复用：校验存在情侣关系，否则抛 30005。"""
+    return _check_relation(db, user_id)
+
+
 def create_item(db: Session, user_id: int, data: dict) -> MuseumItem:
     relation = _check_relation(db, user_id)
     item = museum_repo.create_item(db, {
@@ -20,6 +25,7 @@ def create_item(db: Session, user_id: int, data: dict) -> MuseumItem:
         "item_type": data["item_type"],
         "title": data["title"],
         "story": data.get("story"),
+        "image_url": data.get("image_url"),
         "source_id": data.get("source_id"),
         "source_type": data.get("source_type"),
     })

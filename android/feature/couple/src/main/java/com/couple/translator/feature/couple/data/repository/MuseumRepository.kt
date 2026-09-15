@@ -2,6 +2,9 @@ package com.couple.translator.feature.couple.data.repository
 
 import com.couple.translator.feature.couple.data.model.MuseumDto
 import com.couple.translator.feature.couple.network.CoupleApiService
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -9,6 +12,29 @@ import javax.inject.Singleton
 class MuseumRepository @Inject constructor(
     private val apiService: CoupleApiService,
 ) {
+    /** 上传藏品配图，返回相对 URL（如 /uploads/museum/x.jpg）。 */
+    suspend fun uploadImage(bytes: ByteArray, filename: String): Result<String> {
+        return try {
+            val mime = when (filename.substringAfterLast('.').lowercase()) {
+                "png" -> "image/png"
+                "webp" -> "image/webp"
+                else -> "image/jpeg"
+            }
+            val part = MultipartBody.Part.createFormData(
+                "file", filename, bytes.toRequestBody(mime.toMediaType()),
+            )
+            val response = apiService.uploadMuseumImage(part)
+            val data = response.data
+            if (response.isSuccess && data != null) {
+                Result.success(data.imageUrl)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun createItem(request: MuseumDto.CreateMuseumItemRequest): Result<MuseumDto.MuseumItemResponse?> {
         return try {
             val response = apiService.createMuseumItem(request)

@@ -41,6 +41,9 @@ data class AiChatUiState(
     val showRewriteSheet: Boolean = false,
     val rewriteVersions: List<AiDto.RewriteVersion> = emptyList(),
     val rewriteOriginal: String = "",
+    /** 最近一次 Agent 回答携带的工具调用轨迹（查画像 / 检索理论），渲染在对应气泡上方 */
+    val agentToolCalls: List<AiDto.AgentToolCall> = emptyList(),
+    val agentSteps: Int = 0,
     val error: String = "",
 ) {
     /** 输入框是否应禁用：请求中或流式输出中都禁用，避免同会话并发 */
@@ -162,6 +165,64 @@ class AiChatViewModel @Inject constructor(
 
     fun applyRewrite(content: String) {
         _uiState.update { it.copy(inputText = content, showRewriteSheet = false, rewriteVersions = emptyList()) }
+    }
+
+    /**
+     * Agent 问答：与 [sendMessage] 的区别是走 `POST /ai/agent`，
+     * 模型自主决定是否调用工具（查关系画像 / 检索依恋理论）后作答。
+     * 工具调用轨迹存进 [AiChatUiState.agentToolCalls]，UI 在对应气泡上方展示。
+     * Agent 路径没有会话管理，消息只保留在内存里。
+     */
+    fun askAgent() {
+        val state = _uiState.value
+        val text = state.inputText.trim()
+        if (text.isEmpty() || state.isBusy) return
+
+        val history = state.messages
+            .filter { it.role == "user" || it.role == "assistant" }
+            .takeLast(10)
+            .map { AiDto.AgentHistoryItem(role = it.role, content = it.content.take(4000)) }
+
+        val userMessage = AiDto.MessageResponse(
+            id = System.currentTimeMillis(),
+            role = "user",
+            content = text,
+        )
+        _uiState.update {
+            it.copy(
+                messages = it.messages + userMessage,
+                inputText = "",
+                isLoading = true,
+                agentToolCalls = emptyList(),
+                agentSteps = 0,
+                error = "",
+            )
+        }
+
+        viewModelScope.launch {
+            aiRepository.agentChat(text, history).fold(
+                onSuccess = { result ->
+                    val aiMessage = AiDto.MessageResponse(
+                        id = System.currentTimeMillis(),
+                        role = "assistant",
+                        content = result.answer,
+                    )
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            messages = it.messages + aiMessage,
+                            agentToolCalls = result.toolCalls,
+                            agentSteps = result.steps,
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isLoading = false, error = error.message ?: "Agent 服务异常，请稍后重试")
+                    }
+                },
+            )
+        }
     }
 
     /**

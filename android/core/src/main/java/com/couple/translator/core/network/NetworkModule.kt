@@ -21,7 +21,7 @@ import javax.inject.Singleton
 object NetworkModule {
 
     // 默认 BASE_URL，可以通过 AppStartup 或配置覆盖
-    private const val DEFAULT_BASE_URL = "http://182.92.194.78:8000/"
+    const val DEFAULT_BASE_URL = "http://182.92.194.78:8000/"
 
     @Provides
     @Singleton

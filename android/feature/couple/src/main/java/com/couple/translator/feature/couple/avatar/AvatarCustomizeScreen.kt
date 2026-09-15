@@ -28,19 +28,24 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.theme.Accent
 import com.couple.translator.core.ui.theme.AccentLight
 import com.couple.translator.core.ui.theme.Background
@@ -57,8 +62,21 @@ fun AvatarCustomizeScreen(
     viewModel: AvatarCustomizeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiState.saved) {
+        if (uiState.saved) {
+            snackbarHostState.showSnackbar("形象已保存")
+            viewModel.clearSaved()
+        }
+    }
+
+    if (uiState.error.isNotEmpty()) {
+        ErrorDialog(message = uiState.error, onDismiss = { viewModel.clearError() })
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("AI 形象") },
@@ -68,7 +86,10 @@ fun AvatarCustomizeScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = { /* save */ }) {
+                    TextButton(
+                        onClick = { viewModel.save() },
+                        enabled = !uiState.isSaving,
+                    ) {
                         Text("保存", color = Accent)
                     }
                 },
@@ -124,19 +145,9 @@ fun AvatarCustomizeScreen(
             HorizontalDivider(color = BorderLight, modifier = Modifier.padding(vertical = 16.dp))
 
             SettingRow(
-                label = "换装",
-                value = "帽子 · 衣服 · 配饰",
-                onClick = {},
-            )
-            SettingRow(
                 label = "语气设置",
-                value = uiState.toneStyle,
+                value = toneLabels[uiState.toneIndex],
                 onClick = { viewModel.cycleTone() },
-            )
-            SettingRow(
-                label = "当前名字",
-                value = uiState.aiName,
-                onClick = {},
             )
 
             Spacer(modifier = Modifier.height(40.dp))

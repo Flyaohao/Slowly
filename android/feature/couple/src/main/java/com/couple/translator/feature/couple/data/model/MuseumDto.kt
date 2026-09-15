@@ -12,6 +12,7 @@ object MuseumDto {
         @Json(name = "item_type") val itemType: String,
         @Json(name = "title") val title: String,
         @Json(name = "story") val story: String? = null,
+        @Json(name = "image_url") val imageUrl: String? = null,
         @Json(name = "source_id") val sourceId: Long? = null,
         @Json(name = "source_type") val sourceType: String? = null,
         @Json(name = "pinned") val pinned: Boolean = false,
@@ -24,6 +25,7 @@ object MuseumDto {
         @Json(name = "item_type") val itemType: String,
         @Json(name = "title") val title: String,
         @Json(name = "story") val story: String? = null,
+        @Json(name = "image_url") val imageUrl: String? = null,
         @Json(name = "source_id") val sourceId: Long? = null,
         @Json(name = "source_type") val sourceType: String? = null,
     )
@@ -32,6 +34,12 @@ object MuseumDto {
     data class UpdateMuseumItemRequest(
         @Json(name = "title") val title: String? = null,
         @Json(name = "story") val story: String? = null,
+        @Json(name = "image_url") val imageUrl: String? = null,
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class MuseumImageUploadResponse(
+        @Json(name = "image_url") val imageUrl: String,
     )
 
     @JsonClass(generateAdapter = true)

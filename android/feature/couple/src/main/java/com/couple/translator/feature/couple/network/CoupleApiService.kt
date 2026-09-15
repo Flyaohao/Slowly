@@ -4,20 +4,25 @@ import com.couple.translator.core.data.model.AiDto
 import com.couple.translator.core.data.model.CoupleDto
 import com.couple.translator.core.network.ApiResponse
 import com.couple.translator.feature.couple.data.model.AnniversaryDto
+import com.couple.translator.feature.couple.data.model.AvatarDto
 import com.couple.translator.feature.couple.data.model.DualPerspectiveDto
 import com.couple.translator.feature.couple.data.model.LetterDto
 import com.couple.translator.feature.couple.data.model.MediationDto
 import com.couple.translator.feature.couple.data.model.MemoryDto
 import com.couple.translator.feature.couple.data.model.MuseumDto
+import com.couple.translator.feature.couple.data.model.PresenceDto
 import com.couple.translator.feature.couple.data.model.PracticeDto
 import com.couple.translator.feature.couple.data.model.WishlistDto
+import okhttp3.MultipartBody
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.PUT
+import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 import retrofit2.http.Streaming
@@ -102,6 +107,9 @@ interface CoupleApiService {
     @POST("api/v1/couple/ai/generate-reply")
     suspend fun generateReply(@Body body: LetterDto.GenerateReplyRequest): ApiResponse<LetterDto.GenerateReplyResponse>
 
+    @POST("api/v1/couple/ai/agent")
+    suspend fun agentChat(@Body body: AiDto.AgentRequest): ApiResponse<AiDto.AgentResponse>
+
     // Mediation
     @POST("api/v1/couple/ai/mediation/start")
     suspend fun startMediation(@Body body: MediationDto.MediationStartRequest): ApiResponse<MediationDto.MediationSessionResponse>
@@ -177,6 +185,10 @@ interface CoupleApiService {
     @POST("api/v1/couple/museum")
     suspend fun createMuseumItem(@Body body: MuseumDto.CreateMuseumItemRequest): ApiResponse<MuseumDto.MuseumItemResponse>
 
+    @Multipart
+    @POST("api/v1/couple/museum/upload-image")
+    suspend fun uploadMuseumImage(@Part file: MultipartBody.Part): ApiResponse<MuseumDto.MuseumImageUploadResponse>
+
     // 后端查询参数名是 item_type，不是 type（此前传 type 等于不筛选）
     @GET("api/v1/couple/museum")
     suspend fun getMuseumItems(@Query("item_type") type: String? = null): ApiResponse<MuseumDto.MuseumListResponse>
@@ -195,6 +207,26 @@ interface CoupleApiService {
 
     @POST("api/v1/couple/museum/{id}/pin")
     suspend fun toggleMuseumPin(@Path("id") itemId: Long): ApiResponse<MuseumDto.MuseumItemResponse>
+
+    // Avatar（AI 形象）
+    @GET("api/v1/couple/avatars/me")
+    suspend fun getMyAvatar(): ApiResponse<AvatarDto.AvatarResponse>
+
+    @PUT("api/v1/couple/avatars/me")
+    suspend fun updateMyAvatar(@Body body: AvatarDto.AvatarUpdateRequest): ApiResponse<AvatarDto.AvatarResponse>
+
+    @POST("api/v1/couple/avatars/me/voice-style")
+    suspend fun setVoiceStyle(@Body body: AvatarDto.VoiceStyleRequest): ApiResponse<AvatarDto.AvatarResponse>
+
+    // Presence（在场感）
+    @GET("api/v1/couple/presence/feed")
+    suspend fun getPresenceFeed(): ApiResponse<List<PresenceDto.MomentResponse>>
+
+    @POST("api/v1/couple/presence/moment")
+    suspend fun shareMoment(@Body body: PresenceDto.MomentShareRequest): ApiResponse<PresenceDto.MomentResponse>
+
+    @POST("api/v1/couple/presence/companion-request")
+    suspend fun sendCompanionRequest(@Body body: PresenceDto.CompanionRequest): ApiResponse<PresenceDto.MomentResponse>
 
     // Practice
     @GET("api/v1/couple/practices")
