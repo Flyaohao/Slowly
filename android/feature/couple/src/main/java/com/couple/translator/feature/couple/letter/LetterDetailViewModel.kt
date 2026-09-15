@@ -6,6 +6,7 @@ import com.couple.translator.feature.couple.data.model.LetterDto
 import com.couple.translator.feature.couple.data.repository.LetterRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -97,9 +98,14 @@ class LetterDetailViewModel @Inject constructor(
      * 页面进来先读一次即可，不必重新扣一次模型调用。
      *
      * 拿不到就静默结束——「这封信还没解读过」是正常状态，不该弹报错。
+     *
+     * [delayMs] 是给「连接中断后回读」用的：服务端要等下一次往流里写失败，
+     * 才知道对端已经走了，半成品落库有 1~2 秒延迟。中断瞬间立刻回读，
+     * 多半只能拿到刚建好的空记录。
      */
-    private fun loadSavedUnderstanding(id: Long) {
+    private fun loadSavedUnderstanding(id: Long, delayMs: Long = 0) {
         viewModelScope.launch {
+            if (delayMs > 0) delay(delayMs)
             letterRepository.getSavedUnderstanding(id).onSuccess { payload ->
                 if (payload == null) return@onSuccess
                 // 只有正文和结构化字段都没有时才认为「没东西可显示」，
@@ -201,7 +207,8 @@ class LetterDetailViewModel @Inject constructor(
                         // （跑完存 done、被掐断存 interrupted），而且它是在流式开始
                         // 时就建好记录、逐段更新的。回读一次把内容捞回来，免得界面
                         // 只剩一句报错——用户干等了二十秒，不该什么都看不到。
-                        _uiState.value.letter?.let { loadSavedUnderstanding(it.id) }
+                        // 隔 1.8s 再读，等服务端那侧先发现对端已断并把半成品存下来。
+                        _uiState.value.letter?.let { loadSavedUnderstanding(it.id, delayMs = 1800) }
                         _event.emit(LetterDetailUiEvent.ShowError(ev.message))
                     }
                 }
