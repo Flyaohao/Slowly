@@ -1,12 +1,12 @@
 package com.couple.translator.feature.single.diary
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,21 +20,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,23 +44,36 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.couple.translator.feature.single.data.model.DiaryDto
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppEmptyState
+import com.couple.translator.core.ui.components.AppFilterChip
+import com.couple.translator.core.ui.components.AppLinkText
+import com.couple.translator.core.ui.components.AppPageHeader
+import com.couple.translator.core.ui.components.AppPrimaryButton
+import com.couple.translator.core.ui.components.AppTopBar
+import com.couple.translator.core.ui.components.AppTopBarAction
 import com.couple.translator.core.ui.components.PullToRefreshLayout
+import com.couple.translator.core.ui.components.SkeletonListCard
+import com.couple.translator.core.ui.components.TopBarIdentity
+import com.couple.translator.core.ui.components.pressFeedback
 import com.couple.translator.core.ui.theme.AppAccent
-import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
-import com.couple.translator.core.ui.theme.AppBorderLight
-import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSpacing
+import com.couple.translator.core.ui.theme.AppSurfaceMuted
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
+import com.couple.translator.feature.single.data.model.DiaryDto
 
 @Composable
 fun DiaryListScreen(
     onOpenDrawer: () -> Unit,
     onNavigateToDetail: (Long) -> Unit,
     onNavigateToCompose: () -> Unit,
+    identity: TopBarIdentity = TopBarIdentity(),
     viewModel: DiaryListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -79,36 +88,83 @@ fun DiaryListScreen(
             isRefreshing = uiState.isRefreshing,
             onRefresh = { viewModel.refresh() },
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                // Top bar
-                DiaryTopBar(
-                    onOpenDrawer = onOpenDrawer,
-                    isSelectionMode = uiState.isSelectionMode,
-                    selectedCount = uiState.selectedIds.size,
-                    onToggleSelectionMode = { viewModel.toggleSelectionMode() },
-                    onSelectAll = { viewModel.selectAll() },
-                    onDeleteSelected = { showDeleteDialog = true },
-                )
-
-                // Filter tabs
-                if (!uiState.isSelectionMode) {
-                    DiaryFilterTabs(
-                        currentFilter = uiState.filterType,
-                        onFilterChanged = { viewModel.loadDiaries(it) },
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (uiState.isSelectionMode) {
+                    // 选择态顶栏：返回 + 计数 + 全选 + 删除，复用二级页顶栏的形状
+                    AppBackTopBar(
+                        onBack = { viewModel.toggleSelectionMode() },
+                        title = "已选择 ${uiState.selectedIds.size} 篇",
+                        trailing = {
+                            AppLinkText(label = "全选", onClick = { viewModel.selectAll() })
+                            AppTopBarAction(
+                                icon = Icons.Outlined.Delete,
+                                contentDescription = "删除",
+                                onClick = { showDeleteDialog = true },
+                                tint = AppErrorRed,
+                            )
+                        },
+                    )
+                } else {
+                    AppTopBar(
+                        onOpenDrawer = onOpenDrawer,
+                        isCoupleMode = false,
+                        identity = identity,
+                        trailing = {
+                            AppTopBarAction(
+                                icon = Icons.Outlined.Delete,
+                                contentDescription = "批量删除",
+                                onClick = { viewModel.toggleSelectionMode() },
+                                tint = AppTextSecondary,
+                            )
+                        },
                     )
                 }
 
-                if (uiState.isLoading) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        LoadingIndicator()
-                    }
-                } else if (uiState.diaries.isEmpty()) {
-                    DiaryEmptyState(onCompose = onNavigateToCompose)
-                } else {
-                    LazyColumn(
+                AppPageHeader(
+                    title = "日记",
+                    subtitle = when {
+                        uiState.isSelectionMode -> "长按可多选，删除不可恢复。"
+                        uiState.diaries.isEmpty() -> "写给自己，也算数。"
+                        else -> "已经写下 ${uiState.diaries.size} 篇。"
+                    },
+                    modifier = Modifier.padding(top = AppSpacing.sm),
+                )
+
+                Spacer(modifier = Modifier.height(AppSpacing.lg))
+
+                if (!uiState.isSelectionMode) {
+                    DiaryFilterRow(
+                        currentFilter = uiState.filterType,
+                        onFilterChanged = { viewModel.loadDiaries(it) },
+                    )
+                    Spacer(modifier = Modifier.height(AppSpacing.lg))
+                }
+
+                when {
+                    uiState.isLoading -> SkeletonListCard(rows = 4, withLeading = false)
+
+                    uiState.diaries.isEmpty() -> AppEmptyState(
+                        icon = Icons.Outlined.Book,
+                        title = "还没有日记",
+                        subtitle = "记录你的生活和心情。",
+                        action = {
+                            AppPrimaryButton(
+                                text = "写第一篇日记",
+                                icon = Icons.Outlined.Edit,
+                                onClick = onNavigateToCompose,
+                                modifier = Modifier.padding(horizontal = AppSpacing.screenH),
+                            )
+                        },
+                    )
+
+                    else -> LazyColumn(
                         modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = AppSpacing.screenH,
+                            end = AppSpacing.screenH,
+                            bottom = 108.dp,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         items(uiState.diaries, key = { it.id }) { diary ->
                             DiaryItem(
@@ -136,22 +192,20 @@ fun DiaryListScreen(
             }
         }
 
-        // FAB
+        // 主操作固定在底部：和首页/信箱的"全宽黑按钮"是同一个动作语义
         if (!uiState.isSelectionMode) {
-            FloatingActionButton(
+            AppPrimaryButton(
+                text = "写日记",
+                icon = Icons.Outlined.Edit,
                 onClick = onNavigateToCompose,
-                containerColor = AppAccent,
-                contentColor = AppSurface,
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp),
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "写日记")
-            }
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = AppSpacing.screenH)
+                    .padding(bottom = AppSpacing.lg),
+            )
         }
     }
 
-    // 删除确认对话框
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -164,7 +218,7 @@ fun DiaryListScreen(
                         viewModel.batchDelete()
                     }
                 ) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text("删除", color = AppErrorRed)
                 }
             },
             dismissButton = {
@@ -177,82 +231,7 @@ fun DiaryListScreen(
 }
 
 @Composable
-private fun DiaryTopBar(
-    onOpenDrawer: () -> Unit,
-    isSelectionMode: Boolean = false,
-    selectedCount: Int = 0,
-    onToggleSelectionMode: () -> Unit = {},
-    onSelectAll: () -> Unit = {},
-    onDeleteSelected: () -> Unit = {},
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (isSelectionMode) {
-            IconButton(onClick = onToggleSelectionMode) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = "取消选择",
-                    tint = AppTextPrimary,
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = "已选择 $selectedCount 篇",
-                style = MaterialTheme.typography.titleMedium,
-                color = AppTextPrimary,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onSelectAll) {
-                Text("全选", color = AppAccent)
-            }
-            IconButton(onClick = onDeleteSelected) {
-                Icon(
-                    imageVector = Icons.Outlined.Delete,
-                    contentDescription = "删除",
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            }
-        } else {
-            IconButton(onClick = onOpenDrawer) {
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(AppAccentLight),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Book,
-                        contentDescription = "打开侧边栏",
-                        tint = AppAccent,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = "日记",
-                style = MaterialTheme.typography.titleMedium,
-                color = AppTextPrimary,
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            IconButton(onClick = onToggleSelectionMode) {
-                Icon(
-                    imageVector = Icons.Outlined.Delete,
-                    contentDescription = "批量删除",
-                    tint = AppTextSecondary,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun DiaryFilterTabs(
+private fun DiaryFilterRow(
     currentFilter: String,
     onFilterChanged: (String) -> Unit,
 ) {
@@ -262,27 +241,18 @@ private fun DiaryFilterTabs(
         "month" to "本月",
         "favorite" to "收藏",
     )
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = AppSpacing.screenH),
+        horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
     ) {
         filters.forEach { (key, label) ->
-            val isSelected = currentFilter == key
-            Surface(
+            AppFilterChip(
+                text = label,
+                selected = currentFilter == key,
                 onClick = { onFilterChanged(key) },
-                shape = RoundedCornerShape(50),
-                color = if (isSelected) AppTextPrimary else AppSurface,
-            ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (isSelected) AppSurface else AppTextSecondary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                )
-            }
+            )
         }
     }
 }
@@ -297,14 +267,9 @@ private fun DiaryItem(
     onLongClick: () -> Unit = {},
     onToggleFavorite: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick,
-            )
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+    AppCard(
+        modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        contentPadding = PaddingValues(14.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -315,9 +280,23 @@ private fun DiaryItem(
                     imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
                     contentDescription = if (isSelected) "已选择" else "未选择",
                     tint = if (isSelected) AppAccent else AppTextTertiary,
-                    modifier = Modifier.size(24.dp).padding(end = 8.dp),
+                    modifier = Modifier.size(20.dp),
                 )
+                Spacer(modifier = Modifier.width(AppSpacing.md))
             }
+
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(AppRadius.md))
+                    .background(AppSurfaceMuted),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = "📝", style = MaterialTheme.typography.titleSmall)
+            }
+
+            Spacer(modifier = Modifier.width(AppSpacing.md))
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = diary.title,
@@ -325,7 +304,7 @@ private fun DiaryItem(
                     color = AppTextPrimary,
                     maxLines = 1,
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = diary.content,
                     style = MaterialTheme.typography.bodySmall,
@@ -333,78 +312,40 @@ private fun DiaryItem(
                     maxLines = 2,
                 )
             }
+
             if (!isSelectionMode) {
-                IconButton(onClick = onToggleFavorite, modifier = Modifier.size(32.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .pressFeedback(pressedScale = 0.9f, onClick = onToggleFavorite),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Icon(
                         imageVector = if (diary.isFavorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
                         contentDescription = if (diary.isFavorite) "取消收藏" else "收藏",
                         tint = if (diary.isFavorite) AppAccent else AppTextTertiary,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(17.dp),
                     )
                 }
             }
         }
-        Spacer(modifier = Modifier.height(6.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            if (diary.mood != null) {
+
+        Spacer(modifier = Modifier.height(AppSpacing.sm))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+            Text(
+                text = diary.createdAt?.take(10) ?: "",
+                style = MaterialTheme.typography.labelSmall,
+                color = AppTextTertiary,
+            )
+            if (!diary.mood.isNullOrBlank()) {
                 Text(
                     text = diary.mood,
                     style = MaterialTheme.typography.labelSmall,
                     color = AppTextTertiary,
                 )
             }
-            Text(
-                text = diary.createdAt?.take(10) ?: "",
-                style = MaterialTheme.typography.labelSmall,
-                color = AppTextTertiary,
-            )
-        }
-    }
-    HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(horizontal = 20.dp))
-}
-
-@Composable
-private fun DiaryEmptyState(onCompose: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.Book,
-            contentDescription = null,
-            tint = AppTextTertiary,
-            modifier = Modifier.size(48.dp),
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "还没有日记",
-            style = MaterialTheme.typography.titleMedium,
-            color = AppTextPrimary,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "记录你的生活和心情",
-            style = MaterialTheme.typography.bodyMedium,
-            color = AppTextSecondary,
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        Surface(
-            onClick = onCompose,
-            shape = RoundedCornerShape(50),
-            color = AppAccent,
-        ) {
-            Text(
-                text = "写第一篇日记",
-                style = MaterialTheme.typography.titleSmall,
-                color = AppSurface,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-            )
         }
     }
 }

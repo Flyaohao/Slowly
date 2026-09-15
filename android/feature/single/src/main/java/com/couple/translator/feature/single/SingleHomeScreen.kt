@@ -1,55 +1,44 @@
 package com.couple.translator.feature.single
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Book
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Quiz
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.couple.translator.feature.single.data.model.DiaryDto
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.AppLinkRow
+import com.couple.translator.core.ui.components.AppLinkText
+import com.couple.translator.core.ui.components.AppListCard
+import com.couple.translator.core.ui.components.AppListItem
+import com.couple.translator.core.ui.components.AppPageHeader
+import com.couple.translator.core.ui.components.AppPrimaryButton
+import com.couple.translator.core.ui.components.AppTopBar
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.theme.AppAccent
-import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.components.SectionTitle
+import com.couple.translator.core.ui.components.SkeletonListPage
+import com.couple.translator.core.ui.components.TopBarIdentity
 import com.couple.translator.core.ui.theme.AppBackground
-import com.couple.translator.core.ui.theme.AppBorderLight
-import com.couple.translator.core.ui.theme.AppSurface
-import com.couple.translator.core.ui.theme.AppTextPrimary
-import com.couple.translator.core.ui.theme.AppTextSecondary
-import com.couple.translator.core.ui.theme.AppTextTertiary
+import com.couple.translator.core.ui.theme.AppSpacing
+import com.couple.translator.feature.single.data.model.DiaryDto
 
+/**
+ * 单身模式首页。
+ *
+ * 和情侣模式首页保持同一套语言：顶栏只放头像入口、正文大标题 + 一句说明、
+ * 快捷入口收进卡片、日记列表收进卡片、主操作是全宽按钮。
+ */
 @Composable
 fun SingleHomeScreen(
     onOpenDrawer: () -> Unit,
@@ -57,14 +46,13 @@ fun SingleHomeScreen(
     onNavigateToProfile: () -> Unit = {},
     onNavigateToBind: () -> Unit = {},
     onNavigateToDiary: () -> Unit = {},
+    identity: TopBarIdentity = TopBarIdentity(),
     viewModel: SingleHomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     if (uiState.isLoading) {
-        Box(modifier = Modifier.fillMaxSize().background(AppBackground)) {
-            LoadingIndicator()
-        }
+        SkeletonListPage(cardRows = 3, showButton = true)
         return
     }
 
@@ -73,273 +61,96 @@ fun SingleHomeScreen(
         onRefresh = { viewModel.refresh() },
         modifier = Modifier.fillMaxSize().background(AppBackground),
     ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppBackground)
-            .verticalScroll(rememberScrollState()),
-    ) {
-        // Top bar
-        SingleHomeTopBar(onOpenDrawer = onOpenDrawer)
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // 欢迎文案
-        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-            Text(
-                text = "你好，${uiState.nickname ?: "朋友"}",
-                style = MaterialTheme.typography.displayMedium,
-                color = AppTextPrimary,
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AppBackground)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            AppTopBar(
+                onOpenDrawer = onOpenDrawer,
+                isCoupleMode = false,
+                identity = TopBarIdentity(
+                    userAvatarUrl = identity.userAvatarUrl,
+                    nickname = identity.nickname ?: uiState.nickname,
+                ),
             )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = "记录生活，了解自己",
-                style = MaterialTheme.typography.bodyMedium,
-                color = AppTextTertiary,
+
+            AppPageHeader(
+                title = "你好，${uiState.nickname ?: "朋友"}",
+                subtitle = "记录生活，了解自己。",
             )
-        }
 
-        Spacer(modifier = Modifier.height(28.dp))
-
-        // 快捷入口（已移除自我练习）
-        SingleHomeQuickActions(
-            onNavigateToQuestionnaire = onNavigateToQuestionnaire,
-            onNavigateToProfile = onNavigateToProfile,
-            onNavigateToBind = onNavigateToBind,
-        )
-
-        // 最近日记
-        if (uiState.recentDiaries.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(24.dp))
-            SingleHomeRecentDiaries(
-                diaries = uiState.recentDiaries,
-                onNavigateToDiary = onNavigateToDiary,
-            )
-        }
-
-        // 日记入口
-        Spacer(modifier = Modifier.height(24.dp))
-        SingleHomeDiaryEntry(onClick = onNavigateToDiary)
-
-        Spacer(modifier = Modifier.height(100.dp))
-    }
-    }
-}
-
-@Composable
-private fun SingleHomeTopBar(onOpenDrawer: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        IconButton(onClick = onOpenDrawer) {
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(AppAccentLight),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Person,
-                    contentDescription = "打开侧边栏",
-                    tint = AppAccent,
-                    modifier = Modifier.size(16.dp),
+            SectionTitle(text = "快捷入口")
+            AppListCard(
+                items = listOf(
+                    Triple(Icons.Outlined.Quiz, "了解自己", "填写问卷，生成个人画像"),
+                    Triple(Icons.Outlined.Person, "我的画像", "查看个人维度分析"),
+                    Triple(Icons.Outlined.Edit, "绑定情侣", "邀请 TA，解锁完整功能"),
+                ),
+                modifier = Modifier.padding(horizontal = AppSpacing.screenH),
+            ) { (icon, label, description) ->
+                AppListItem(
+                    title = label,
+                    subtitle = description,
+                    leadingIcon = icon,
+                    showChevron = true,
+                    onClick = when (label) {
+                        "了解自己" -> onNavigateToQuestionnaire
+                        "我的画像" -> onNavigateToProfile
+                        else -> onNavigateToBind
+                    },
                 )
             }
+
+            if (uiState.recentDiaries.isNotEmpty()) {
+                SectionTitle(
+                    text = "最近日记",
+                    count = uiState.recentDiaries.size,
+                    trailing = {
+                        AppLinkText(label = "查看全部", onClick = onNavigateToDiary)
+                    },
+                )
+                AppListCard(
+                    items = uiState.recentDiaries,
+                    modifier = Modifier.padding(horizontal = AppSpacing.screenH),
+                ) { diary ->
+                    DiaryRow(diary = diary, onClick = onNavigateToDiary)
+                }
+            } else {
+                SectionTitle(text = "最近日记")
+                AppLinkRow(
+                    label = "还没有日记，从这里开始",
+                    leadingEmoji = "📝",
+                    onClick = onNavigateToDiary,
+                    modifier = Modifier.padding(horizontal = AppSpacing.screenH),
+                )
+            }
+
+            AppPrimaryButton(
+                text = "写日记",
+                icon = Icons.Outlined.Edit,
+                onClick = onNavigateToDiary,
+                modifier = Modifier
+                    .padding(horizontal = AppSpacing.screenH)
+                    .padding(top = AppSpacing.section),
+            )
+
+            Spacer(modifier = Modifier.height(100.dp))
         }
-
-        Text(
-            text = "我的空间",
-            style = MaterialTheme.typography.titleMedium,
-            color = AppTextPrimary,
-        )
-
-        Spacer(modifier = Modifier.size(48.dp))
     }
 }
 
 @Composable
-private fun SingleHomeQuickActions(
-    onNavigateToQuestionnaire: () -> Unit,
-    onNavigateToProfile: () -> Unit,
-    onNavigateToBind: () -> Unit,
-) {
-    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-        Text(
-            text = "快捷入口",
-            style = MaterialTheme.typography.labelSmall,
-            color = AppTextTertiary,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
-
-        QuickActionItem(
-            icon = Icons.Outlined.Quiz,
-            label = "了解自己",
-            description = "填写问卷，生成个人画像",
-            onClick = onNavigateToQuestionnaire,
-        )
-
-        QuickActionItem(
-            icon = Icons.Outlined.Person,
-            label = "我的画像",
-            description = "查看个人维度分析",
-            onClick = onNavigateToProfile,
-        )
-
-        QuickActionItem(
-            icon = Icons.Outlined.Edit,
-            label = "绑定情侣",
-            description = "邀请 TA，解锁完整功能",
-            onClick = onNavigateToBind,
-        )
-    }
-}
-
-@Composable
-private fun QuickActionItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    description: String,
+private fun DiaryRow(
+    diary: DiaryDto.DiaryResponse,
     onClick: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(AppSurface),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = AppAccent,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.titleSmall,
-                color = AppTextPrimary,
-            )
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = AppTextSecondary,
-            )
-        }
-        Icon(
-            imageVector = Icons.Outlined.ChevronRight,
-            contentDescription = null,
-            tint = AppTextTertiary,
-            modifier = Modifier.size(16.dp),
-        )
-    }
-}
-
-@Composable
-private fun SingleHomeRecentDiaries(
-    diaries: List<DiaryDto.DiaryResponse>,
-    onNavigateToDiary: () -> Unit,
-) {
-    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "最近日记",
-                style = MaterialTheme.typography.labelSmall,
-                color = AppTextTertiary,
-            )
-            Text(
-                text = "查看全部",
-                style = MaterialTheme.typography.labelSmall,
-                color = AppAccent,
-                modifier = Modifier.clickable(onClick = onNavigateToDiary),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        diaries.forEachIndexed { index, diary ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Book,
-                    contentDescription = null,
-                    tint = AppTextSecondary,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = diary.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = AppTextPrimary,
-                        maxLines = 1,
-                    )
-                    if (diary.mood != null) {
-                        Text(
-                            text = diary.mood,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppTextTertiary,
-                        )
-                    }
-                }
-                Text(
-                    text = diary.createdAt?.take(10) ?: "",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = AppTextTertiary,
-                )
-            }
-            if (index < diaries.lastIndex) {
-                HorizontalDivider(color = AppBorderLight)
-            }
-        }
-    }
-}
-
-@Composable
-private fun SingleHomeDiaryEntry(onClick: () -> Unit) {
-    Button(
+    AppListItem(
+        title = diary.title.ifBlank { "无标题" },
+        subtitle = diary.mood,
+        leadingEmoji = "📝",
+        trailingText = diary.createdAt?.take(10),
         onClick = onClick,
-        modifier = Modifier
-            .padding(horizontal = 20.dp)
-            .fillMaxWidth()
-            .height(48.dp),
-        shape = RoundedCornerShape(50),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = AppTextPrimary,
-            contentColor = AppSurface,
-        ),
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.Edit,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "写日记",
-            style = MaterialTheme.typography.titleSmall,
-        )
-    }
+    )
 }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Quiz
@@ -95,6 +96,12 @@ fun SingleDrawerContent(
 
         HorizontalDivider(color = AppBorderLight)
         Spacer(modifier = Modifier.height(16.dp))
+
+        DrawerNavItem(
+            icon = Icons.Outlined.Book,
+            label = "使用指南",
+            onClick = { onNavigateToRoute(Screen.Guide.route) },
+        )
 
         DrawerNavItem(
             icon = Icons.Outlined.Settings,

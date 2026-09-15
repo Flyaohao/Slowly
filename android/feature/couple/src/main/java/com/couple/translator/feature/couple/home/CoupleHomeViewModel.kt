@@ -40,6 +40,10 @@ data class RecentItem(
 
 data class NewHomeUiState(
     val nickname: String? = null,
+    // 首页顶栏 / 主视觉卡片用的双人头像信息
+    val userAvatarUrl: String? = null,
+    val partnerNickname: String? = null,
+    val partnerAvatarUrl: String? = null,
     val coupleInfo: CoupleDto.CoupleRelationResponse? = null,
     val isBound: Boolean = false,
     val daysCount: Int = 0,
@@ -213,6 +217,9 @@ class NewHomeViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         nickname = nickname,
+                        userAvatarUrl = relation?.userAvatarUrl,
+                        partnerNickname = relation?.partnerNickname,
+                        partnerAvatarUrl = relation?.partnerAvatarUrl,
                         coupleInfo = null,
                         isBound = true,
                         isRefreshing = false,
@@ -354,6 +361,9 @@ class NewHomeViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         nickname = nickname,
+                        userAvatarUrl = relation?.userAvatarUrl,
+                        partnerNickname = relation?.partnerNickname,
+                        partnerAvatarUrl = relation?.partnerAvatarUrl,
                         coupleInfo = null,
                         isBound = true,
                         isLoading = false,

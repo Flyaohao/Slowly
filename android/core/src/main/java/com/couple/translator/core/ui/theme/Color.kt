@@ -34,6 +34,14 @@ data class AppColors(
     val accent: Color,
     /** 品牌主色的浅色容器：图标底、标签底、卡片底 */
     val accentContainer: Color,
+    /** 比 accentContainer 更淡一档：大色块（主视觉卡片）底，避免与图标底糊在一起 */
+    val accentFaint: Color,
+    /** 静默区块底：提示条、次要信息条。比 surface 沉、比 background 亮 */
+    val surfaceMuted: Color,
+    /** 第二强调色（暖橙）：用于「对方」一侧的头像、双色标签 */
+    val warm: Color,
+    /** 暖色的浅色容器 */
+    val warmContainer: Color,
     /** 叠在 accent 之上的前景色 */
     val onAccent: Color,
     /** 错误 / 危险操作 */
@@ -54,6 +62,10 @@ internal val LightAppColors = AppColors(
     track = Color(0xFFECEAE7),
     accent = Color(0xFFBE185D),
     accentContainer = Color(0xFFFCE7F3),
+    accentFaint = Color(0xFFFCF0F4),
+    surfaceMuted = Color(0xFFF3F1EE),
+    warm = Color(0xFFB45309),
+    warmContainer = Color(0xFFFDEBD8),
     onAccent = Color(0xFFFFFFFF),
     error = Color(0xFFDC2626),
     success = Color(0xFF16A34A),
@@ -73,6 +85,11 @@ internal val DarkAppColors = AppColors(
     // accent 在「深底上的强调文字」与「白字按钮底」之间取平衡点：两边对比度均 ≈ 4.1:1
     accent = Color(0xFFE62E7E),
     accentContainer = Color(0xFF3D1526),
+    // 大色块底：比 accentContainer 再暗一档，深色下大面积极易显得刺眼
+    accentFaint = Color(0xFF2A1420),
+    surfaceMuted = Color(0xFF26262A),
+    warm = Color(0xFFF0A868),
+    warmContainer = Color(0xFF3A2410),
     onAccent = Color(0xFFFFFFFF),
     error = Color(0xFFEF4444),
     success = Color(0xFF22C55E),
@@ -112,6 +129,18 @@ val AppAccent: Color
 
 val AppAccentLight: Color
     @Composable @ReadOnlyComposable get() = LocalAppColors.current.accentContainer
+
+val AppAccentFaint: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.accentFaint
+
+val AppSurfaceMuted: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.surfaceMuted
+
+val AppWarm: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.warm
+
+val AppWarmLight: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.warmContainer
 
 val AppOnAccent: Color
     @Composable @ReadOnlyComposable get() = LocalAppColors.current.onAccent

@@ -15,7 +15,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.BrightnessAuto
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
@@ -26,6 +29,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -44,6 +49,7 @@ import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
+import com.couple.translator.core.ui.theme.ThemeMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,6 +58,8 @@ fun SettingsScreen(
     onNavigateToProfile: () -> Unit,
     onLogout: () -> Unit,
     isCoupleMode: Boolean = true,
+    themeMode: ThemeMode = ThemeMode.DEFAULT,
+    onThemeModeChange: (ThemeMode) -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -94,6 +102,39 @@ fun SettingsScreen(
                         subtitle = "编辑昵称、性别、生日等",
                         onClick = onNavigateToProfile,
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 外观设置 —— 情侣 / 单身模式都会显示（主题跟使用模式无关）
+            Text(
+                text = "外观",
+                style = MaterialTheme.typography.labelMedium,
+                color = AppTextTertiary,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+            )
+
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = AppSurface),
+            ) {
+                Column {
+                    ThemeMode.values().forEachIndexed { index, mode ->
+                        if (index > 0) {
+                            HorizontalDivider(
+                                color = AppBorderLight,
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                            )
+                        }
+                        ThemeOptionItem(
+                            icon = mode.icon,
+                            title = mode.label,
+                            subtitle = mode.hint,
+                            selected = mode == themeMode,
+                            onSelect = { onThemeModeChange(mode) },
+                        )
+                    }
                 }
             }
 
@@ -178,6 +219,69 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+}
+
+/** 「外观」三个选项各自的图标 */
+private val ThemeMode.icon: ImageVector
+    get() = when (this) {
+        ThemeMode.SYSTEM -> Icons.Outlined.BrightnessAuto
+        ThemeMode.LIGHT -> Icons.Outlined.LightMode
+        ThemeMode.DARK -> Icons.Outlined.DarkMode
+    }
+
+/** 「外观」三个选项各自的说明文案 */
+private val ThemeMode.hint: String
+    get() = when (this) {
+        ThemeMode.SYSTEM -> "跟随手机的深色模式设置"
+        ThemeMode.LIGHT -> "界面始终使用浅色外观"
+        ThemeMode.DARK -> "界面始终使用深色外观"
+    }
+
+/** 主题单选项：整行可点，右侧 RadioButton 表示当前选中 */
+@Composable
+private fun ThemeOptionItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onSelect: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onSelect)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (selected) AppAccent else AppTextSecondary,
+            modifier = Modifier.size(24.dp),
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = AppTextPrimary,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTextTertiary,
+            )
+        }
+        RadioButton(
+            selected = selected,
+            onClick = onSelect,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = AppAccent,
+                unselectedColor = AppBorderLight,
+            ),
+        )
     }
 }
 

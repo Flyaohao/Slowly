@@ -13,7 +13,13 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+/**
+ * 全局唯一的 DataStore 实例（internal，供 TokenStore / GuideStore 等共用）。
+ * 注意：DataStore 同一个文件只允许存在一个实例，否则运行时会抛
+ * IllegalStateException("There are multiple DataStores active for the same file")。
+ * 因此新增本地存储时请复用本委托，不要再写一份 preferencesDataStore(name = ...)。
+ */
+internal val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
     name = Constants.DATASTORE_NAME
 )
 

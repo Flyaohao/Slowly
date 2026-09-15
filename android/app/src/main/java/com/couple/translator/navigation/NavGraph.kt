@@ -1,7 +1,7 @@
 package com.couple.translator.navigation
 
 import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -11,6 +11,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -18,8 +19,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.couple.translator.core.data.repository.GuideStore
+import com.couple.translator.core.data.repository.ThemeStore
 import com.couple.translator.core.data.repository.TokenStore
 import com.couple.translator.core.navigation.Screen
+import com.couple.translator.core.ui.theme.ThemeMode
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
 import com.couple.translator.feature.couple.ai.AiSessionListScreen
@@ -27,6 +31,7 @@ import com.couple.translator.feature.couple.ai.ColdWarScreen
 import com.couple.translator.feature.couple.anniversary.AddAnniversaryScreen
 import com.couple.translator.feature.couple.anniversary.AnniversaryListScreen
 import com.couple.translator.core.ui.auth.ForgotPasswordScreen
+import com.couple.translator.core.ui.guide.GuideScreen
 import com.couple.translator.core.ui.auth.LoginScreen
 import com.couple.translator.core.ui.auth.RegisterScreen
 import com.couple.translator.feature.couple.avatar.AvatarCustomizeScreen
@@ -65,6 +70,8 @@ import com.couple.translator.feature.single.diary.ComposeDiaryScreen
 import com.couple.translator.feature.single.practice.SelfPracticeListScreen
 import com.couple.translator.feature.single.SingleShell
 import com.couple.translator.feature.couple.CoupleShell
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 
 @Composable
 fun NavGraph(
@@ -72,6 +79,8 @@ fun NavGraph(
     tokenStore: TokenStore? = null,
     coupleStateManager: CoupleStateManager? = null,
     realtimeSocketManager: RealtimeSocketManager? = null,
+    guideStore: GuideStore? = null,
+    themeStore: ThemeStore? = null,
 ) {
     var startDest by remember { mutableStateOf<String?>(null) }
     val coupleState = coupleStateManager?.state?.collectAsState()?.value
@@ -88,9 +97,12 @@ fun NavGraph(
 
     if (startDest == null) return
 
-    // 动画参数：300ms + FastOutSlowInEasing，比默认更丝滑
+    // 动画参数：300ms。
+    // 用 Material 的 emphasized 缓动曲线而不是 FastOutSlowIn —— 前者起步更快、收尾更匀，
+    // 观感上就是"页面滑进来然后稳稳停住"，FastOutSlowIn 会显得尾巴拖沓。
     val animDuration = 300
-    val animEasing = FastOutSlowInEasing
+    val enterEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+    val exitEasing = CubicBezierEasing(0.4f, 0f, 1f, 1f)
 
     NavHost(
         navController = navController,
@@ -98,25 +110,25 @@ fun NavGraph(
         enterTransition = {
             slideIntoContainer(
                 towards = AnimatedContentTransitionScope.SlideDirection.Left,
-                animationSpec = tween(animDuration, easing = animEasing)
+                animationSpec = tween(animDuration, easing = enterEasing)
             ) + fadeIn(animationSpec = tween(animDuration / 2))
         },
         exitTransition = {
             slideOutOfContainer(
                 towards = AnimatedContentTransitionScope.SlideDirection.Left,
-                animationSpec = tween(animDuration, easing = animEasing)
+                animationSpec = tween(animDuration, easing = exitEasing)
             ) + fadeOut(animationSpec = tween(animDuration / 3))
         },
         popEnterTransition = {
             slideIntoContainer(
                 towards = AnimatedContentTransitionScope.SlideDirection.Right,
-                animationSpec = tween(animDuration, easing = animEasing)
+                animationSpec = tween(animDuration, easing = enterEasing)
             ) + fadeIn(animationSpec = tween(animDuration / 2))
         },
         popExitTransition = {
             slideOutOfContainer(
                 towards = AnimatedContentTransitionScope.SlideDirection.Right,
-                animationSpec = tween(animDuration, easing = animEasing)
+                animationSpec = tween(animDuration, easing = exitEasing)
             ) + fadeOut(animationSpec = tween(animDuration / 3))
         },
     ) {
@@ -173,6 +185,14 @@ fun NavGraph(
                     tokenStore = tokenStore,
                 )
             }
+        }
+
+        composable(Screen.Guide.route) {
+            GuideScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToRoute = { route -> navController.navigate(route) },
+                isCoupleMode = isCoupleMode,
+            )
         }
 
         composable(Screen.Profile.route) {
@@ -666,6 +686,10 @@ fun NavGraph(
 
         // Settings
         composable("settings") {
+            val scope = rememberCoroutineScope()
+            // 读当前外观偏好；写入后 MainActivity 那层的 Flow 会立刻收到并整体换肤
+            val themeMode by (themeStore?.themeMode ?: flowOf(ThemeMode.DEFAULT))
+                .collectAsState(initial = ThemeMode.DEFAULT)
             com.couple.translator.core.ui.settings.SettingsScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToProfile = {
@@ -677,7 +701,21 @@ fun NavGraph(
                     }
                 },
                 isCoupleMode = isCoupleMode,
+                themeMode = themeMode,
+                onThemeModeChange = { mode ->
+                    scope.launch { themeStore?.setThemeMode(mode) }
+                },
             )
         }
+    }
+
+    // 首次进入主界面时自动展示一次使用指南：看完即走，不占底部栏也不占 Tab 位；
+    // 之后再从左上角菜单随时打开（GuideStore 记标记，不会重复打扰）。
+    LaunchedEffect(startDest) {
+        if (startDest != Screen.Main.route) return@LaunchedEffect
+        val store = guideStore ?: return@LaunchedEffect
+        if (store.isGuideSeen()) return@LaunchedEffect
+        store.markGuideSeen()
+        navController.navigate(Screen.Guide.route)
     }
 }

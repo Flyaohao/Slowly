@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.People
@@ -162,6 +163,12 @@ fun DrawerContent(
                 onClick = { onNavigateToRoute(Screen.CoupleInfo.route) },
             )
         }
+
+        DrawerNavItem(
+            icon = Icons.Outlined.Book,
+            label = "使用指南",
+            onClick = { onNavigateToRoute(Screen.Guide.route) },
+        )
 
         DrawerNavItem(
             icon = Icons.Outlined.Settings,

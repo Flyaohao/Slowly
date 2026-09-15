@@ -1,59 +1,49 @@
 package com.couple.translator.feature.couple.letter
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.MailOutline
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.couple.translator.feature.couple.data.model.LetterDto
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.AppEmptyState
+import com.couple.translator.core.ui.components.AppLinkRow
+import com.couple.translator.core.ui.components.AppListCard
+import com.couple.translator.core.ui.components.AppListItem
+import com.couple.translator.core.ui.components.AppPageHeader
+import com.couple.translator.core.ui.components.AppPrimaryButton
+import com.couple.translator.core.ui.components.AppTopBar
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.theme.AppAccent
-import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.components.SectionTitle
+import com.couple.translator.core.ui.components.SkeletonListPage
+import com.couple.translator.core.ui.components.TopBarIdentity
 import com.couple.translator.core.ui.theme.AppBackground
-import com.couple.translator.core.ui.theme.AppBorderLight
-import com.couple.translator.core.ui.theme.AppSurface
-import com.couple.translator.core.ui.theme.AppTextPrimary
-import com.couple.translator.core.ui.theme.AppTextSecondary
-import com.couple.translator.core.ui.theme.AppTextTertiary
+import com.couple.translator.core.ui.theme.AppSpacing
+import com.couple.translator.feature.couple.data.model.LetterDto
 
+/**
+ * 信箱（情侣模式）/ 我的日记（单身模式）。
+ *
+ * 排版原则和首页对齐：**顶栏只放叠头像入口，标题交给正文大标题**；
+ * 列表不再是「裸行 + 全宽分隔线」，而是收进卡片里 —— 分组一看就清楚，
+ * 屏底那个居中的纯文字链接也换成了有容器的行。
+ */
 @Composable
 fun NewMailboxScreen(
     onOpenDrawer: () -> Unit,
@@ -61,6 +51,7 @@ fun NewMailboxScreen(
     onNavigateToLetterList: () -> Unit,
     onNavigateToLetterDetail: (Long) -> Unit,
     isCoupleMode: Boolean = true,
+    identity: TopBarIdentity = TopBarIdentity(),
     viewModel: MailboxViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -70,9 +61,7 @@ fun NewMailboxScreen(
     }
 
     if (uiState.isLoading) {
-        Box(modifier = Modifier.fillMaxSize().background(AppBackground)) {
-            LoadingIndicator()
-        }
+        SkeletonListPage(cardRows = 3)
         return
     }
 
@@ -80,39 +69,40 @@ fun NewMailboxScreen(
         isRefreshing = uiState.isRefreshing,
         onRefresh = { viewModel.refresh(isCoupleMode) },
     ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppBackground)
-            .verticalScroll(rememberScrollState()),
-    ) {
-        // Top bar
-        MailboxTopBar(onOpenDrawer = onOpenDrawer)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (isCoupleMode) {
-            CoupleMailboxContent(
-                uiState = uiState,
-                onNavigateToCompose = onNavigateToCompose,
-                onNavigateToLetterList = onNavigateToLetterList,
-                onNavigateToLetterDetail = onNavigateToLetterDetail,
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AppBackground)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            AppTopBar(
+                onOpenDrawer = onOpenDrawer,
+                isCoupleMode = isCoupleMode,
+                identity = identity,
             )
-        } else {
-            SingleDiaryContent(
-                uiState = uiState,
-                onNavigateToCompose = onNavigateToCompose,
-                onNavigateToLetterList = onNavigateToLetterList,
-                onNavigateToLetterDetail = onNavigateToLetterDetail,
-            )
+
+            if (isCoupleMode) {
+                CoupleMailboxContent(
+                    uiState = uiState,
+                    onNavigateToCompose = onNavigateToCompose,
+                    onNavigateToLetterList = onNavigateToLetterList,
+                    onNavigateToLetterDetail = onNavigateToLetterDetail,
+                )
+            } else {
+                SingleDiaryContent(
+                    uiState = uiState,
+                    onNavigateToCompose = onNavigateToCompose,
+                    onNavigateToLetterList = onNavigateToLetterList,
+                    onNavigateToLetterDetail = onNavigateToLetterDetail,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(100.dp))
         }
-
-        Spacer(modifier = Modifier.height(100.dp))
-    }
     }
 }
 
-// ==================== Couple Mode ====================
+// ==================== 情侣模式 ====================
 
 @Composable
 private fun CoupleMailboxContent(
@@ -121,69 +111,89 @@ private fun CoupleMailboxContent(
     onNavigateToLetterList: () -> Unit,
     onNavigateToLetterDetail: (Long) -> Unit,
 ) {
-    // Title
-    Text(
-        text = "信箱",
-        style = MaterialTheme.typography.displayMedium,
-        color = AppTextPrimary,
-        modifier = Modifier.padding(horizontal = 20.dp),
+    val pending = uiState.receivedLetters.size
+
+    AppPageHeader(
+        title = "信箱",
+        subtitle = when {
+            pending > 0 -> "有 $pending 封信在等你打开"
+            else -> "认真写下的句子，会一直留在这里。"
+        },
     )
 
-    Spacer(modifier = Modifier.height(24.dp))
+    Spacer(modifier = Modifier.height(AppSpacing.section))
 
-    // Write button
-    Button(
+    AppPrimaryButton(
+        text = "写一封信",
+        icon = Icons.Outlined.Edit,
         onClick = onNavigateToCompose,
-        modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(52.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = AppTextPrimary, contentColor = AppSurface),
-    ) {
-        Icon(Icons.Outlined.MailOutline, contentDescription = null, modifier = Modifier.size(20.dp))
-        Spacer(modifier = Modifier.width(8.dp))
-        Text("写一封信", style = MaterialTheme.typography.titleSmall)
-    }
+        modifier = Modifier.padding(horizontal = AppSpacing.screenH),
+    )
 
-    Spacer(modifier = Modifier.height(28.dp))
-
-    // Received letters
     if (uiState.receivedLetters.isNotEmpty()) {
-        SectionHeader(title = "收到的信", count = uiState.receivedLetters.size)
-        uiState.receivedLetters.take(3).forEach { letter ->
-            LetterRow(letter = letter, onClick = { onNavigateToLetterDetail(letter.id) })
+        SectionTitle(text = "收到的信", count = uiState.receivedLetters.size)
+        AppListCard(
+            items = uiState.receivedLetters.take(3),
+            modifier = Modifier.padding(horizontal = AppSpacing.screenH),
+        ) { letter ->
+            LetterRow(
+                letter = letter,
+                icon = Icons.Outlined.Inbox,
+                onClick = { onNavigateToLetterDetail(letter.id) },
+            )
         }
-        Spacer(modifier = Modifier.height(20.dp))
     }
 
-    // Sent letters
     if (uiState.sentLetters.isNotEmpty()) {
-        SectionHeader(title = "已发出", count = uiState.sentLetters.size)
-        uiState.sentLetters.take(3).forEach { letter ->
-            LetterRow(letter = letter, onClick = { onNavigateToLetterDetail(letter.id) })
+        SectionTitle(text = "已发出", count = uiState.sentLetters.size)
+        AppListCard(
+            items = uiState.sentLetters.take(3),
+            modifier = Modifier.padding(horizontal = AppSpacing.screenH),
+        ) { letter ->
+            LetterRow(
+                letter = letter,
+                icon = Icons.Outlined.Send,
+                onClick = { onNavigateToLetterDetail(letter.id) },
+            )
         }
-        Spacer(modifier = Modifier.height(20.dp))
     }
 
-    // Favorites
     if (uiState.favoriteLetters.isNotEmpty()) {
-        SectionHeader(title = "收藏的信", count = uiState.favoriteLetters.size)
-        uiState.favoriteLetters.take(3).forEach { letter ->
-            LetterRow(letter = letter, onClick = { onNavigateToLetterDetail(letter.id) })
+        SectionTitle(text = "收藏的信", count = uiState.favoriteLetters.size)
+        AppListCard(
+            items = uiState.favoriteLetters.take(3),
+            modifier = Modifier.padding(horizontal = AppSpacing.screenH),
+        ) { letter ->
+            LetterRow(
+                letter = letter,
+                icon = Icons.Outlined.StarOutline,
+                onClick = { onNavigateToLetterDetail(letter.id) },
+            )
         }
-        Spacer(modifier = Modifier.height(20.dp))
     }
 
-    // Empty state
-    if (uiState.receivedLetters.isEmpty() && uiState.sentLetters.isEmpty() && uiState.favoriteLetters.isEmpty()) {
-        MailboxEmptyState(isCoupleMode = true)
+    if (uiState.receivedLetters.isEmpty() &&
+        uiState.sentLetters.isEmpty() &&
+        uiState.favoriteLetters.isEmpty()
+    ) {
+        AppEmptyState(
+            icon = Icons.Outlined.MailOutline,
+            title = "还没有信件",
+            subtitle = "从第一句认真话开始。",
+            modifier = Modifier.padding(top = AppSpacing.section),
+        )
     }
 
-    Spacer(modifier = Modifier.height(24.dp))
-
-    // All letters link
-    AllLettersLink(onClick = onNavigateToLetterList)
+    SectionTitle(text = "更多")
+    AppLinkRow(
+        label = "全部信件",
+        leadingIcon = Icons.Outlined.MailOutline,
+        onClick = onNavigateToLetterList,
+        modifier = Modifier.padding(horizontal = AppSpacing.screenH),
+    )
 }
 
-// ==================== Single Mode ====================
+// ==================== 单身模式 ====================
 
 @Composable
 private fun SingleDiaryContent(
@@ -192,206 +202,85 @@ private fun SingleDiaryContent(
     onNavigateToLetterList: () -> Unit,
     onNavigateToLetterDetail: (Long) -> Unit,
 ) {
-    // Title
-    Text(
-        text = "我的日记",
-        style = MaterialTheme.typography.displayMedium,
-        color = AppTextPrimary,
-        modifier = Modifier.padding(horizontal = 20.dp),
+    val total = uiState.recentDiaries.size
+
+    AppPageHeader(
+        title = "我的日记",
+        subtitle = if (total > 0) "已经写下 $total 篇" else "写给自己，也算数。",
     )
 
-    Spacer(modifier = Modifier.height(24.dp))
+    Spacer(modifier = Modifier.height(AppSpacing.section))
 
-    // Write button
-    Button(
+    AppPrimaryButton(
+        text = "写一篇日记",
+        icon = Icons.Outlined.Edit,
         onClick = onNavigateToCompose,
-        modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(52.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = AppTextPrimary, contentColor = AppSurface),
-    ) {
-        Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(20.dp))
-        Spacer(modifier = Modifier.width(8.dp))
-        Text("写一篇日记", style = MaterialTheme.typography.titleSmall)
-    }
+        modifier = Modifier.padding(horizontal = AppSpacing.screenH),
+    )
 
-    Spacer(modifier = Modifier.height(28.dp))
-
-    // Recent diaries
     if (uiState.recentDiaries.isNotEmpty()) {
-        SectionHeader(title = "最近日记", count = uiState.recentDiaries.size)
-        uiState.recentDiaries.forEach { letter ->
-            DiaryRow(letter = letter, onClick = { onNavigateToLetterDetail(letter.id) })
+        SectionTitle(text = "最近日记", count = uiState.recentDiaries.size)
+        AppListCard(
+            items = uiState.recentDiaries,
+            modifier = Modifier.padding(horizontal = AppSpacing.screenH),
+        ) { letter ->
+            LetterRow(
+                letter = letter,
+                emoji = "📝",
+                onClick = { onNavigateToLetterDetail(letter.id) },
+            )
         }
-        Spacer(modifier = Modifier.height(20.dp))
     }
 
-    // Favorites
     if (uiState.favoriteLetters.isNotEmpty()) {
-        SectionHeader(title = "收藏", count = uiState.favoriteLetters.size)
-        uiState.favoriteLetters.take(3).forEach { letter ->
-            DiaryRow(letter = letter, onClick = { onNavigateToLetterDetail(letter.id) })
+        SectionTitle(text = "收藏", count = uiState.favoriteLetters.size)
+        AppListCard(
+            items = uiState.favoriteLetters.take(3),
+            modifier = Modifier.padding(horizontal = AppSpacing.screenH),
+        ) { letter ->
+            LetterRow(
+                letter = letter,
+                icon = Icons.Outlined.StarOutline,
+                onClick = { onNavigateToLetterDetail(letter.id) },
+            )
         }
-        Spacer(modifier = Modifier.height(20.dp))
     }
 
-    // Empty state
     if (uiState.recentDiaries.isEmpty() && uiState.favoriteLetters.isEmpty()) {
-        MailboxEmptyState(isCoupleMode = false)
+        AppEmptyState(
+            icon = Icons.Outlined.Edit,
+            title = "还没有日记",
+            subtitle = "记录此刻的心情。",
+            modifier = Modifier.padding(top = AppSpacing.section),
+        )
     }
 
-    Spacer(modifier = Modifier.height(24.dp))
-
-    // All diaries link
-    AllLettersLink(onClick = onNavigateToLetterList, label = "全部日记")
-}
-
-// ==================== Shared Components ====================
-
-@Composable
-private fun MailboxTopBar(onOpenDrawer: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        IconButton(onClick = onOpenDrawer) {
-            Box(
-                modifier = Modifier.size(30.dp).clip(CircleShape).background(AppAccentLight),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Outlined.Person, contentDescription = "打开侧边栏", tint = AppAccent, modifier = Modifier.size(16.dp))
-            }
-        }
-        Spacer(modifier = Modifier.size(48.dp))
-    }
-}
-
-@Composable
-private fun SectionHeader(title: String, count: Int) {
-    Text(
-        text = "$title ($count)",
-        style = MaterialTheme.typography.labelSmall,
-        color = AppTextTertiary,
-        fontWeight = FontWeight.Medium,
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+    SectionTitle(text = "更多")
+    AppLinkRow(
+        label = "全部日记",
+        leadingIcon = Icons.Outlined.Edit,
+        onClick = onNavigateToLetterList,
+        modifier = Modifier.padding(horizontal = AppSpacing.screenH),
     )
 }
 
-@Composable
-private fun LetterRow(letter: LetterDto.LetterResponse, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)).background(AppAccentLight),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Outlined.Person, contentDescription = null, tint = AppAccent, modifier = Modifier.size(18.dp))
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = letter.title?.ifBlank { "无标题" } ?: "无标题",
-                style = MaterialTheme.typography.titleSmall,
-                color = AppTextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = letter.content?.take(50) ?: "",
-                style = MaterialTheme.typography.bodySmall,
-                color = AppTextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = formatDateShort(letter.sendTime ?: letter.createdAt),
-            style = MaterialTheme.typography.labelSmall,
-            color = AppTextTertiary,
-        )
-    }
-    HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(horizontal = 20.dp))
-}
+// ==================== 列表行 ====================
 
 @Composable
-private fun DiaryRow(letter: LetterDto.LetterResponse, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)).background(AppAccentLight),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("📝", style = MaterialTheme.typography.titleMedium)
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = letter.title?.ifBlank { "无标题" } ?: "无标题",
-                style = MaterialTheme.typography.titleSmall,
-                color = AppTextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = letter.content?.take(50) ?: "",
-                style = MaterialTheme.typography.bodySmall,
-                color = AppTextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = formatDateShort(letter.createdAt),
-            style = MaterialTheme.typography.labelSmall,
-            color = AppTextTertiary,
-        )
-    }
-    HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(horizontal = 20.dp))
-}
-
-@Composable
-private fun MailboxEmptyState(isCoupleMode: Boolean) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(
-            if (isCoupleMode) Icons.Outlined.MailOutline else Icons.Outlined.Edit,
-            contentDescription = null,
-            tint = AppTextTertiary,
-            modifier = Modifier.size(48.dp),
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = if (isCoupleMode) "还没有信件" else "还没有日记",
-            style = MaterialTheme.typography.bodyLarge,
-            color = AppTextSecondary,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = if (isCoupleMode) "可以从第一句认真话开始。" else "记录此刻的心情。",
-            style = MaterialTheme.typography.bodySmall,
-            color = AppTextTertiary,
-        )
-    }
-}
-
-@Composable
-private fun AllLettersLink(onClick: () -> Unit, label: String = "全部信件") {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, style = MaterialTheme.typography.titleSmall, color = AppTextSecondary)
-        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = AppTextTertiary, modifier = Modifier.size(16.dp))
-    }
+private fun LetterRow(
+    letter: LetterDto.LetterResponse,
+    onClick: () -> Unit,
+    icon: ImageVector? = null,
+    emoji: String? = null,
+) {
+    AppListItem(
+        title = letter.title?.ifBlank { "无标题" } ?: "无标题",
+        subtitle = letter.content?.take(60)?.replace('\n', ' ')?.ifBlank { null },
+        leadingIcon = icon,
+        leadingEmoji = emoji,
+        trailingText = formatDateShort(letter.sendTime ?: letter.createdAt),
+        onClick = onClick,
+    )
 }
 
 private fun formatDateShort(isoString: String?): String {

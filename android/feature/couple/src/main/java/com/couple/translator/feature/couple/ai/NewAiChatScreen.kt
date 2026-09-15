@@ -6,6 +6,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -59,7 +60,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.AiDto
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppFilterChip
+import com.couple.translator.core.ui.components.AppPageHeader
+import com.couple.translator.core.ui.components.AppTopBar
+import com.couple.translator.core.ui.components.AppTopBarAction
+import com.couple.translator.core.ui.components.TopBarIdentity
 import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentFaint
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
@@ -74,6 +82,7 @@ fun NewAiChatScreen(
     onOpenDrawer: () -> Unit,
     onNavigateToSessionList: () -> Unit,
     onNavigateToMediation: () -> Unit,
+    identity: TopBarIdentity = TopBarIdentity(),
     viewModel: AiChatViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -98,10 +107,16 @@ fun NewAiChatScreen(
             .background(AppBackground)
             .imePadding(),
     ) {
-        AiTopBar(
-            currentMode = uiState.sceneKey,
+        AppTopBar(
             onOpenDrawer = onOpenDrawer,
-            onOpenHistory = onNavigateToSessionList,
+            identity = identity,
+            trailing = {
+                AppTopBarAction(
+                    icon = Icons.Outlined.History,
+                    contentDescription = "历史会话",
+                    onClick = onNavigateToSessionList,
+                )
+            },
         )
 
         LazyColumn(
@@ -115,12 +130,12 @@ fun NewAiChatScreen(
             item { Spacer(modifier = Modifier.height(8.dp)) }
 
             if (uiState.messages.isEmpty()) {
+                // 空会话也当成一页来排：大标题说清"现在是什么模式"，副标题说清"能干什么"
                 item {
-                    Text(
-                        text = "可以直接说你想说的话。\n我会帮你表达，也会帮你理解 TA。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AppTextTertiary,
-                        modifier = Modifier.padding(vertical = 24.dp),
+                    AppPageHeader(
+                        title = AiSceneCatalog.labelOf(uiState.sceneKey),
+                        subtitle = "直接说你想说的话。我会帮你表达，也会帮你理解 TA。",
+                        horizontalPadding = 0.dp,
                     )
                 }
                 item {
@@ -213,55 +228,6 @@ fun NewAiChatScreen(
             onApply = { viewModel.applyRewrite(it) },
             onDismiss = { viewModel.dismissRewriteSheet() },
         )
-    }
-}
-
-@Composable
-private fun AiTopBar(
-    currentMode: String,
-    onOpenDrawer: () -> Unit,
-    onOpenHistory: () -> Unit,
-) {
-    // 文案统一来自 AiSceneCatalog，不再在界面里写 when 硬编码
-    val modeLabel = AiSceneCatalog.labelOf(currentMode)
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        IconButton(onClick = onOpenDrawer) {
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(AppAccentLight),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Person,
-                    contentDescription = "打开侧边栏",
-                    tint = AppAccent,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-        }
-
-        Text(
-            text = modeLabel,
-            style = MaterialTheme.typography.titleMedium,
-            color = AppTextPrimary,
-        )
-
-        IconButton(onClick = onOpenHistory) {
-            Icon(
-                imageVector = Icons.Outlined.History,
-                contentDescription = "历史会话",
-                tint = AppTextSecondary,
-            )
-        }
     }
 }
 
@@ -434,31 +400,29 @@ private fun AiInputBar(
 /** Agent 工具调用轨迹：让"查了画像、翻了理论"的过程可见。 */
 @Composable
 private fun AgentTraceCard(toolCalls: List<AiDto.AgentToolCall>, steps: Int) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = AppAccentLight),
+        containerColor = AppAccentFaint,
+        contentPadding = PaddingValues(12.dp),
     ) {
-        Column(modifier = Modifier.padding(10.dp)) {
+        Text(
+            text = "Agent 深度提问 · " + (if (steps > 0) "$steps 轮" else "已完成"),
+            style = MaterialTheme.typography.labelSmall,
+            color = AppAccent,
+        )
+        if (toolCalls.isEmpty()) {
             Text(
-                text = "Agent 深度提问 · " + (if (steps > 0) "$steps 轮" else "已完成"),
+                text = "本轮未调用工具，直接作答",
                 style = MaterialTheme.typography.labelSmall,
-                color = AppAccent,
+                color = AppTextSecondary,
             )
-            if (toolCalls.isEmpty()) {
+        } else {
+            toolCalls.forEach { call ->
                 Text(
-                    text = "本轮未调用工具，直接作答",
+                    text = "· " + toolLabel(call.name),
                     style = MaterialTheme.typography.labelSmall,
                     color = AppTextSecondary,
                 )
-            } else {
-                toolCalls.forEach { call ->
-                    Text(
-                        text = "· " + toolLabel(call.name),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = AppTextSecondary,
-                    )
-                }
             }
         }
     }
@@ -486,19 +450,10 @@ private fun QuickSceneChips(
     ) {
         Spacer(modifier = Modifier.width(4.dp))
         scenes.forEach { scene ->
-            FilterChip(
+            AppFilterChip(
+                text = scene.chipLabel,
                 selected = currentScene == scene.key,
                 onClick = { onSceneSelected(scene) },
-                label = {
-                    Text(
-                        text = scene.chipLabel,
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = AppAccentLight,
-                    selectedLabelColor = AppAccent,
-                ),
             )
         }
         Spacer(modifier = Modifier.width(4.dp))
@@ -544,38 +499,30 @@ private fun RewriteResultSheet(
             Spacer(modifier = Modifier.height(16.dp))
 
             versions.forEach { version ->
-                Card(
+                AppCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 12.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = AppSurface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    contentPadding = PaddingValues(16.dp),
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
+                    Text(
+                        text = version.style,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = AppAccent,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = version.content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTextPrimary,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { onApply(version.content) },
+                        modifier = Modifier.align(Alignment.End),
                     ) {
-                        Text(
-                            text = version.style,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = AppAccent,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = version.content,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AppTextPrimary,
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        TextButton(
-                            onClick = { onApply(version.content) },
-                            modifier = Modifier.align(Alignment.End),
-                        ) {
-                            Text("使用这个版本", color = AppAccent)
-                        }
+                        Text("使用这个版本", color = AppAccent)
                     }
                 }
             }

@@ -7,6 +7,9 @@ enum class Screen(val route: String) {
 
     Main("main"),
 
+    /** 使用指南：全屏根路由，压在主界面之上，因此既不占底部栏也不占任何 Tab 位 */
+    Guide("guide"),
+
     Home("home"),
     Mailbox("mailbox"),
     AiChat("ai_chat"),

@@ -21,6 +21,10 @@ data class CoupleState(
     val isLoading: Boolean = true,
     val coupleInfo: CoupleDto.CoupleRelationResponse? = null,
     val userNickname: String? = null,
+    /** 顶栏叠头像的统一数据源：首页/信箱/翻译官都从这里取，避免有的页面显示真头像、有的显示"我"字 */
+    val userAvatarUrl: String? = null,
+    val partnerNickname: String? = null,
+    val partnerAvatarUrl: String? = null,
 )
 
 @Singleton
@@ -53,13 +57,20 @@ class CoupleStateManager @Inject constructor(
             _state.update { it.copy(isLoading = false) }
         }
 
-        // 加载用户昵称（单身/情侣模式通用）
+        // 加载用户昵称 / 头像（单身、情侣模式通用），顶栏叠头像统一用这份
         try {
             val homeResponse = sharedApiService.getHomeData()
             if (homeResponse.isSuccess && homeResponse.data != null) {
                 val data = homeResponse.data!!
-                val nickname = data.userNickname ?: data.relation?.userNickname
-                _state.update { it.copy(userNickname = nickname) }
+                val relation = data.relation
+                _state.update {
+                    it.copy(
+                        userNickname = relation?.userNickname ?: data.userNickname,
+                        userAvatarUrl = relation?.userAvatarUrl ?: data.userAvatarUrl,
+                        partnerNickname = relation?.partnerNickname,
+                        partnerAvatarUrl = relation?.partnerAvatarUrl,
+                    )
+                }
             }
         } catch (_: Exception) {}
     }
@@ -79,6 +90,8 @@ class CoupleStateManager @Inject constructor(
             it.copy(
                 mode = AppMode.SINGLE,
                 coupleInfo = null,
+                partnerNickname = null,
+                partnerAvatarUrl = null,
                 isLoading = false,
             )
         }

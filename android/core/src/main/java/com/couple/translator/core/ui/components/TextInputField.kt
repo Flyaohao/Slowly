@@ -1,6 +1,7 @@
 package com.couple.translator.core.ui.components
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
@@ -15,6 +16,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextTertiary
 
@@ -66,6 +68,6 @@ fun TextInputField(
             focusedLabelColor = AppAccent,
             cursorColor = AppTextPrimary,
         ),
-        shape = MaterialTheme.shapes.medium,
+        shape = RoundedCornerShape(AppRadius.md),
     )
 }

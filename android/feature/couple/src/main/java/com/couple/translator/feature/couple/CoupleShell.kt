@@ -1,9 +1,12 @@
 package com.couple.translator.feature.couple
 
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalDrawerSheet
@@ -39,6 +42,7 @@ import com.couple.translator.feature.couple.navigation.DrawerContent
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
 import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.ui.components.BottomTabBar
+import com.couple.translator.core.ui.components.TopBarIdentity
 import com.couple.translator.core.ui.theme.AppBackground
 import kotlinx.coroutines.launch
 
@@ -60,8 +64,14 @@ fun CoupleShell(
     val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    val defaultCoupleState = androidx.compose.runtime.remember { CoupleState() }
-    val coupleState = coupleStateManager?.state?.collectAsState()?.value ?: defaultCoupleState
+    // 顶栏叠头像的唯一数据源：三个 tab 共用，避免首页真头像 / 其他页"我"字的分叉
+    val coupleState = coupleStateManager?.state?.collectAsState()?.value ?: remember { CoupleState() }
+    val topBarIdentity = TopBarIdentity(
+        userAvatarUrl = coupleState.userAvatarUrl,
+        nickname = coupleState.userNickname,
+        partnerAvatarUrl = coupleState.partnerAvatarUrl,
+        partnerNickname = coupleState.partnerNickname,
+    )
 
     // 实时通道：进入情侣模式建立 WS 连接，退出时断开；事件转 Snackbar 提示
     val snackbarHostState = remember { SnackbarHostState() }
@@ -156,10 +166,41 @@ fun CoupleShell(
                 navController = tabNavController,
                 startDestination = BottomTab.Home.route,
                 modifier = Modifier.padding(innerPadding),
-                enterTransition = { fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) },
-                exitTransition = { fadeOut(animationSpec = tween(180, easing = FastOutSlowInEasing)) },
-                popEnterTransition = { fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) },
-                popExitTransition = { fadeOut(animationSpec = tween(180, easing = FastOutSlowInEasing)) },
+                // Tab 之间是「平级切换」而不是「推入新页面」，所以不做整屏横移：
+                // 只给 1/5 屏的横向位移 + 淡入，方向由 tab 在底栏里的先后顺序决定。
+                // 旧版是纯 fadeIn/fadeOut，没有方向感，切换时像画面"闪"了一下。
+                enterTransition = {
+                    val forward = tabIndexOf(tabs, targetState.destination.route) >=
+                        tabIndexOf(tabs, initialState.destination.route)
+                    slideInHorizontally(
+                        animationSpec = tween(durationMillis = 300, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)),
+                        initialOffsetX = { width -> if (forward) width / 5 else -width / 5 },
+                    ) + fadeIn(animationSpec = tween(durationMillis = 240, easing = LinearOutSlowInEasing))
+                },
+                exitTransition = {
+                    val forward = tabIndexOf(tabs, targetState.destination.route) >=
+                        tabIndexOf(tabs, initialState.destination.route)
+                    slideOutHorizontally(
+                        animationSpec = tween(durationMillis = 300, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)),
+                        targetOffsetX = { width -> if (forward) -width / 5 else width / 5 },
+                    ) + fadeOut(animationSpec = tween(durationMillis = 200, easing = LinearOutSlowInEasing))
+                },
+                popEnterTransition = {
+                    val forward = tabIndexOf(tabs, targetState.destination.route) >=
+                        tabIndexOf(tabs, initialState.destination.route)
+                    slideInHorizontally(
+                        animationSpec = tween(durationMillis = 300, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)),
+                        initialOffsetX = { width -> if (forward) width / 5 else -width / 5 },
+                    ) + fadeIn(animationSpec = tween(durationMillis = 240, easing = LinearOutSlowInEasing))
+                },
+                popExitTransition = {
+                    val forward = tabIndexOf(tabs, targetState.destination.route) >=
+                        tabIndexOf(tabs, initialState.destination.route)
+                    slideOutHorizontally(
+                        animationSpec = tween(durationMillis = 300, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)),
+                        targetOffsetX = { width -> if (forward) -width / 5 else width / 5 },
+                    ) + fadeOut(animationSpec = tween(durationMillis = 200, easing = LinearOutSlowInEasing))
+                },
             ) {
                 composable(BottomTab.Home.route) {
                     NewHomeScreen(
@@ -192,6 +233,7 @@ fun CoupleShell(
                             onNavigateToRoute(Screen.CoupleBind.route)
                         },
                         isCoupleMode = true,
+                        identity = topBarIdentity,
                     )
                 }
 
@@ -208,6 +250,7 @@ fun CoupleShell(
                             onNavigateToRoute("letter_detail/$letterId")
                         },
                         isCoupleMode = true,
+                        identity = topBarIdentity,
                     )
                 }
 
@@ -220,9 +263,14 @@ fun CoupleShell(
                         onNavigateToMediation = {
                             onNavigateToRoute("mediation_explanation")
                         },
+                        identity = topBarIdentity,
                     )
                 }
             }
         }
     }
 }
+
+/** tab 在底栏里的先后位置，用来决定转场方向；未知路由按最左处理。 */
+private fun tabIndexOf(tabs: List<BottomTab>, route: String?): Int =
+    tabs.indexOfFirst { it.route == route }.coerceAtLeast(0)
