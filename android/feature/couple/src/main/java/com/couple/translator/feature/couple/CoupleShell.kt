@@ -9,11 +9,16 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -31,6 +36,7 @@ import com.couple.translator.feature.couple.ai.NewAiChatScreen
 import com.couple.translator.feature.couple.home.NewHomeScreen
 import com.couple.translator.feature.couple.letter.NewMailboxScreen
 import com.couple.translator.feature.couple.navigation.DrawerContent
+import com.couple.translator.feature.couple.network.RealtimeSocketManager
 import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.ui.components.BottomTabBar
 import com.couple.translator.core.ui.theme.Background
@@ -46,6 +52,7 @@ fun CoupleShell(
     onLogout: () -> Unit,
     tokenStore: TokenStore? = null,
     coupleStateManager: CoupleStateManager? = null,
+    realtimeSocketManager: RealtimeSocketManager? = null,
 ) {
     val tabNavController = rememberNavController()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -55,6 +62,33 @@ fun CoupleShell(
 
     val defaultCoupleState = androidx.compose.runtime.remember { CoupleState() }
     val coupleState = coupleStateManager?.state?.collectAsState()?.value ?: defaultCoupleState
+
+    // 实时通道：进入情侣模式建立 WS 连接，退出时断开；事件转 Snackbar 提示
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) {
+        realtimeSocketManager?.start()
+    }
+    DisposableEffect(Unit) {
+        onDispose { realtimeSocketManager?.stop() }
+    }
+    LaunchedEffect(realtimeSocketManager) {
+        realtimeSocketManager?.events?.collect { event ->
+            val text = when (event.notificationType) {
+                "companion_request" -> "对方发来了陪伴请求" + (event.content?.let { "：$it" } ?: "")
+                "partner_moment" -> "对方分享了此刻状态" + (event.content?.let { "：$it" } ?: "")
+                "unbind_requested" -> "对方发起了关系解绑请求"
+                "unbind_confirmed" -> "关系解绑已完成"
+                "unbind_cancelled" -> "对方取消了解绑申请"
+                "letter_received" -> "收到一封新信件"
+                "mediation_invite" -> "对方邀请你进行冷静沟通"
+                else -> null
+            }
+            if (text != null) {
+                snackbarHostState.showSnackbar(text, duration = SnackbarDuration.Short)
+                coupleStateManager?.refresh()
+            }
+        }
+    }
 
     // 每次回到前台时刷新情侣状态
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -86,6 +120,7 @@ fun CoupleShell(
                     onLogout = {
                         scope.launch {
                             tokenStore?.clearTokens()
+                            realtimeSocketManager?.stop()
                             closeDrawer()
                             onLogout()
                         }
@@ -98,6 +133,7 @@ fun CoupleShell(
     ) {
         Scaffold(
             containerColor = Background,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
                 BottomTabBar(
                     currentRoute = currentRoute,

@@ -21,6 +21,7 @@ import androidx.navigation.navArgument
 import com.couple.translator.core.data.repository.TokenStore
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
+import com.couple.translator.feature.couple.network.RealtimeSocketManager
 import com.couple.translator.feature.couple.ai.AiSessionListScreen
 import com.couple.translator.feature.couple.ai.ColdWarScreen
 import com.couple.translator.feature.couple.anniversary.AddAnniversaryScreen
@@ -70,6 +71,7 @@ fun NavGraph(
     navController: NavHostController = rememberNavController(),
     tokenStore: TokenStore? = null,
     coupleStateManager: CoupleStateManager? = null,
+    realtimeSocketManager: RealtimeSocketManager? = null,
 ) {
     var startDest by remember { mutableStateOf<String?>(null) }
     val coupleState = coupleStateManager?.state?.collectAsState()?.value
@@ -158,6 +160,7 @@ fun NavGraph(
                     },
                     tokenStore = tokenStore,
                     coupleStateManager = coupleStateManager,
+                    realtimeSocketManager = realtimeSocketManager,
                 )
             } else {
                 SingleShell(

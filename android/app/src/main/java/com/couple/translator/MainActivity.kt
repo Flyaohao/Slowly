@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import com.couple.translator.core.data.repository.TokenStore
 import com.couple.translator.core.ui.theme.CoupleTranslatorTheme
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
+import com.couple.translator.feature.couple.network.RealtimeSocketManager
 import com.couple.translator.navigation.NavGraph
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -20,6 +21,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var coupleStateManager: CoupleStateManager
 
+    @Inject
+    lateinit var realtimeSocketManager: RealtimeSocketManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -28,6 +32,7 @@ class MainActivity : ComponentActivity() {
                 NavGraph(
                     tokenStore = tokenStore,
                     coupleStateManager = coupleStateManager,
+                    realtimeSocketManager = realtimeSocketManager,
                 )
             }
         }

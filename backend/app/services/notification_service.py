@@ -27,6 +27,10 @@ class NotificationType(str, Enum):
     MEDIATION_INPUT_DONE = "mediation_input_done"
     MEDIATION_CONFIRMED = "mediation_confirmed"
 
+    # 在场感相关
+    PARTNER_MOMENT = "partner_moment"
+    COMPANION_REQUEST = "companion_request"
+
     # 通用
     SYSTEM_NOTICE = "system_notice"
 
@@ -117,4 +121,22 @@ async def notify_mediation_invite(partner_id: int, session_id: int, inviter_name
         "调解邀请",
         f"{inviter_name} 邀请你进行冷静沟通",
         {"type": NotificationType.MEDIATION_INVITE.value, "session_id": session_id}
+    )
+
+
+async def notify_partner_moment(partner_id: int, sender_id: int, moment_type: str, content: str):
+    """实时通知对方：伴侣分享了此刻状态 / 发来陪伴请求。
+
+    moment_type 由 presence_service 决定：text=此刻状态；companion_request=陪伴请求。
+    客户端收到后刷新 presence 卡片；陪伴请求额外弹提示。
+    """
+    nt = (
+        NotificationType.COMPANION_REQUEST
+        if moment_type == "companion_request"
+        else NotificationType.PARTNER_MOMENT
+    )
+    await send_ws_notification(
+        partner_id,
+        nt,
+        {"sender_id": sender_id, "moment_type": moment_type, "content": content},
     )
