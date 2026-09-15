@@ -168,14 +168,18 @@ def _save(**kwargs: Any) -> None:
 
 
 def _validate_structured(
-    payload: Optional[Dict[str, Any]], output_model: Type[BaseModel], generation_kind: str
+    payload: Optional[Dict[str, Any]],
+    output_model: Optional[Type[BaseModel]],
+    generation_kind: str,
 ) -> Optional[Dict[str, Any]]:
     """用 Pydantic 模型校验分隔符后解析出来的 JSON。
 
     校验不过不是致命错误：正文已经推给用户了，结构化字段只是锦上添花。
     宁可不显示卡片，也不要因为模型少填一个字段就让整次生成看起来失败。
+    `output_model` 为 None 表示这类生成没有结构化字段（如画像报告的
+    纯 Markdown 长文），直接返回 None。
     """
-    if payload is None:
+    if payload is None or output_model is None:
         return None
     try:
         return output_model.model_validate(payload).model_dump(mode="json")
@@ -218,7 +222,8 @@ def stream_generation_events(prepared: Dict[str, Any]) -> Iterator[Dict[str, Any
     cancel_event: threading.Event = prepared["cancel_event"]
     generation_kind: str = prepared["generation_kind"]
     scene_key: str = prepared["scene_key"]
-    output_model: Type[BaseModel] = prepared["output_model"]
+    # output_model 可省：纯文本流式（画像报告）没有结构化字段
+    output_model = prepared.get("output_model")
     save_kwargs = {
         "user_id": prepared["user_id"],
         "relation_id": prepared["relation_id"],

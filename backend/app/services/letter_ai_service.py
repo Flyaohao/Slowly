@@ -2,7 +2,11 @@ from sqlalchemy.orm import Session
 from typing import Optional, Dict
 
 from app.repositories import letter_repo, couple_repo, profile_repo
-from app.schemas.ai_output import LetterAnalysisOutput
+from app.schemas.ai_output import (
+    LetterAnalysisOutput,
+    LetterReplyOutput,
+    LetterRewriteOutput,
+)
 from app.services import ai_generation_service
 from app.services.ai_service import _call_llm, _format_profile, _get_partner_id
 from app.services.prompt_builder import build_structured_stream_prompt
@@ -10,6 +14,10 @@ from app.services.prompt_builder import build_structured_stream_prompt
 #: 落 `ai_generation` 时用的生成类型。同时也是回读端点里的 `kind` 参数值，
 #: 客户端与后端两侧都靠它定位「某封信的解读」，改名会同时打断两边。
 GENERATION_KIND_UNDERSTAND = "letter_analysis"
+#: 信件改写（`/ai/rewrite-letter/stream`）
+GENERATION_KIND_REWRITE = "letter_rewrite"
+#: AI 回信建议（`/ai/generate-reply/stream`）
+GENERATION_KIND_REPLY = "letter_reply"
 #: 生成结果挂靠的实体类型
 TARGET_TYPE_LETTER = "letter"
 
@@ -287,4 +295,116 @@ def generate_reply(db: Session, user_id: int, letter_id: int) -> dict:
             "do_not_say": ai_response.get("do_not_say", ""),
             "risk_level": ai_response.get("risk_level", "normal"),
         },
+    }
+
+
+def prepare_rewrite_letter(
+    db: Session, user_id: int, relation_id: int, letter_id: int, style: str
+) -> dict:
+    """流式版「信件改写」的前处理，与 `prepare_understand_letter` 同构。
+
+    共用同步版的 Prompt（LETTER_REWRITE_PROMPT）和输出模型（LetterRewriteOutput），
+    仅输出协议分叉：正文流直接输出改写后的信件全文（用户最关心的东西，
+    打字机逐字可见），分隔符后的 JSON 承载标题/改动说明等结构化字段。
+    """
+    letter = _load_letter_in_relation(db, relation_id, letter_id)
+    if letter.sender_id != user_id:
+        raise ValueError("60002")
+
+    partner_id = _get_partner_id(db, relation_id, user_id)
+    partner_profile = profile_repo.get_latest_profile(db, partner_id) if partner_id else None
+    partner_scores = {}
+    if partner_profile:
+        dims = profile_repo.get_dimension_scores(db, partner_profile.id)
+        partner_scores = {d.dimension_key: d.score for d in dims}
+    partner_profile_text = _format_profile(partner_profile, partner_scores)
+
+    base_prompt = LETTER_REWRITE_PROMPT.format(
+        partner_profile=partner_profile_text,
+        letter_title=letter.title,
+        letter_content=letter.content,
+        style=style,
+    )
+    prompt = build_structured_stream_prompt(
+        base_prompt,
+        LetterRewriteOutput,
+        content_instruction=(
+            "直接输出改写后的完整信件正文，像替用户重写这封信一样，"
+            "不要复述原文、不要解释改写思路"
+        ),
+        max_content_chars=1200,
+    )
+
+    generation_id, cancel_event = ai_generation_service.begin(
+        db,
+        user_id=user_id,
+        relation_id=relation_id,
+        generation_kind=GENERATION_KIND_REWRITE,
+        scene_key="letter_rewrite",
+        target_type=TARGET_TYPE_LETTER,
+        target_id=letter_id,
+    )
+
+    return {
+        "generation_id": generation_id,
+        "cancel_event": cancel_event,
+        "generation_kind": GENERATION_KIND_REWRITE,
+        "scene_key": "letter_rewrite",
+        "target_type": TARGET_TYPE_LETTER,
+        "target_id": letter_id,
+        "user_id": user_id,
+        "relation_id": relation_id,
+        "prompt": prompt,
+        "output_model": LetterRewriteOutput,
+        "temperature": 0.7,
+        # 双出口协议下要容纳「思考 + 正文 + JSON」，理由同 prepare_understand_letter
+        "max_tokens": 4000,
+    }
+
+
+def prepare_generate_reply(
+    db: Session, user_id: int, relation_id: int, letter_id: int
+) -> dict:
+    """流式版「AI 回信建议」的前处理，与 `prepare_understand_letter` 同构。"""
+    letter = _load_letter_in_relation(db, relation_id, letter_id)
+    sender_profile_text = _sender_profile_text(db, letter.sender_id)
+
+    base_prompt = LETTER_REPLY_PROMPT.format(
+        sender_profile=sender_profile_text,
+        letter_title=letter.title,
+        letter_content=letter.content,
+    )
+    prompt = build_structured_stream_prompt(
+        base_prompt,
+        LetterReplyOutput,
+        content_instruction=(
+            "像替用户起草回信一样，按不同风格逐段输出可直接发送的回信全文，"
+            "每个风格前用一行标注风格名"
+        ),
+        max_content_chars=1200,
+    )
+
+    generation_id, cancel_event = ai_generation_service.begin(
+        db,
+        user_id=user_id,
+        relation_id=relation_id,
+        generation_kind=GENERATION_KIND_REPLY,
+        scene_key="letter_reply",
+        target_type=TARGET_TYPE_LETTER,
+        target_id=letter_id,
+    )
+
+    return {
+        "generation_id": generation_id,
+        "cancel_event": cancel_event,
+        "generation_kind": GENERATION_KIND_REPLY,
+        "scene_key": "letter_reply",
+        "target_type": TARGET_TYPE_LETTER,
+        "target_id": letter_id,
+        "user_id": user_id,
+        "relation_id": relation_id,
+        "prompt": prompt,
+        "output_model": LetterReplyOutput,
+        "temperature": 0.7,
+        "max_tokens": 4000,
     }

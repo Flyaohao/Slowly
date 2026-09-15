@@ -1,10 +1,15 @@
 package com.couple.translator.feature.couple.ai
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.couple.translator.core.data.model.AiDto
+import com.couple.translator.core.service.AiStreamKeepAlive
 import com.couple.translator.feature.couple.data.repository.AiRepository
+import com.couple.translator.feature.couple.data.repository.GenerationStreamEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -41,13 +46,19 @@ data class AiChatUiState(
     val showRewriteSheet: Boolean = false,
     val rewriteVersions: List<AiDto.RewriteVersion> = emptyList(),
     val rewriteOriginal: String = "",
+    /** 表达改写流式生成中（v2.2 起走 ai_generation 流式端点） */
+    val isRewriteStreaming: Boolean = false,
+    /** 表达改写的流式正文（5 个风格逐段打字机） */
+    val rewriteStreamContent: String = "",
+    /** 表达改写模型的思考过程，喂「深度思考」面板 */
+    val rewriteThinking: String = "",
     /** 最近一次 Agent 回答携带的工具调用轨迹（查画像 / 检索理论），渲染在对应气泡上方 */
     val agentToolCalls: List<AiDto.AgentToolCall> = emptyList(),
     val agentSteps: Int = 0,
     val error: String = "",
 ) {
-    /** 输入框是否应禁用：请求中或流式输出中都禁用，避免同会话并发 */
-    val isBusy: Boolean get() = isLoading || isStreaming
+    /** 输入框是否应禁用：请求中或流式输出中都禁用，避免同会话并发（含表达改写流式） */
+    val isBusy: Boolean get() = isLoading || isStreaming || isRewriteStreaming
 
     /** 是否正在思考（收到了思考增量但正文还没来） */
     val isThinking: Boolean get() = isStreaming && streamingContent.isEmpty()
@@ -60,6 +71,8 @@ sealed class AiChatUiEvent {
 @HiltViewModel
 class AiChatViewModel @Inject constructor(
     private val aiRepository: AiRepository,
+    // 流式回答期间挂前台服务保活，退后台不被系统掐断
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AiChatUiState())
@@ -67,6 +80,11 @@ class AiChatViewModel @Inject constructor(
 
     /** 本次流的起始时刻，用于算出「已深度思考 N 秒」 */
     private var streamStartedAt = 0L
+
+    /** 表达改写流式协程与取消上下文 */
+    private var rewriteStreamJob: Job? = null
+    private var rewriteGenerationId: Long = 0
+    private var rewriteStopRequested = false
 
     init {
         loadScenes()
@@ -131,7 +149,17 @@ class AiChatViewModel @Inject constructor(
     }
 
     fun dismissRewriteSheet() {
-        _uiState.update { it.copy(showRewriteSheet = false, rewriteVersions = emptyList(), rewriteOriginal = "") }
+        stopRewrite()
+        _uiState.update {
+            it.copy(
+                showRewriteSheet = false,
+                rewriteVersions = emptyList(),
+                rewriteOriginal = "",
+                rewriteStreamContent = "",
+                rewriteThinking = "",
+                isRewriteStreaming = false,
+            )
+        }
     }
 
     fun rewriteExpression() {
@@ -139,32 +167,100 @@ class AiChatViewModel @Inject constructor(
         val content = state.inputText.trim()
         if (content.isEmpty() || state.isBusy) return
 
-        _uiState.update { it.copy(isLoading = true) }
+        rewriteStopRequested = false
+        rewriteGenerationId = 0
 
-        viewModelScope.launch {
-            aiRepository.rewriteExpression(content).fold(
-                onSuccess = { response ->
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            showRewriteSheet = true,
-                            rewriteVersions = response.versions,
-                            rewriteOriginal = response.original,
-                            inputText = "",
-                        )
-                    }
-                },
-                onFailure = { error ->
-                    _uiState.update {
-                        it.copy(isLoading = false, error = error.message ?: "改写失败")
-                    }
-                },
+        // 弹层立刻打开：正文流式期间就能逐字看到，不再空等十几秒
+        _uiState.update {
+            it.copy(
+                isRewriteStreaming = true,
+                rewriteStreamContent = "",
+                rewriteThinking = "",
+                showRewriteSheet = true,
+                rewriteVersions = emptyList(),
+                rewriteOriginal = content,
+                inputText = "",
+                error = "",
             )
+        }
+        AiStreamKeepAlive.start(appContext)
+
+        rewriteStreamJob = viewModelScope.launch {
+            aiRepository.rewriteExpressionStream(content).collect { ev ->
+                when (ev) {
+                    is GenerationStreamEvent.Started -> rewriteGenerationId = ev.generationId
+
+                    is GenerationStreamEvent.Thinking -> _uiState.update {
+                        it.copy(rewriteThinking = it.rewriteThinking + ev.content)
+                    }
+
+                    is GenerationStreamEvent.Delta -> _uiState.update {
+                        it.copy(rewriteStreamContent = it.rewriteStreamContent + ev.content)
+                    }
+
+                    is GenerationStreamEvent.Structuring -> Unit
+
+                    is GenerationStreamEvent.Finished -> {
+                        _uiState.update {
+                            it.copy(
+                                isRewriteStreaming = false,
+                                rewriteVersions = parseRewriteVersions(ev.structured),
+                                rewriteStreamContent = ev.content.ifBlank { it.rewriteStreamContent },
+                            )
+                        }
+                        AiStreamKeepAlive.stop(appContext)
+                    }
+
+                    is GenerationStreamEvent.Failure -> if (!rewriteStopRequested) {
+                        _uiState.update { it.copy(isRewriteStreaming = false, error = ev.message) }
+                        AiStreamKeepAlive.stop(appContext)
+                    }
+                }
+            }
+
+            // 兜底：服务端没发 done 就断开时收敛状态
+            if (!rewriteStopRequested && _uiState.value.isRewriteStreaming) {
+                _uiState.update { it.copy(isRewriteStreaming = false) }
+                AiStreamKeepAlive.stop(appContext)
+            }
+        }
+    }
+
+    /** 用户点「停止生成」。半成品保留在弹层里，服务端也存了 interrupted。 */
+    fun stopRewrite() {
+        if (!_uiState.value.isRewriteStreaming) return
+        rewriteStopRequested = true
+        _uiState.update { it.copy(isRewriteStreaming = false) }
+        val id = rewriteGenerationId
+        viewModelScope.launch {
+            if (id != 0L) aiRepository.cancelGeneration(id)
+        }
+        rewriteStreamJob?.cancel()
+        AiStreamKeepAlive.stop(appContext)
+    }
+
+    /** `Finished.structured` 的 `rewrites` → 弹层版本卡片 */
+    private fun parseRewriteVersions(structured: Map<String, Any?>?): List<AiDto.RewriteVersion> {
+        val list = (structured?.get("rewrites") as? List<*>) ?: return emptyList()
+        return list.mapNotNull { item ->
+            val m = item as? Map<*, *> ?: return@mapNotNull null
+            val style = m["style"] as? String ?: return@mapNotNull null
+            val text = m["content"] as? String ?: return@mapNotNull null
+            AiDto.RewriteVersion(style, text)
         }
     }
 
     fun applyRewrite(content: String) {
-        _uiState.update { it.copy(inputText = content, showRewriteSheet = false, rewriteVersions = emptyList()) }
+        _uiState.update {
+            it.copy(
+                inputText = content,
+                showRewriteSheet = false,
+                rewriteVersions = emptyList(),
+                rewriteStreamContent = "",
+                rewriteThinking = "",
+                isRewriteStreaming = false,
+            )
+        }
     }
 
     /**
@@ -351,5 +447,12 @@ class AiChatViewModel @Inject constructor(
                 error = message,
             )
         }
+        AiStreamKeepAlive.stop(appContext)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // 页面销毁时流式协程会随之取消，保活服务没有存在的必要了
+        AiStreamKeepAlive.stop(appContext)
     }
 }

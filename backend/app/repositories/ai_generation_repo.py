@@ -38,7 +38,7 @@ def upsert_generation(
     db: Session,
     *,
     user_id: int,
-    relation_id: int,
+    relation_id: Optional[int],
     generation_kind: str,
     scene_key: str,
     content: str,

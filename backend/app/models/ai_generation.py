@@ -51,8 +51,10 @@ class AiGeneration(BigIntPKMixin, TimestampMixin, Base):
     )
 
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
-    relation_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("couple_relation.id"), nullable=False
+    #: 归属关系。信件类生成挂关系；画像报告等个人维度生成为 NULL
+    #: （v2.2 起可空，见迁移 a8b9c0d1e2f3）
+    relation_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("couple_relation.id"), nullable=True
     )
     #: 生成类型，如 letter_analysis / letter_rewrite / letter_reply
     generation_kind: Mapped[str] = mapped_column(String(50), nullable=False)

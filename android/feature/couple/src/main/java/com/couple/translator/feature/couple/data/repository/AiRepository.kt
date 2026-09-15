@@ -33,6 +33,26 @@ class AiRepository @Inject constructor(
     private val doneAdapter by lazy { moshi.adapter(AiDto.StreamDonePayload::class.java) }
     private val errorAdapter by lazy { moshi.adapter(AiDto.StreamErrorPayload::class.java) }
 
+    /** 表达改写 / 画像报告等新流式端点共用的通用解码器（ai_generation 协议） */
+    private val generationDecoder = GenerationStreamDecoder(moshi)
+
+    /**
+     * 流式「帮我表达」（表达改写）。
+     *
+     * 正文按 5 个风格逐段打字机下发；`Finished.structured` 里的
+     * `rewrites` 是结构化版本数组（每项含 style/content）。
+     */
+    fun rewriteExpressionStream(text: String, context: String? = null): Flow<GenerationStreamEvent> =
+        generationStreamFlow(generationDecoder) {
+            apiService.rewriteExpressionStream(AiDto.RewriteRequest(text, context))
+        }
+
+    /** 流式「AI 画像报告」（纯 Markdown 长文，无结构化字段）。 */
+    fun profileReportStream(): Flow<GenerationStreamEvent> =
+        generationStreamFlow(generationDecoder) {
+            apiService.profileReportStream()
+        }
+
     /**
      * 拉取后端场景清单。
      *
@@ -265,5 +285,20 @@ class AiRepository @Inject constructor(
         is java.net.SocketException -> "网络连接被中断（可能是切换了 Wi-Fi 或移动数据）"
         is java.io.IOException -> "网络读写失败，请检查网络后重试"
         else -> e.message ?: "连接已断开"
+    }
+
+    /** 中断一次正在进行的 ai_generation 生成（表达改写等流式端点共用）。 */
+    suspend fun cancelGeneration(generationId: Long): Result<Boolean> {
+        return try {
+            val response = apiService.cancelGeneration(generationId)
+            val data = response.data
+            if (response.isSuccess && data != null) {
+                Result.success(data.cancelled)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 }

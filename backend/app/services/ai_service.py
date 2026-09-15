@@ -10,8 +10,16 @@ from app.repositories import (
     couple_repo,
     safety_repo,
 )
-from app.services.prompt_builder import build_prompt, build_stream_prompt
+from app.schemas.ai_output import RewriteOutput
+from app.services.prompt_builder import (
+    build_prompt,
+    build_stream_prompt,
+    build_structured_stream_prompt,
+    build_profile_report_prompt,
+)
 from app.services.scene_router import get_scene_config
+# 循环导入注意：ai_generation_service 也会 import 本模块的辅助函数，
+# 不能放模块顶层，prepare_* 内部再导入。
 from app.services.safety_service import (
     check_input_safety,
     check_output_safety,
@@ -811,4 +819,169 @@ def _degraded_response(reason: str) -> dict:
         "next_step": "稍后再试一次，或者先深呼吸，让自己平静下来。",
         "risk_level": "normal",
         "scene_key": "degraded",
+    }
+
+
+# --------------------------------------------------------------------------- #
+# 单次触发型生成的流式前处理（prepare_*）
+#
+# 与 letter_ai_service.prepare_understand_letter 同一模式：请求级 db 存活期间
+# 完成校验 + 拼 Prompt + 占位 ai_generation 记录，返回 dict 交给
+# ai_generation_service.stream_generation_events 推 SSE。
+# --------------------------------------------------------------------------- #
+
+def prepare_rewrite_expression(
+    db: Session,
+    user_id: int,
+    relation_id: int,
+    original_text: str,
+    context: Optional[str] = None,
+) -> dict:
+    """流式版「帮我表达」（表达改写）的前处理。
+
+    共用同步版 `rewrite_expression` 的 Prompt 与输出模型（RewriteOutput）。
+    正文流按 5 个风格逐段输出改写全文，分隔符后 JSON 承载结构化版本数组。
+    """
+    from app.services import ai_generation_service  # 局部导入，避免模块加载环
+
+    scene = ai_repo.get_scene_by_key(db, "expression_rewrite")
+    if not scene:
+        raise ValueError("50001")
+
+    partner_id = _get_partner_id(db, relation_id, user_id)
+    partner_profile = profile_repo.get_latest_profile(db, partner_id) if partner_id else None
+    partner_scores: Dict[str, float] = {}
+    if partner_profile:
+        dims = profile_repo.get_dimension_scores(db, partner_profile.id)
+        partner_scores = {d.dimension_key: d.score for d in dims}
+    partner_profile_text = _format_profile(partner_profile, partner_scores)
+
+    base_prompt = f"""你是一位专业的沟通顾问。请将以下原始表达改写为5种不同风格的版本。
+
+## 原始表达
+{original_text}
+
+## 补充背景
+{context or "无"}
+
+## 对方画像
+{partner_profile_text}
+
+## 改写要求
+请生成以下5个版本，每个版本都要保持核心意思不变，但调整语气和表达方式：
+
+1. **温柔版**：语气柔和温暖，减少攻击性，让对方更容易接受
+2. **直接版**：表达清晰直接，但不带伤害性，保持尊重
+3. **道歉版**：真诚表达歉意和反思，承认自己的不足
+4. **解释版**：理性解释自己的想法和感受，不带辩解语气
+5. **想和好版**：表达想要修复关系的意愿，给出具体行动建议
+
+## 输出格式
+请以JSON格式输出，包含以下字段：
+- summary: 改写总结（一句话说明主要调整）
+- rewrites: 数组，包含5个对象，每个对象有 style（风格名称）和 content（改写内容）
+- risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk
+"""
+    prompt = build_structured_stream_prompt(
+        base_prompt,
+        RewriteOutput,
+        content_instruction=(
+            "把 5 个版本的改写结果作为正文完整输出，每个版本以【风格名】开头，"
+            "风格顺序与要求一致"
+        ),
+        max_content_chars=1500,
+    )
+
+    generation_id, cancel_event = ai_generation_service.begin(
+        db,
+        user_id=user_id,
+        relation_id=relation_id,
+        generation_kind="expression_rewrite",
+        scene_key="expression_rewrite",
+        target_type="none",
+        target_id=None,
+    )
+
+    return {
+        "generation_id": generation_id,
+        "cancel_event": cancel_event,
+        "generation_kind": "expression_rewrite",
+        "scene_key": "expression_rewrite",
+        "target_type": "none",
+        "target_id": None,
+        "user_id": user_id,
+        "relation_id": relation_id,
+        "prompt": prompt,
+        "output_model": RewriteOutput,
+        "temperature": 0.7,
+        "max_tokens": 4000,
+    }
+
+
+def prepare_profile_report(db: Session, user_id: int) -> dict:
+    """流式版「AI 画像报告」的前处理。
+
+    画像报告是长 Markdown，没有结构化字段，`output_model` 置 None——
+    `stream_generation_events` 会把整段输出当正文流式下发。
+    """
+    from app.services import ai_generation_service  # 局部导入，避免模块加载环
+
+    profile = profile_repo.get_latest_profile(db, user_id)
+    if not profile:
+        raise ValueError("40001")
+
+    dimensions = profile_repo.get_dimension_scores(db, profile.id)
+    if not dimensions:
+        raise ValueError("40001")
+
+    dimension_names = {
+        "attachment_anxiety": "依恋焦虑",
+        "attachment_avoidance": "依恋回避",
+        "conflict_pursue": "冲突追问倾向",
+        "conflict_withdraw": "冲突退缩倾向",
+        "defensive_response": "防御反驳倾向",
+        "emotional_validation_need": "情绪确认需求",
+        "factual_explanation_need": "事实解释需求",
+        "personal_space_need": "独处冷静需求",
+        "reassurance_need": "安全感确认需求",
+        "directness_preference": "直接表达偏好",
+        "softness_preference": "柔和表达偏好",
+    }
+
+    dim_lines = []
+    for d in dimensions:
+        name = dimension_names.get(d.dimension_key, d.dimension_key)
+        explanation = d.explanation or ""
+        dim_lines.append(f"- {name}：{d.score:.0f}分（{explanation}）")
+    dimensions_text = "\n".join(dim_lines)
+
+    prompt = build_profile_report_prompt(
+        profile_type=profile.profile_type,
+        confidence=profile.confidence,
+        dimensions_data=dimensions_text,
+    )
+
+    generation_id, cancel_event = ai_generation_service.begin(
+        db,
+        user_id=user_id,
+        relation_id=None,  # 画像是个人维度，不挂关系（v2.2 起可空）
+        generation_kind="profile_report",
+        scene_key="profile_report",
+        target_type="none",
+        target_id=None,
+    )
+
+    return {
+        "generation_id": generation_id,
+        "cancel_event": cancel_event,
+        "generation_kind": "profile_report",
+        "scene_key": "profile_report",
+        "target_type": "none",
+        "target_id": None,
+        "user_id": user_id,
+        "relation_id": None,
+        "prompt": prompt,
+        "output_model": None,
+        "temperature": 0.6,
+        "max_tokens": 2500,
     }

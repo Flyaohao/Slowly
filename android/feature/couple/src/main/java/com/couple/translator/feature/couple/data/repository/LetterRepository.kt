@@ -25,6 +25,9 @@ class LetterRepository @Inject constructor(
     private val chunkAdapter by lazy { moshi.adapter(LetterDto.LetterStreamChunk::class.java) }
     private val doneAdapter by lazy { moshi.adapter(LetterDto.LetterStreamDone::class.java) }
     private val errorAdapter by lazy { moshi.adapter(LetterDto.LetterStreamError::class.java) }
+
+    /** 信件改写 / AI 回信等新流式端点共用的通用解码器（同一套 ai_generation 协议） */
+    private val generationDecoder = GenerationStreamDecoder(moshi)
     suspend fun createLetter(request: LetterDto.LetterRequest): Result<LetterDto.LetterResponse?> {
         return try {
             val response = apiService.createLetter(request)
@@ -329,6 +332,21 @@ class LetterRepository @Inject constructor(
             Result.failure(e)
         }
     }
+
+    /**
+     * 流式「信件改写」：正文即改写后的信件全文，逐字下发。
+     * 事件协议与 [understandLetterStream] 完全同一套（ai_generation 基建）。
+     */
+    fun rewriteLetterStream(letterId: Long, style: String): Flow<GenerationStreamEvent> =
+        generationStreamFlow(generationDecoder) {
+            apiService.rewriteLetterStream(LetterDto.RewriteLetterRequest(letterId, style, ""))
+        }
+
+    /** 流式「AI 回信建议」。 */
+    fun generateReplyStream(letterId: Long): Flow<GenerationStreamEvent> =
+        generationStreamFlow(generationDecoder) {
+            apiService.generateReplyStream(LetterDto.GenerateReplyRequest(letterId))
+        }
 
     suspend fun generateReply(letterId: Long): Result<LetterDto.GenerateReplyResponse?> {
         return try {

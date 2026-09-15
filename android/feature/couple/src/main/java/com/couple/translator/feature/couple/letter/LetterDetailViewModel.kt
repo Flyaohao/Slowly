@@ -1,10 +1,13 @@
 package com.couple.translator.feature.couple.letter
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.couple.translator.core.service.AiStreamKeepAlive
 import com.couple.translator.feature.couple.data.model.LetterDto
 import com.couple.translator.feature.couple.data.repository.LetterRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -52,6 +55,8 @@ sealed class LetterDetailUiEvent {
 @HiltViewModel
 class LetterDetailViewModel @Inject constructor(
     private val letterRepository: LetterRepository,
+    // 保活服务要用 applicationContext 启动，不能拿 Activity 的 context
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LetterDetailUiState())
@@ -172,6 +177,10 @@ class LetterDetailViewModel @Inject constructor(
             )
         }
 
+        // 生成期间挂前台服务保活：退后台后进程不被冻结、网络不受限，
+        // 否则 socket 一断服务端就把这轮生成按 interrupted 收尾了
+        AiStreamKeepAlive.start(appContext)
+
         streamJob = viewModelScope.launch {
             letterRepository.understandLetterStream(letter.id).collect { ev ->
                 when (ev) {
@@ -220,6 +229,7 @@ class LetterDetailViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(isStreaming = false, isThinking = false, isStructuring = false)
                 }
+                AiStreamKeepAlive.stop(appContext)
             }
         }
     }
@@ -237,6 +247,7 @@ class LetterDetailViewModel @Inject constructor(
     fun stopUnderstanding() {
         if (!_uiState.value.isStreaming) return
         stopRequested = true
+        AiStreamKeepAlive.stop(appContext)
 
         _uiState.update {
             it.copy(
@@ -291,6 +302,7 @@ class LetterDetailViewModel @Inject constructor(
                 showUnderstanding = true,
             )
         }
+        AiStreamKeepAlive.stop(appContext)
     }
 
     /** 从发问算起的等待秒数，至少 1 秒（避免显示「已深度思考 0 秒」）。 */
@@ -298,5 +310,11 @@ class LetterDetailViewModel @Inject constructor(
         if (streamStartedAt == 0L) return 0
         val seconds = ((System.currentTimeMillis() - streamStartedAt) / 1000).toInt()
         return seconds.coerceAtLeast(1)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // 页面销毁时流式协程会随之取消，保活服务没有存在的必要了
+        AiStreamKeepAlive.stop(appContext)
     }
 }

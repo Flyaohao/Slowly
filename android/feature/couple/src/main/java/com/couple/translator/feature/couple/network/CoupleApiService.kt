@@ -111,6 +111,26 @@ interface CoupleApiService {
     @POST("api/v1/couple/ai/understand-letter/stream")
     suspend fun understandLetterStream(@Body body: LetterDto.UnderstandLetterRequest): Response<ResponseBody>
 
+    /** 信件改写流式版。SSE 事件与 understandLetterStream 完全同一套（ai_generation 基建）。 */
+    @Streaming
+    @POST("api/v1/couple/ai/rewrite-letter/stream")
+    suspend fun rewriteLetterStream(@Body body: LetterDto.RewriteLetterRequest): Response<ResponseBody>
+
+    /** AI 回信建议流式版。SSE 事件与 understandLetterStream 完全同一套。 */
+    @Streaming
+    @POST("api/v1/couple/ai/generate-reply/stream")
+    suspend fun generateReplyStream(@Body body: LetterDto.GenerateReplyRequest): Response<ResponseBody>
+
+    /** 表达改写（帮我表达）流式版。SSE 事件与 understandLetterStream 完全同一套。 */
+    @Streaming
+    @POST("api/v1/couple/ai/rewrite/stream")
+    suspend fun rewriteExpressionStream(@Body body: AiDto.RewriteRequest): Response<ResponseBody>
+
+    /** AI 画像报告流式版（纯 Markdown 长文，无结构化字段）。 */
+    @Streaming
+    @POST("api/v1/couple/ai/profile-report/stream")
+    suspend fun profileReportStream(): Response<ResponseBody>
+
     /**
      * 回读已保存的 AI 理解。
      *

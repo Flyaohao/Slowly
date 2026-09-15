@@ -235,6 +235,7 @@ fun ComposeLetterScreen(
         bottomBar = {
             ComposeBottomBar(
                 onAiAssist = { viewModel.showAiAssist() },
+                onStopRewrite = { viewModel.stopRewrite() },
                 onLetterType = { viewModel.onLetterTypeChange(it) },
                 onTemplate = { showTemplates = true },
                 currentType = uiState.letterType,
@@ -327,6 +328,7 @@ fun ComposeLetterScreen(
 @Composable
 private fun ComposeBottomBar(
     onAiAssist: () -> Unit,
+    onStopRewrite: () -> Unit = {},
     onLetterType: (String) -> Unit,
     onTemplate: () -> Unit,
     currentType: String,
@@ -348,9 +350,11 @@ private fun ComposeBottomBar(
             Text("模板", color = AppAccent, style = MaterialTheme.typography.labelLarge)
         }
         Spacer(modifier = Modifier.width(4.dp))
-        TextButton(onClick = onAiAssist, enabled = !isRewriting) {
+        // 同一个按钮承担「打开 AI 辅助」和「停止生成」两种语义：
+        // 流式改写期间它是停止入口，避免用户找不到中止的地方
+        TextButton(onClick = if (isRewriting) onStopRewrite else onAiAssist) {
             Text(
-                if (isRewriting) "AI 改写中..." else "AI 辅助",
+                if (isRewriting) "停止改写" else "AI 辅助",
                 color = AppAccent,
                 style = MaterialTheme.typography.labelLarge,
             )

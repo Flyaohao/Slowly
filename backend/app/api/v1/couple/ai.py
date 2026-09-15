@@ -504,3 +504,142 @@ def agent_chat(
         )
 
     return ApiResponse(data=result)
+
+
+# --------------------------------------------------------------------------- #
+# 单次触发型 AI 生成的流式端点（v2.2 起全面切换）
+#
+# 与 /understand-letter/stream 完全同一套基建：prepare_* 在请求级 db 存活期间
+# 完成校验与占位，stream_generation_events 推 SSE，结果落 ai_generation。
+# 旧同步端点原样保留：线上客户端还没切过来。
+# --------------------------------------------------------------------------- #
+
+_LETTER_ERROR_MAP = {
+    "60001": (404, "信件不存在"),
+    "60002": (403, "无权访问此信件"),
+    "30005": (400, "请先绑定情侣关系"),
+}
+
+
+def _raise_prepared_error(exc: ValueError, error_map: dict) -> None:
+    """把 prepare_* 抛出的 ValueError 翻译成 HTTPException。
+
+    必须在流开始之前抛干净：流一旦开始，HTTP 头已发出，状态码改不了。
+    """
+    code = str(exc)
+    sc, msg = error_map.get(code, (500, "AI 服务异常"))
+    raise HTTPException(
+        status_code=sc,
+        detail={"code": int(code) if code.isdigit() else 50000, "message": msg, "data": None},
+    )
+
+
+@router.post("/rewrite-letter/stream")
+@_ai_limit()
+def rewrite_letter_stream(
+    request: Request,
+    req: LetterRewriteRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """信件改写流式接口（SSE）。事件序列与 /understand-letter/stream 一致。"""
+    relation = couple_repo.get_active_relation_by_user(db, current_user.id)
+    if not relation:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 30005, "message": "请先绑定情侣关系", "data": None},
+        )
+    try:
+        prepared = letter_ai_service.prepare_rewrite_letter(
+            db, current_user.id, relation.id, req.letter_id, req.style
+        )
+    except ValueError as e:
+        _raise_prepared_error(e, _LETTER_ERROR_MAP)
+
+    return StreamingResponse(
+        sse_encode(ai_generation_service.stream_generation_events(prepared)),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
+
+
+@router.post("/generate-reply/stream")
+@_ai_limit()
+def generate_reply_stream(
+    request: Request,
+    req: LetterReplyRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """AI 回信建议流式接口（SSE）。事件序列与 /understand-letter/stream 一致。"""
+    relation = couple_repo.get_active_relation_by_user(db, current_user.id)
+    if not relation:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 30005, "message": "请先绑定情侣关系", "data": None},
+        )
+    try:
+        prepared = letter_ai_service.prepare_generate_reply(
+            db, current_user.id, relation.id, req.letter_id
+        )
+    except ValueError as e:
+        _raise_prepared_error(e, _LETTER_ERROR_MAP)
+
+    return StreamingResponse(
+        sse_encode(ai_generation_service.stream_generation_events(prepared)),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
+
+
+@router.post("/rewrite/stream")
+@_ai_limit()
+def rewrite_expression_stream(
+    request: Request,
+    req: RewriteRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """表达改写（帮我表达）流式接口（SSE）。事件序列与 /understand-letter/stream 一致。"""
+    relation = couple_repo.get_active_relation_by_user(db, current_user.id)
+    if not relation:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 30005, "message": "请先绑定情侣关系", "data": None},
+        )
+    try:
+        prepared = ai_service.prepare_rewrite_expression(
+            db=db,
+            user_id=current_user.id,
+            relation_id=relation.id,
+            original_text=req.text,
+            context=req.context,
+        )
+    except ValueError as e:
+        _raise_prepared_error(e, {"50001": (404, "场景不存在")})
+
+    return StreamingResponse(
+        sse_encode(ai_generation_service.stream_generation_events(prepared)),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
+
+
+@router.post("/profile-report/stream")
+@_ai_limit()
+def profile_report_stream(
+    request: Request,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """AI 画像报告流式接口（SSE）。纯 Markdown 长文，无结构化字段（output_model=None）。"""
+    try:
+        prepared = ai_service.prepare_profile_report(db, current_user.id)
+    except ValueError as e:
+        _raise_prepared_error(e, {"40001": (400, "请先完成问卷")})
+
+    return StreamingResponse(
+        sse_encode(ai_generation_service.stream_generation_events(prepared)),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )

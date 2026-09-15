@@ -60,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.AiDto
+import com.couple.translator.core.ui.components.AiStreamingText
 import com.couple.translator.core.ui.components.AiThinkingPanel
 import com.couple.translator.core.ui.components.AiWaitingBubble
 import com.couple.translator.core.ui.components.AppCard
@@ -222,11 +223,17 @@ fun NewAiChatScreen(
         )
     }
 
-    // 表达改写结果底部弹窗
-    if (uiState.showRewriteSheet && uiState.rewriteVersions.isNotEmpty()) {
+    // 表达改写结果底部弹窗：流式生成期间也要展示（正文打字机 + 思考面板）
+    if (uiState.showRewriteSheet &&
+        (uiState.rewriteVersions.isNotEmpty() || uiState.isRewriteStreaming || uiState.rewriteStreamContent.isNotEmpty())
+    ) {
         RewriteResultSheet(
             original = uiState.rewriteOriginal,
             versions = uiState.rewriteVersions,
+            streamContent = uiState.rewriteStreamContent,
+            thinking = uiState.rewriteThinking,
+            isStreaming = uiState.isRewriteStreaming,
+            onStop = viewModel::stopRewrite,
             onApply = { viewModel.applyRewrite(it) },
             onDismiss = { viewModel.dismissRewriteSheet() },
         )
@@ -467,6 +474,10 @@ private fun QuickSceneChips(
 private fun RewriteResultSheet(
     original: String,
     versions: List<com.couple.translator.core.data.model.AiDto.RewriteVersion>,
+    streamContent: String = "",
+    thinking: String = "",
+    isStreaming: Boolean = false,
+    onStop: () -> Unit = {},
     onApply: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -483,12 +494,20 @@ private fun RewriteResultSheet(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 32.dp),
         ) {
-            Text(
-                text = "改写结果",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = AppTextPrimary,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "改写结果",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = AppTextPrimary,
+                    modifier = Modifier.weight(1f),
+                )
+                if (isStreaming) {
+                    TextButton(onClick = onStop) {
+                        Text("停止生成", color = AppAccent)
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -499,6 +518,21 @@ private fun RewriteResultSheet(
             )
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            // 流式阶段：思考面板 + 打字机正文；完成后切到结构化版本卡片
+            if (versions.isEmpty()) {
+                if (thinking.isNotBlank()) {
+                    AiThinkingPanel(thinking = thinking, isLive = isStreaming)
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                when {
+                    streamContent.isNotBlank() -> AiStreamingText(
+                        content = streamContent,
+                        isStreaming = isStreaming,
+                    )
+                    isStreaming -> AiWaitingBubble()
+                }
+            }
 
             versions.forEach { version ->
                 AppCard(
