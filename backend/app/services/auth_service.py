@@ -1,12 +1,15 @@
 import re
 import random
 import string
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional, Dict
 
 from sqlalchemy.orm import Session
 
 from app.repositories import user_repo
+from app.repositories import email_code_repo
+from app.services import email_service
+from app.core.config import EMAIL_DEV_MODE
 from app.security.password import hash_password, verify_password
 from app.security.jwt import (
     create_access_token,
@@ -14,9 +17,6 @@ from app.security.jwt import (
     decode_token,
 )
 from app.utils.validators import validate_password_strength
-
-_verification_codes: Dict[str, dict] = {}
-
 
 def _generate_code() -> str:
     return "".join(random.choices(string.digits, k=6))
@@ -57,23 +57,30 @@ def refresh_access_token(refresh_token_str: str) -> str:
     return create_access_token(user_id)
 
 
-def forgot_password(db: Session, email: str) -> None:
+def forgot_password(db: Session, email: str) -> Optional[str]:
+    """发起忘记密码：生成验证码 → 落库 → 邮件发送。
+
+    返回值：EMAIL_DEV_MODE 下返回验证码（接口回显 dev_code 便于联调），其余返回 None。
+    SMTP 发送失败时抛 ValueError("20004")。
+    """
     user = user_repo.get_user_by_email(db, email)
     if not user:
-        return
+        # 不暴露邮箱是否注册，静默成功
+        return None
 
     code = _generate_code()
-    _verification_codes[email] = {
-        "code": code,
-        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
-    }
+    email_code_repo.create_code(
+        db, email, code,
+        expires_at=datetime.utcnow() + timedelta(minutes=10),
+    )
+    email_service.send_verification_code(email, code, minutes=10)
+
+    return code if EMAIL_DEV_MODE else None
 
 
 def reset_password(db: Session, email: str, code: str, new_password: str) -> None:
-    record = _verification_codes.get(email)
-    if not record:
-        raise ValueError("20003")
-    if record["code"] != code or datetime.now(timezone.utc) > record["expires_at"]:
+    record = email_code_repo.get_valid_code(db, email)
+    if not record or record.code != code:
         raise ValueError("20003")
 
     if not validate_password_strength(new_password):
@@ -84,5 +91,5 @@ def reset_password(db: Session, email: str, code: str, new_password: str) -> Non
         raise ValueError("20003")
 
     user.password_hash = hash_password(new_password)
+    email_code_repo.mark_used(db, record)
     db.commit()
-    _verification_codes.pop(email, None)

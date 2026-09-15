@@ -1,6 +1,6 @@
 """冷静期超时定时任务
 
-检查超过 7 天未确认的解绑请求，自动取消解绑，恢复为 active 状态。
+检查超过冷静期（72 小时）未确认的解绑请求，自动取消解绑，恢复为 active 状态。
 """
 
 import logging
@@ -15,15 +15,15 @@ from app.repositories import user_repo
 
 logger = logging.getLogger(__name__)
 
-# 冷静期时长（天）
-COOLING_PERIOD_DAYS = 7
+# 冷静期时长（小时），与 couple_service.confirm_unbind 保持一致
+COOLING_PERIOD_HOURS = 72
 
 
 def check_unbinding_timeout():
     """检查并处理超时的解绑请求"""
     db = SessionLocal()
     try:
-        timeout_threshold = datetime.utcnow() - timedelta(days=COOLING_PERIOD_DAYS)
+        timeout_threshold = datetime.utcnow() - timedelta(hours=COOLING_PERIOD_HOURS)
 
         # 查找超时的 unbinding 记录
         expired_relations = (

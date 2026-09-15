@@ -36,6 +36,7 @@ from app.models.avatar import AiAvatar, AiAvatarAsset
 from app.models.diary_entry import DiaryEntry
 from app.models.invite_code import InviteCode
 from app.models.self_practice import SelfPractice, SelfPracticeRecord
+from app.models.email_verification import EmailVerificationCode
 
 __all__ = [
     "User",
@@ -75,4 +76,5 @@ __all__ = [
     "InviteCode",
     "SelfPractice",
     "SelfPracticeRecord",
+    "EmailVerificationCode",
 ]

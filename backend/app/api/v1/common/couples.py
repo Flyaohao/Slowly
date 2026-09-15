@@ -106,6 +106,11 @@ def confirm_unbind(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"code": 30004, "message": "冷静期未满，无法确认解绑", "data": None},
             )
+        if code == "30006":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 30006, "message": "不能确认自己发起的解绑申请", "data": None},
+            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": 30005, "message": "无权操作此关系", "data": None},

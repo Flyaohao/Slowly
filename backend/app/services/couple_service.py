@@ -136,7 +136,7 @@ def confirm_unbind(db: Session, user_id: int) -> None:
 
     # 不能自己确认自己发起的解绑
     if relation.unbind_requested_by == user_id:
-        raise ValueError("30004")
+        raise ValueError("30006")
 
     # 冷静期检查（72小时）
     if relation.unbind_requested_at:

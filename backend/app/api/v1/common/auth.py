@@ -63,8 +63,18 @@ def refresh(req: RefreshRequest):
 @router.post("/forgot-password", response_model=ApiResponse)
 @limiter.limit("1/minute")
 def forgot_password(request: Request, req: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    auth_service.forgot_password(db, req.email)
-    return ApiResponse()
+    try:
+        dev_code = auth_service.forgot_password(db, req.email)
+    except ValueError as e:
+        if str(e) == "20004":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 20004, "message": "邮件发送失败，请稍后重试", "data": None},
+            )
+        raise
+    # EMAIL_DEV_MODE 下回显 dev_code 便于联调；生产环境恒为 None
+    data = {"dev_code": dev_code} if dev_code else None
+    return ApiResponse(data=data)
 
 
 @router.post("/reset-password", response_model=ApiResponse)

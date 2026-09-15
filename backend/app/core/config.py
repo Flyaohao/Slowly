@@ -19,3 +19,14 @@ AI_BASE_URL: str = os.getenv("AI_BASE_URL", "https://dashscope.aliyuncs.com/comp
 # 向量库持久化目录。留空表示用默认的 backend/data/chroma；
 # 容器部署时通过该变量把目录指到挂载卷上，避免重建镜像丢向量。
 CHROMA_DIR: str = os.getenv("CHROMA_DIR", "")
+
+# ---- 邮件（忘记密码验证码）----
+SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.qq.com")
+SMTP_PORT: int = int(os.getenv("SMTP_PORT", "465"))
+#: 发信邮箱，如 1106665698@qq.com
+SMTP_USER: str = os.getenv("SMTP_USER", "")
+#: SMTP 授权码（QQ 邮箱：设置-账户-开启 SMTP 服务后生成授权码，不是 QQ 密码）
+SMTP_AUTH_CODE: str = os.getenv("SMTP_AUTH_CODE", "")
+EMAIL_FROM: str = os.getenv("EMAIL_FROM", SMTP_USER)
+#: true 时验证码不真实发信：写库+打日志，forgot-password 返回 dev_code 便于联调
+EMAIL_DEV_MODE: bool = os.getenv("EMAIL_DEV_MODE", "false").lower() == "true"
