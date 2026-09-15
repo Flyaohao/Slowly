@@ -26,8 +26,10 @@ data class AppColors(
     val textSecondary: Color,
     /** 三级文字、占位符、未选中态 */
     val textTertiary: Color,
-    /** 分隔线、描边、进度条轨道 */
+    /** 分隔线、描边 */
     val border: Color,
+    /** 进度条 / 滑块的未填充轨道：需比 border 略亮，否则深色下会与卡片底色糊成一片 */
+    val track: Color,
     /** 品牌主色：按钮填充、选中态、强调文字 */
     val accent: Color,
     /** 品牌主色的浅色容器：图标底、标签底、卡片底 */
@@ -49,6 +51,7 @@ internal val LightAppColors = AppColors(
     textSecondary = Color(0xFF5C5C5C),
     textTertiary = Color(0xFFA1A1A1),
     border = Color(0xFFECEAE7),
+    track = Color(0xFFECEAE7),
     accent = Color(0xFFBE185D),
     accentContainer = Color(0xFFFCE7F3),
     onAccent = Color(0xFFFFFFFF),
@@ -65,6 +68,8 @@ internal val DarkAppColors = AppColors(
     textSecondary = Color(0xFFAEAEB2),
     textTertiary = Color(0xFF8E8E93),
     border = Color(0xFF2C2C2E),
+    // 比 surface(#1C1C1E) 亮一档，保证「已填充/未填充」的比例能被看清
+    track = Color(0xFF3A3A3C),
     // accent 在「深底上的强调文字」与「白字按钮底」之间取平衡点：两边对比度均 ≈ 4.1:1
     accent = Color(0xFFE62E7E),
     accentContainer = Color(0xFF3D1526),
@@ -98,6 +103,9 @@ val AppTextTertiary: Color
 
 val AppBorderLight: Color
     @Composable @ReadOnlyComposable get() = LocalAppColors.current.border
+
+val AppTrack: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.track
 
 val AppAccent: Color
     @Composable @ReadOnlyComposable get() = LocalAppColors.current.accent

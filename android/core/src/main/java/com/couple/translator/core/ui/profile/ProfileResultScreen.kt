@@ -56,11 +56,11 @@ import com.couple.translator.core.ui.components.PrimaryButton
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
-import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
+import com.couple.translator.core.ui.theme.AppTrack
 import io.noties.markwon.Markwon
 
 private val dimensionNames = mapOf(
@@ -476,7 +476,7 @@ private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
             Spacer(modifier = Modifier.height(8.dp))
 
             Box(
-                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(AppBorderLight),
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(AppTrack),
             ) {
                 Box(
                     modifier = Modifier
@@ -536,7 +536,7 @@ private fun DimensionScoreItem(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Box(
-                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(AppBorderLight),
+                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(AppTrack),
             ) {
                 Box(
                     modifier = Modifier

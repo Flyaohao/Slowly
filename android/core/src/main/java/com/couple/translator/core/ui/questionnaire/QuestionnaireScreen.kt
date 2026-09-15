@@ -92,6 +92,7 @@ import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
+import com.couple.translator.core.ui.theme.AppTrack
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -237,7 +238,7 @@ fun QuestionnaireScreen(
                         .height(6.dp)
                         .clip(RoundedCornerShape(3.dp)),
                     color = AppAccent,
-                    trackColor = AppBorderLight,
+                    trackColor = AppTrack,
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(

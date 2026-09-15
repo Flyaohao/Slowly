@@ -128,26 +128,43 @@ fun DimensionRadarChart(
                 drawCircle(Color.White, radius = 2f, center = Offset(x, y))
             }
 
-            // Draw labels
+            // Draw labels（带防重叠：与已放置标签的包围盒相交时，朝圆心方向逐行错开）
+            // 为什么需要：维度数多时底部相邻两个标签的 cos 一正一负，会被分别判成
+            // LEFT / RIGHT 对齐，两段文字相向延伸，在圆的正下方叠字。
+            val labelRadius = radius + textSizePx * 2.2f
+            val rowHeight = textSizePx * 2.8f
+            val placedRects = mutableListOf<android.graphics.RectF>()
             for (i in 0 until count) {
                 val (_, label, score) = dimensions[i]
                 val angle = startAngle + angleStep * i
-                val labelRadius = radius + 28f
-                val x = centerX + labelRadius * cos(angle)
-                val y = centerY + labelRadius * sin(angle)
+                val cosA = cos(angle)
+                val align = when {
+                    cosA > 0.3f -> android.graphics.Paint.Align.LEFT
+                    cosA < -0.3f -> android.graphics.Paint.Align.RIGHT
+                    else -> android.graphics.Paint.Align.CENTER
+                }
+                val x = centerX + labelRadius * cosA
+                var anchorY = centerY + labelRadius * sin(angle)
+                // 底部标签向上挪、顶部标签向下挪，错行后不会跑出画布
+                val inward = if (sin(angle) >= 0f) -rowHeight else rowHeight
+
+                var guard = 0
+                while (guard < 4 &&
+                    placedRects.any { it.overlaps(labelBounds(x, anchorY, label, align, textSizePx)) }
+                ) {
+                    anchorY += inward
+                    guard++
+                }
+                placedRects.add(labelBounds(x, anchorY, label, align, textSizePx))
 
                 drawContext.canvas.nativeCanvas.apply {
                     val paint = android.graphics.Paint().apply {
                         color = labelColor
                         textSize = textSizePx
-                        textAlign = when {
-                            cos(angle) > 0.3f -> android.graphics.Paint.Align.LEFT
-                            cos(angle) < -0.3f -> android.graphics.Paint.Align.RIGHT
-                            else -> android.graphics.Paint.Align.CENTER
-                        }
+                        textAlign = align
                         isAntiAlias = true
                     }
-                    val textY = y + when {
+                    val textY = anchorY + when {
                         sin(angle) > 0.5f -> textSizePx * 0.4f
                         sin(angle) < -0.5f -> -textSizePx * 0.3f
                         else -> textSizePx * 0.15f
@@ -158,7 +175,7 @@ fun DimensionRadarChart(
                     val scorePaint = android.graphics.Paint().apply {
                         color = accentArgb
                         textSize = textSizePx * 0.9f
-                        textAlign = paint.textAlign
+                        textAlign = align
                         isAntiAlias = true
                         isFakeBoldText = true
                     }
@@ -168,3 +185,27 @@ fun DimensionRadarChart(
         }
     }
 }
+
+/**
+ * 标签的包围盒，用于相邻标签的防重叠检测。
+ * 中文按「1 个字符宽度 ≈ textSize」估算并留 5% 余量；纵向覆盖「标签 + 下方分数」两行。
+ */
+private fun labelBounds(
+    x: Float,
+    y: Float,
+    label: String,
+    align: android.graphics.Paint.Align,
+    textSizePx: Float,
+): android.graphics.RectF {
+    val width = label.length * textSizePx * 1.05f
+    val left = when (align) {
+        android.graphics.Paint.Align.LEFT -> x
+        android.graphics.Paint.Align.RIGHT -> x - width
+        else -> x - width / 2f
+    }
+    return android.graphics.RectF(left, y - textSizePx, left + width, y + textSizePx * 1.7f)
+}
+
+/** RectF.intersect() 会就地修改自身，这里用纯判断版本。 */
+private fun android.graphics.RectF.overlaps(other: android.graphics.RectF): Boolean =
+    left < other.right && other.left < right && top < other.bottom && other.top < bottom
