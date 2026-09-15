@@ -56,6 +56,9 @@ fun LetterDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
+    // AI 失败的提示独立于「页面加载失败」：前者只需关掉弹窗，
+    // 后者要重新拉一次数据，两者的 dismiss 行为不一样。
+    var aiError by remember { mutableStateOf("") }
 
     LaunchedEffect(letterId) {
         viewModel.loadLetter(letterId)
@@ -65,7 +68,8 @@ fun LetterDetailScreen(
         viewModel.event.collect { event ->
             when (event) {
                 is LetterDetailUiEvent.LetterDeleted -> onNavigateBack()
-                is LetterDetailUiEvent.ShowError -> {}
+                // 此前这里是空实现，导致 AI 失败时用户看不到任何反馈
+                is LetterDetailUiEvent.ShowError -> aiError = event.message
             }
         }
     }
@@ -95,6 +99,13 @@ fun LetterDetailScreen(
         ErrorDialog(
             message = uiState.error,
             onDismiss = { viewModel.loadLetter(letterId) },
+        )
+    }
+
+    if (aiError.isNotEmpty()) {
+        ErrorDialog(
+            message = aiError,
+            onDismiss = { aiError = "" },
         )
     }
 
@@ -194,21 +205,31 @@ fun LetterDetailScreen(
                     Text("回应", color = AppAccent)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                TextButton(
-                    onClick = { viewModel.understandLetter() },
-                    enabled = !uiState.isLoadingAi,
-                ) {
+                // 同一个按钮承担「开始」和「停止」两种语义：生成中它变成停止入口，
+                // 否则用户找不到中止的地方（旧版这里是禁用的「AI 理解中...」）。
+                TextButton(onClick = { viewModel.understandLetter() }) {
                     Text(
-                        if (uiState.isLoadingAi) "AI 理解中..." else "AI 帮我理解",
+                        text = when {
+                            uiState.isStreaming -> "停止生成"
+                            uiState.showUnderstanding -> "重新理解"
+                            else -> "AI 帮我理解"
+                        },
                         color = AppAccent,
                     )
                 }
             }
 
-            if (uiState.showUnderstanding && uiState.understanding != null) {
+            if (uiState.showUnderstanding) {
                 Spacer(modifier = Modifier.height(16.dp))
                 LetterUnderstandingCard(
-                    understanding = uiState.understanding!!,
+                    understanding = uiState.understanding,
+                    streamContent = uiState.streamContent,
+                    thinking = uiState.thinkingContent,
+                    isStreaming = uiState.isStreaming,
+                    isThinking = uiState.isThinking,
+                    isStructuring = uiState.isStructuring,
+                    thinkingSeconds = uiState.thinkingSeconds,
+                    status = uiState.understandingStatus,
                     onDismiss = { viewModel.dismissUnderstanding() },
                 )
             }

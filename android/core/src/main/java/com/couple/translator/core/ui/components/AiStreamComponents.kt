@@ -1,4 +1,4 @@
-package com.couple.translator.feature.couple.ai
+package com.couple.translator.core.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
@@ -40,11 +40,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
 
@@ -63,6 +65,9 @@ import com.couple.translator.core.ui.theme.AppTextTertiary
  *
  * 折叠状态用 `remember` 存本地：面板是纯展示件，不值得为它引入一层 UI 状态。
  * 但要注意 [isLive] 变化时要重置回默认态，否则"思考中展开过"会带到结束后。
+ *
+ * 2026-09-16 从 `feature:couple` 下沉到 core：信件解读、量表分析等场景也要用，
+ * 留在业务模块里会让 core/feature:single 反向依赖 feature:couple。
  */
 @Composable
 fun AiThinkingPanel(
@@ -227,5 +232,55 @@ fun AiWaitingBubble(modifier: Modifier = Modifier) {
                 }
             }
         }
+    }
+}
+
+/**
+ * 流式正文：逐字追加的文本 + 一个表示「还在写」的光标。
+ *
+ * 光标是这件事唯一的视觉信号来源——没有它，用户分不清"输出完了"和
+ * "模型卡住了"，只能干等。
+ */
+@Composable
+fun AiStreamingText(
+    content: String,
+    modifier: Modifier = Modifier,
+    isStreaming: Boolean = false,
+    color: Color = AppTextPrimary,
+) {
+    if (content.isEmpty() && !isStreaming) return
+
+    Text(
+        text = if (isStreaming) "$content▍" else content,
+        style = MaterialTheme.typography.bodyMedium,
+        color = color,
+        modifier = modifier.fillMaxWidth(),
+    )
+}
+
+/**
+ * 「正文已完成、正在整理结构化结果」的提示。
+ *
+ * 服务端的双出口协议里，正文之后还要生成一段 JSON。这段期间用户看不到内容，
+ * 如果什么都不说，会被误认为卡住（尤其它的耗时并不短）。
+ */
+@Composable
+fun AiStructuringHint(modifier: Modifier = Modifier, text: String = "正在整理要点…") {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(AppAccent),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = AppTextSecondary,
+        )
     }
 }

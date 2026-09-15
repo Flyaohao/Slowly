@@ -1,6 +1,5 @@
-import json
 import logging
-from typing import Any, Dict, Iterator
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -20,12 +19,23 @@ from app.schemas.ai_schema import (
     LetterReplyRequest,
     RewriteRequest,
 )
-from app.services import ai_service, letter_ai_service
-from app.repositories import couple_repo, ai_repo
+from app.services import ai_generation_service, ai_service, letter_ai_service
+from app.services.sse import sse_encode
+from app.repositories import ai_generation_repo, couple_repo, ai_repo
 
 logger = logging.getLogger("couple.ai")
 
 router = APIRouter(prefix="/ai", tags=["AI 翻译官"])
+
+#: SSE 响应的公共响应头。
+#:
+#: `X-Accel-Buffering: no` 不是可选项：线上前面挂着 Nginx，默认会把响应攒满
+#: 缓冲区才下发，流式效果会整个消失（表现为「等了 20 秒，然后整段蹦出来」）。
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
 
 
 def _ai_limit():
@@ -91,24 +101,6 @@ def chat(
     return ApiResponse(data=result)
 
 
-def _sse_encode(events: Iterator[Dict[str, Any]]) -> Iterator[str]:
-    """把事件字典序列化成 SSE 报文。
-
-    每帧格式：`event: <name>\\ndata: <json>\\n\\n`（空行结尾是 SSE 协议的帧分隔符）。
-    用 `ensure_ascii=False` 保持中文原样传输，`default=str` 兜底 datetime 等类型。
-
-    另支持 `{"comment": "..."}` 形式的心跳帧，输出为 SSE 注释行（以 `:` 开头）。
-    按协议注释行不属于任何事件，客户端解析器会忽略；模型思考期间用它保持
-    连接活跃，避免 readTimeout 把静默误判为断连（见 ai_service._stream_with_heartbeat）。
-    """
-    for ev in events:
-        if "comment" in ev:
-            yield ": %s\n\n" % ev["comment"]
-            continue
-        payload = json.dumps(ev["data"], ensure_ascii=False, default=str)
-        yield "event: %s\ndata: %s\n\n" % (ev["event"], payload)
-
-
 @router.post("/chat/stream")
 @_ai_limit()
 def chat_stream(
@@ -160,14 +152,9 @@ def chat_stream(
         )
 
     return StreamingResponse(
-        _sse_encode(ai_service.stream_chat_events(prepared)),
+        sse_encode(ai_service.stream_chat_events(prepared)),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            # 关闭 Nginx 缓冲，否则内容会被攒到最后一次性下发，流式效果消失
-            "X-Accel-Buffering": "no",
-        },
+        headers=_SSE_HEADERS,
     )
 
 
@@ -309,6 +296,108 @@ def understand_letter(
             detail={"code": int(code), "message": msg, "data": None},
         )
     return ApiResponse(data=result)
+
+
+@router.post("/understand-letter/stream")
+@_ai_limit()
+def understand_letter_stream(
+    request: Request,
+    req: LetterUnderstandRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """信件「AI 帮我理解」流式接口（SSE）。
+
+    与同步版 `/understand-letter` 的差异，逐条对应产品的三个诉求：
+
+    1. **不空等**：正文一个字一个字下发，推理过程走 `thinking` 帧喂给
+       「正在深度思考」面板。同步版是「转圈十几秒 → 整段蹦出来」。
+    2. **可中断**：`meta` 帧带回 `generation_id`，客户端点「停止生成」时
+       调 `/generations/{id}/cancel`，服务端立刻断掉到模型的连接。
+       客户端直接断开连接也行，只是要多等一个心跳周期。
+    3. **可回读**：结果落 `ai_generation`，退出详情页再进来直接读上次的结果，
+       不再重复扣一次模型调用。回读走 `GET /generations/letter_analysis`。
+
+    旧端点原样保留：线上客户端还没切过来，直接改造会让线上立刻不可用。
+
+    事件序列：`meta` → `thinking`* / `delta`* → `notice`（正文说完、整理
+    结构化结果中）→ `result` → `done`；失败给 `error`。空行注释帧是心跳，
+    客户端解析器应当忽略。
+    """
+    relation = couple_repo.get_active_relation_by_user(db, current_user.id)
+    if not relation:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 30005, "message": "请先绑定情侣关系", "data": None},
+        )
+
+    # 前处理必须在请求级 db 存活期间完成：它要落一条 streaming 占位记录并
+    # 返回 generation_id。异常也要在这里抛干净，别等流已经开始了才报错
+    # （那时 HTTP 头已发出，改不了状态码，客户端只能看到一个空流）。
+    try:
+        prepared = letter_ai_service.prepare_understand_letter(
+            db, current_user.id, relation.id, req.letter_id
+        )
+    except ValueError as e:
+        code = str(e)
+        error_map = {
+            "60001": (404, "信件不存在"),
+            "60002": (403, "无权访问此信件"),
+            "30005": (400, "请先绑定情侣关系"),
+        }
+        sc, msg = error_map.get(code, (500, "AI 服务异常"))
+        raise HTTPException(
+            status_code=sc,
+            detail={"code": int(code), "message": msg, "data": None},
+        )
+
+    return StreamingResponse(
+        sse_encode(ai_generation_service.stream_generation_events(prepared)),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
+
+
+@router.get("/generations/{kind}", response_model=ApiResponse)
+def get_generation(
+    kind: str,
+    target_type: str = "none",
+    target_id: Optional[int] = None,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """回读某次单次触发型 AI 生成已保存的结果。
+
+    没有记录时返回 `data: null`，客户端据此决定要不要发起新的生成——
+    这正是「退出再进来还能看到上次的解读」的实现方式：先回读，拿不到才调模型。
+
+    例：`GET /ai/generations/letter_analysis?target_type=letter&target_id=88`
+    """
+    payload = ai_generation_service.get_saved(
+        db, current_user.id, kind, target_type, target_id
+    )
+    return ApiResponse(data=payload)
+
+
+@router.post("/generations/{generation_id}/cancel", response_model=ApiResponse)
+def cancel_generation(
+    generation_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """中断一次正在进行的生成。
+
+    `cancelled=false` 不是错误：生成可能刚好自己结束了，或者服务端重启过
+    （取消信号存在进程内存里，见 `ai_stream_registry` 的说明）。
+    客户端拿到 false 只需照常收尾即可。
+    """
+    row = ai_generation_repo.get_generation_by_id(db, generation_id)
+    if not row or row.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": 50004, "message": "无权操作此生成", "data": None},
+        )
+    return ApiResponse(data={"cancelled": ai_generation_service.cancel(generation_id)})
 
 
 @router.post("/rewrite-letter", response_model=ApiResponse)

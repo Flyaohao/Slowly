@@ -1,4 +1,8 @@
+import json
 from typing import Optional
+
+from app.schemas.ai_output import inline_json_schema
+from app.services.structured_stream import STRUCTURED_MARKER
 
 
 SYSTEM_PROMPTS = {
@@ -302,6 +306,47 @@ def build_stream_prompt(
     prompt += "\n\n" + _STREAM_INSTRUCTION
 
     return prompt
+
+
+def build_structured_stream_prompt(
+    base_prompt: str,
+    output_model,
+    *,
+    content_instruction: str = "自然、口语化，像面对面说话那样",
+    max_content_chars: int = 500,
+) -> str:
+    """在结构化 Prompt 上叠加「先正文、后 JSON」的双出口流式协议。
+
+    与 `build_stream_prompt` 的分工：
+
+    - `build_stream_prompt`：**纯文本**流式。结构化字段一概不要，适合那些
+      本来就只需要一段话的场景（AI 对话）。
+    - 本函数：**双出口**流式。用户读正文、程序读 JSON，适合必须落库结构化
+      字段的场景（信件解读/改写/回信）。它只调用一次模型——如果先流式调一次
+      再结构化调一次，token 和等待都要翻倍。
+
+    实现上把 base_prompt 里的「请以 JSON 格式回复…」及其后的字段说明整段
+    截掉，换成由 Pydantic 模型现场生成的 JSON Schema。这样做的好处是
+    **字段契约只有 Pydantic 一处定义**，不会再出现「prompt 里写的字段名
+    和模型定义对不上、代码读不到值」这类漂移。
+    """
+    cut = base_prompt.find(_JSON_MARKER)
+    head = base_prompt[:cut].rstrip() if cut != -1 else base_prompt.rstrip()
+
+    schema = json.dumps(inline_json_schema(output_model), ensure_ascii=False, indent=2)
+    tail = (
+        "\n\n## 输出格式（必须严格遵守）\n"
+        "输出分为两段，第一段在前、第二段在后。\n\n"
+        "第一段：用简体中文把分析讲清楚，Markdown 分段，%s，控制在 %d 字以内。"
+        "这一段是用户直接读到的内容，因此**不要**出现「JSON」「字段」「结构化」"
+        "「Schema」这类字眼，也不要输出代码块。\n\n"
+        "第二段：另起一行，先原样输出分隔符 %s，紧接着输出一个 JSON 对象。"
+        "该对象必须严格符合下面的 Schema，字段一个都不能少。"
+        "它由程序解析、用户看不到，所以**不要**用 ``` 代码块包裹：\n%s\n\n"
+        "除这两段之外，不要输出任何多余内容（不要开场白、不要总结）。"
+        % (content_instruction, max_content_chars, STRUCTURED_MARKER, schema)
+    )
+    return head + tail
 
 
 def build_profile_report_prompt(

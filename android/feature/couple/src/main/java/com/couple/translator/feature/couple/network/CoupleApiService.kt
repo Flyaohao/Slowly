@@ -101,6 +101,34 @@ interface CoupleApiService {
     @POST("api/v1/couple/ai/understand-letter")
     suspend fun understandLetter(@Body body: LetterDto.UnderstandLetterRequest): ApiResponse<LetterDto.UnderstandLetterResponse>
 
+    /**
+     * 信件「AI 帮我理解」流式接口（SSE）。`@Streaming` 是必需的，
+     * 否则 Retrofit 会把整个响应体缓冲完才交给调用方，打字机效果直接失效。
+     *
+     * 事件序列：meta → thinking* / delta* → notice → result → done，失败给 error。
+     */
+    @Streaming
+    @POST("api/v1/couple/ai/understand-letter/stream")
+    suspend fun understandLetterStream(@Body body: LetterDto.UnderstandLetterRequest): Response<ResponseBody>
+
+    /**
+     * 回读已保存的 AI 理解。
+     *
+     * 这是「退出再进来还能看到上次解读」的关键：进详情页先读，拿到就不再调模型。
+     * `data` 为 null 表示这封信还没解读过。
+     */
+    @GET("api/v1/couple/ai/generations/letter_analysis")
+    suspend fun getLetterUnderstanding(
+        @Query("target_type") targetType: String = "letter",
+        @Query("target_id") targetId: Long,
+    ): ApiResponse<LetterDto.LetterGenerationPayload>
+
+    /** 中断正在进行的生成，服务端会立刻停止向模型取数。 */
+    @POST("api/v1/couple/ai/generations/{generation_id}/cancel")
+    suspend fun cancelGeneration(
+        @Path("generation_id") generationId: Long,
+    ): ApiResponse<LetterDto.CancelGenerationResponse>
+
     @POST("api/v1/couple/ai/rewrite-letter")
     suspend fun rewriteLetter(@Body body: LetterDto.RewriteLetterRequest): ApiResponse<LetterDto.RewriteLetterResponse>
 

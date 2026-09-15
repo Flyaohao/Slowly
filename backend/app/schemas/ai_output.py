@@ -245,6 +245,14 @@ def inline_json_schema(model) -> Dict[str, Any]:
     schema = model.model_json_schema()
     defs = schema.pop("$defs", {})
 
+    # Pydantic v2 会把这个模型类的 docstring 自动放进顶层 `description`，
+    # 而我们的 docstring 是写给开发者看的（里面会提到别的模型类名、
+    # 以及「不要合并」这类内部约定）。一旦随 Schema 发给模型，模型很可能
+    # 把它当成一个真实字段照抄进输出 JSON —— 2026-09-16 实测发生过。
+    # 顶层 `title` 同理，纯噪音。字段级的 description 要保留，那是有效约束。
+    schema.pop("description", None)
+    schema.pop("title", None)
+
     def _resolve(node):
         if isinstance(node, dict):
             if "$ref" in node:

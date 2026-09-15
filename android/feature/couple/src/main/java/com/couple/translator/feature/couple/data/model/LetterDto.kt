@@ -137,4 +137,99 @@ object LetterDto {
     data class BatchDeleteResponse(
         @Json(name = "deleted_count") val deletedCount: Int = 0,
     )
+
+    // ------------------------------------------------------------------ //
+    // 流式解读（SSE）+ 结果回读
+    // ------------------------------------------------------------------ //
+
+    /** `meta` 帧。带回 `generationId`——用户点「停止生成」时要靠它告诉服务端停手。 */
+    @JsonClass(generateAdapter = true)
+    data class LetterStreamMeta(
+        @Json(name = "generation_id") val generationId: Long = 0,
+        @Json(name = "generation_kind") val generationKind: String = "",
+        @Json(name = "target_id") val targetId: Long? = null,
+    )
+
+    /** `thinking` / `delta` 帧的载荷，形状相同（都是 `{"content": "..."}`）。 */
+    @JsonClass(generateAdapter = true)
+    data class LetterStreamChunk(
+        @Json(name = "content") val content: String = "",
+    )
+
+    /** `notice` 帧：正文已说完，服务端正在整理结构化结果（`stage = "structuring"`）。 */
+    @JsonClass(generateAdapter = true)
+    data class LetterStreamNotice(
+        @Json(name = "stage") val stage: String = "",
+    )
+
+    /** `done` 帧：终态，携带完整正文、思考过程与结构化字段。 */
+    @JsonClass(generateAdapter = true)
+    data class LetterStreamDone(
+        @Json(name = "generation_id") val generationId: Long = 0,
+        @Json(name = "status") val status: String = "done",
+        @Json(name = "interrupted") val interrupted: Boolean = false,
+        @Json(name = "content") val content: String = "",
+        @Json(name = "thinking") val thinking: String = "",
+        @Json(name = "structured_output") val structuredOutput: LetterUnderstanding? = null,
+        @Json(name = "risk_level") val riskLevel: String = "normal",
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class LetterStreamError(
+        @Json(name = "code") val code: Int = 50000,
+        @Json(name = "message") val message: String = "AI 服务异常，请稍后重试",
+    )
+
+    /**
+     * 生成结果的回读载荷（后端 `ai_generation` 表的一行）。
+     *
+     * `structuredOutput` 直接声明成 [LetterUnderstanding] 而不是通用 Map，
+     * 让 Moshi 一次解析到位——否则调用方还得自己再做一次类型转换。
+     */
+    @JsonClass(generateAdapter = true)
+    data class LetterGenerationPayload(
+        @Json(name = "generation_id") val generationId: Long = 0,
+        @Json(name = "status") val status: String = "",
+        @Json(name = "content") val content: String = "",
+        @Json(name = "thinking") val thinking: String = "",
+        @Json(name = "structured_output") val structuredOutput: LetterUnderstanding? = null,
+        @Json(name = "risk_level") val riskLevel: String = "normal",
+        @Json(name = "updated_at") val updatedAt: String? = null,
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class CancelGenerationResponse(
+        @Json(name = "cancelled") val cancelled: Boolean = false,
+    )
+
+    /**
+     * 信件解读的流式事件。
+     *
+     * UI 只消费它，不关心线上报文——服务端改帧名、加字段都不会波及 ViewModel。
+     */
+    sealed interface LetterStreamEvent {
+        /** 服务端已就绪，带回 generationId */
+        data class Started(val generationId: Long) : LetterStreamEvent
+
+        /** 模型推理过程增量，只喂「深度思考」面板，不参与正文拼接 */
+        data class Thinking(val content: String) : LetterStreamEvent
+
+        /** 正文增量，逐块追加即得打字机效果 */
+        data class Delta(val content: String) : LetterStreamEvent
+
+        /** 正文结束，正在整理结构化结果 */
+        data object Structuring : LetterStreamEvent
+
+        data class Finished(
+            val generationId: Long,
+            val status: String,
+            val interrupted: Boolean,
+            val content: String,
+            val thinking: String,
+            val structured: LetterUnderstanding?,
+            val riskLevel: String,
+        ) : LetterStreamEvent
+
+        data class Failure(val code: Int, val message: String) : LetterStreamEvent
+    }
 }

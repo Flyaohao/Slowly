@@ -27,6 +27,7 @@ from app.models.ai import (
     AiKnowledgeChunk,
     AiMemory,
 )
+from app.models.ai_generation import AiGeneration
 from app.models.letter import Letter
 from app.models.dual_perspective import DualPerspectiveEvent, DualPerspectiveRecord
 from app.models.museum import MuseumItem
@@ -64,6 +65,7 @@ __all__ = [
     "AiKnowledgeDoc",
     "AiKnowledgeChunk",
     "AiMemory",
+    "AiGeneration",
     "Letter",
     "DualPerspectiveEvent",
     "DualPerspectiveRecord",

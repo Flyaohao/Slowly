@@ -1,13 +1,16 @@
 package com.couple.translator.feature.couple.data.repository
 
 import com.couple.translator.core.data.model.AiDto
+import com.couple.translator.core.network.sseFrames
 import com.couple.translator.feature.couple.network.CoupleApiService
 import com.squareup.moshi.Moshi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.mapNotNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -68,12 +71,11 @@ class AiRepository @Inject constructor(
     /**
      * SSE 流式对话。
      *
-     * 为什么直接读 okio 的行而不是用 EventSource 之类的库：
-     * 服务端报文是极简的三行帧（`event:` / `data:` / 空行），
-     * 自己解析既能保证「收到即 emit」的实时性，也避免再引一个依赖。
+     * 报文解析交给 `core.network.sseFrames()`——信件解读、量表分析等场景走的是
+     * 同一套 SSE 报文格式，各自抄一份解析器迟早会抄出不一致。
+     * 这里只负责把通用帧翻译成聊天语义的事件。
      *
-     * 注意 `body.use { }` 里的 `emit` 之所以合法，是因为 `use` 是 inline 函数，
-     * 且整个 flow 构建块本身处于 suspend 上下文。
+     * `body.use { }` 不是可省的：它保证流被取消或异常时立刻关闭 HTTP 连接。
      */
     fun chatStream(request: AiDto.ChatRequest): Flow<AiDto.ChatStreamEvent> = flow {
         val response = try {
@@ -95,28 +97,8 @@ class AiRepository @Inject constructor(
         }
 
         body.use { rb ->
-            val source = rb.source()
-            var eventName: String? = null
-            val dataBuf = StringBuilder()
-
-            while (true) {
-                val line = source.readUtf8Line() ?: break
-                when {
-                    // 空行 = 一帧结束，此时才派发
-                    line.isEmpty() -> {
-                        val name = eventName
-                        if (name != null) {
-                            // decode 可能返回 null（该帧无需派发），此时静默跳过
-                            decode(name, dataBuf.toString())?.let { emit(it) }
-                        }
-                        eventName = null
-                        dataBuf.setLength(0)
-                    }
-
-                    line.startsWith("event:") -> eventName = line.substring(6).trim()
-                    line.startsWith("data:") -> dataBuf.append(line.substring(5).trim())
-                }
-            }
+            // decode 返回 null 表示该帧无需派发（如解析失败的 thinking 帧），静默跳过
+            emitAll(rb.sseFrames().mapNotNull { frame -> decode(frame.event, frame.data) })
         }
     }.catch { e ->
         // 连接中断也要收敛成终态事件，否则 UI 的 isStreaming 永远为 true

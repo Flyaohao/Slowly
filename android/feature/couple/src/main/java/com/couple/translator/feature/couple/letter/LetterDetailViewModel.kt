@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.couple.translator.feature.couple.data.model.LetterDto
 import com.couple.translator.feature.couple.data.repository.LetterRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -17,12 +18,30 @@ import javax.inject.Inject
 
 data class LetterDetailUiState(
     val letter: LetterDto.LetterResponse? = null,
+    /** 结构化解读结果。流式期间为 null，`done` 帧到达后才填上。 */
     val understanding: LetterDto.LetterUnderstanding? = null,
+    /** 流式正文，逐字增长。流结束后会被服务端下发的终稿覆盖（去掉了尾部空行）。 */
+    val streamContent: String = "",
+    /** 推理模型的思考过程累积，只喂「深度思考」面板。 */
+    val thinkingContent: String = "",
     val isLoading: Boolean = false,
-    val isLoadingAi: Boolean = false,
+    /** 是否正在生成（思考中、正文中、整理结构化结果中都算）。 */
+    val isStreaming: Boolean = false,
+    /** 正在思考：收到了思考增量，正文还没开始。 */
+    val isThinking: Boolean = false,
+    /** 正文已说完，正在整理结构化结果。 */
+    val isStructuring: Boolean = false,
+    /** 从发问到出正文之间的等待秒数。 */
+    val thinkingSeconds: Int = 0,
+    /** 是否展示解读面板。 */
     val showUnderstanding: Boolean = false,
+    /** 最近一次生成的状态：done / interrupted。中断的半成品同样会保留展示。 */
+    val understandingStatus: String = "",
     val error: String = "",
-)
+) {
+    /** 解读结果是否已经拿到了结构化字段（决定渲染要点卡片还是纯正文）。 */
+    val hasStructured: Boolean get() = understanding != null
+}
 
 sealed class LetterDetailUiEvent {
     data class ShowError(val message: String) : LetterDetailUiEvent()
@@ -40,6 +59,20 @@ class LetterDetailViewModel @Inject constructor(
     private val _event = MutableSharedFlow<LetterDetailUiEvent>()
     val event: SharedFlow<LetterDetailUiEvent> = _event.asSharedFlow()
 
+    /** 当前这次生成的协程。持有它才能让用户主动叫停。 */
+    private var streamJob: Job? = null
+    /** 服务端分配的生成 id，取消时要回传。 */
+    private var generationId: Long = 0
+    private var streamStartedAt: Long = 0
+
+    /**
+     * 用户是否按了「停止生成」。
+     *
+     * 用途是抑制后续事件：停止后流还可能吐出一两个残留帧，若照单全收，
+     * 刚清空的正文会突然又冒出来一截。
+     */
+    private var stopRequested = false
+
     fun loadLetter(id: Long) {
         _uiState.update { it.copy(isLoading = true, error = "") }
         viewModelScope.launch {
@@ -53,6 +86,36 @@ class LetterDetailViewModel @Inject constructor(
                     }
                 },
             )
+        }
+        loadSavedUnderstanding(id)
+    }
+
+    /**
+     * 回读上次的解读。
+     *
+     * 这是「退出再进来还能看到」的落点：结果早就存在服务端的 `ai_generation` 里，
+     * 页面进来先读一次即可，不必重新扣一次模型调用。
+     *
+     * 拿不到就静默结束——「这封信还没解读过」是正常状态，不该弹报错。
+     */
+    private fun loadSavedUnderstanding(id: Long) {
+        viewModelScope.launch {
+            letterRepository.getSavedUnderstanding(id).onSuccess { payload ->
+                if (payload == null) return@onSuccess
+                // 只有正文和结构化字段都没有时才认为「没东西可显示」，
+                // 那种情况通常是上次生成直接失败了，不如留白让用户手点。
+                val hasSomething = payload.content.isNotBlank() || payload.structuredOutput != null
+                if (!hasSomething) return@onSuccess
+                _uiState.update {
+                    it.copy(
+                        understanding = payload.structuredOutput,
+                        streamContent = payload.content,
+                        thinkingContent = payload.thinking,
+                        understandingStatus = payload.status,
+                        showUnderstanding = true,
+                    )
+                }
+            }
         }
     }
 
@@ -70,25 +133,116 @@ class LetterDetailViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 拉取 / 重新拉取 AI 理解。
+     *
+     * 流式生成期间再点一次等价于「停止生成」——按钮在 UI 上也是这么变化的，
+     * 免得用户找不到中止的地方。
+     */
     fun understandLetter() {
+        if (_uiState.value.isStreaming) {
+            stopUnderstanding()
+            return
+        }
+
         val letter = _uiState.value.letter ?: return
-        _uiState.update { it.copy(isLoadingAi = true) }
-        viewModelScope.launch {
-            letterRepository.understandLetter(letter.id).fold(
-                onSuccess = { understanding ->
-                    _uiState.update {
+
+        stopRequested = false
+        generationId = 0
+        streamStartedAt = System.currentTimeMillis()
+
+        _uiState.update {
+            it.copy(
+                isStreaming = true,
+                isThinking = true,
+                isStructuring = false,
+                streamContent = "",
+                thinkingContent = "",
+                understanding = null,
+                thinkingSeconds = 0,
+                understandingStatus = "",
+                showUnderstanding = true,
+                error = "",
+            )
+        }
+
+        streamJob = viewModelScope.launch {
+            letterRepository.understandLetterStream(letter.id).collect { ev ->
+                when (ev) {
+                    is LetterDto.LetterStreamEvent.Started -> generationId = ev.generationId
+
+                    // 思考增量只喂「深度思考」面板，不拼进正文
+                    is LetterDto.LetterStreamEvent.Thinking -> _uiState.update {
+                        it.copy(thinkingContent = it.thinkingContent + ev.content)
+                    }
+
+                    is LetterDto.LetterStreamEvent.Delta -> _uiState.update {
                         it.copy(
-                            understanding = understanding,
-                            isLoadingAi = false,
-                            showUnderstanding = true,
+                            streamContent = it.streamContent + ev.content,
+                            // 正文一开始，思考就结束了：面板转为折叠并标注耗时
+                            isThinking = false,
+                            isStructuring = false,
+                            thinkingSeconds = it.thinkingSeconds
+                                .takeIf { s -> s > 0 } ?: elapsedSeconds(),
                         )
                     }
-                },
-                onFailure = { error ->
-                    _uiState.update { it.copy(isLoadingAi = false) }
-                    _event.emit(LetterDetailUiEvent.ShowError(error.message ?: "AI 理解失败"))
-                },
+
+                    is LetterDto.LetterStreamEvent.Structuring -> _uiState.update {
+                        it.copy(isStructuring = true, isThinking = false)
+                    }
+
+                    is LetterDto.LetterStreamEvent.Finished -> finishStream(ev)
+
+                    is LetterDto.LetterStreamEvent.Failure -> if (!stopRequested) {
+                        _uiState.update {
+                            it.copy(isStreaming = false, isThinking = false, isStructuring = false)
+                        }
+                        _event.emit(LetterDetailUiEvent.ShowError(ev.message))
+                    }
+                }
+            }
+
+            // 兜底：服务端如果没发 done 就断开，这里把状态收敛掉，
+            // 否则「生成中」会一直挂着，按钮永远停在「停止生成」。
+            if (!stopRequested && _uiState.value.isStreaming) {
+                _uiState.update {
+                    it.copy(isStreaming = false, isThinking = false, isStructuring = false)
+                }
+            }
+        }
+    }
+
+    /**
+     * 用户点「停止生成」。
+     *
+     * 顺序很讲究：**先改本地状态，再通知服务端**。本地立即响应，用户按下去
+     * 就见效；服务端那边要断开连接、通知模型停手，存在一两秒延迟，
+     * 等它回来才更新界面的话，按钮就像没反应。
+     *
+     * 注意「停止」不等于「丢弃」：已经生成的那半段照常留在界面上，
+     * 服务端也会以 `interrupted` 状态把它存下来，下次进来还能看到。
+     */
+    fun stopUnderstanding() {
+        if (!_uiState.value.isStreaming) return
+        stopRequested = true
+
+        _uiState.update {
+            it.copy(
+                isStreaming = false,
+                isThinking = false,
+                isStructuring = false,
+                understandingStatus = "interrupted",
+                showUnderstanding = it.streamContent.isNotBlank() || it.understanding != null,
             )
+        }
+
+        val id = generationId
+        viewModelScope.launch {
+            if (id != 0L) {
+                letterRepository.cancelGeneration(id)
+            }
+            // 后端停手后连接会收尾，这里再主动取消一次，让 body 尽早关闭
+            streamJob?.cancel()
         }
     }
 
@@ -108,5 +262,29 @@ class LetterDetailViewModel @Inject constructor(
                 },
             )
         }
+    }
+
+    private fun finishStream(ev: LetterDto.LetterStreamEvent.Finished) {
+        _uiState.update {
+            it.copy(
+                understanding = ev.structured,
+                // 用服务端终稿覆盖流式拼接：它去掉了正文与分隔符之间的空行，
+                // 也保证界面显示的和库里存的是同一份。
+                streamContent = ev.content.ifBlank { it.streamContent },
+                thinkingContent = ev.thinking.ifBlank { it.thinkingContent },
+                understandingStatus = ev.status,
+                isStreaming = false,
+                isThinking = false,
+                isStructuring = false,
+                showUnderstanding = true,
+            )
+        }
+    }
+
+    /** 从发问算起的等待秒数，至少 1 秒（避免显示「已深度思考 0 秒」）。 */
+    private fun elapsedSeconds(): Int {
+        if (streamStartedAt == 0L) return 0
+        val seconds = ((System.currentTimeMillis() - streamStartedAt) / 1000).toInt()
+        return seconds.coerceAtLeast(1)
     }
 }

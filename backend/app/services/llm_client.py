@@ -14,9 +14,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
+import threading
 import time
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Type
 
@@ -53,6 +55,41 @@ _MODEL_UNAVAILABLE_CODES = (
 
 class LlmError(RuntimeError):
     """LLM 调用异常（已完成重试与降级仍然失败）"""
+
+
+@contextlib.contextmanager
+def _cancel_scope(
+    cancel_event: Optional[threading.Event], resp: httpx.Response
+) -> Iterator[None]:
+    """在 `cancel_event` 被置位时立刻关闭底层 HTTP 响应。
+
+    **为什么不能只在 for 循环里判断标志位**：`resp.iter_lines()` 是阻塞读取，
+    模型思考期间可能长时间没有新字节，循环根本转不到下一圈，标志位判了也白判。
+    真正能立刻解除阻塞的只有 `resp.close()`——它让读取端抛错返回。
+    因此这里单开一个守护线程盯着信号，而不是污染主读取循环。
+    """
+    if cancel_event is None:
+        yield
+        return
+
+    finished = threading.Event()
+
+    def _watch() -> None:
+        # 轮询而非 wait()：既要能被 cancel_event 唤醒，也要能在正常结束时退出。
+        while not finished.is_set():
+            if cancel_event.wait(timeout=0.2):
+                try:
+                    resp.close()
+                except Exception:  # noqa: BLE001 —— 关闭失败无关紧要，读取端自会报错
+                    logger.debug("[LLM] 取消时关闭响应失败", exc_info=True)
+                return
+
+    watcher = threading.Thread(target=_watch, daemon=True, name="llm-cancel")
+    watcher.start()
+    try:
+        yield
+    finally:
+        finished.set()
 
 
 class LlmClient:
@@ -120,8 +157,14 @@ class LlmClient:
         temperature: float = 0.7,
         max_tokens: int = 2000,
         scene: str = "unknown",
+        cancel_event: Optional[threading.Event] = None,
     ) -> Iterator[Tuple[str, str]]:
         """流式调用，逐块产出 `(kind, text)`。
+
+        `cancel_event` 是可选的取消信号：一旦被置位，本方法会**立刻关闭**
+        正在读取的 HTTP 响应并安静返回（不抛异常）。这是服务端主动中断的
+        落地方式——用户点了「停止生成」之后，不能再让模型把剩下的话说完，
+        否则 token 白烧、账单照付。
 
         `kind` 取 `KIND_THINKING`（模型的推理过程，来自 `reasoning_content`）
         或 `KIND_CONTENT`（面向用户的正文，来自 `content`）。
@@ -169,28 +212,34 @@ class LlmClient:
                                 continue
                             raise LlmError("流式调用失败 HTTP %s: %s" % (resp.status_code, last_error))
 
-                        for line in resp.iter_lines():
-                            if not line:
-                                continue
-                            if line.startswith("data:"):
-                                line = line[5:].strip()
-                            if line == "[DONE]":
-                                break
-                            try:
-                                event = json.loads(line)
-                            except ValueError:
-                                continue
+                        with _cancel_scope(cancel_event, resp):
+                            for line in resp.iter_lines():
+                                if not line:
+                                    continue
+                                if line.startswith("data:"):
+                                    line = line[5:].strip()
+                                if line == "[DONE]":
+                                    break
+                                try:
+                                    event = json.loads(line)
+                                except ValueError:
+                                    continue
 
-                            reasoning = self._extract_reasoning(event)
-                            if reasoning:
-                                thinking_chunks += 1
-                                yield self.KIND_THINKING, reasoning
+                                reasoning = self._extract_reasoning(event)
+                                if reasoning:
+                                    thinking_chunks += 1
+                                    yield self.KIND_THINKING, reasoning
 
-                            delta = self._extract_delta(event)
-                            if delta:
-                                content_chunks += 1
-                                yield self.KIND_CONTENT, delta
+                                delta = self._extract_delta(event)
+                                if delta:
+                                    content_chunks += 1
+                                    yield self.KIND_CONTENT, delta
             except httpx.HTTPError as exc:
+                if cancel_event is not None and cancel_event.is_set():
+                    # 调用方主动取消：连接是我们自己关掉的，不是故障。
+                    # 安静收尾，不要把「取消」当成异常抛给上层。
+                    logger.info("[LLM] 流式已被调用方取消 scene=%s model=%s", scene, model)
+                    return
                 last_error = "网络异常: %s" % exc
                 if thinking_chunks == 0 and content_chunks == 0:
                     logger.warning("[LLM] 流式 %s 请求异常，尝试下一个模型: %s", model, exc)

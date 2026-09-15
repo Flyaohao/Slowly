@@ -2,7 +2,16 @@ from sqlalchemy.orm import Session
 from typing import Optional, Dict
 
 from app.repositories import letter_repo, couple_repo, profile_repo
+from app.schemas.ai_output import LetterAnalysisOutput
+from app.services import ai_generation_service
 from app.services.ai_service import _call_llm, _format_profile, _get_partner_id
+from app.services.prompt_builder import build_structured_stream_prompt
+
+#: 落 `ai_generation` 时用的生成类型。同时也是回读端点里的 `kind` 参数值，
+#: 客户端与后端两侧都靠它定位「某封信的解读」，改名会同时打断两边。
+GENERATION_KIND_UNDERSTAND = "letter_analysis"
+#: 生成结果挂靠的实体类型
+TARGET_TYPE_LETTER = "letter"
 
 
 LETTER_UNDERSTAND_PROMPT = """你是一位专业的信件解读师，用户想深入理解伴侣写的一封信。
@@ -120,6 +129,85 @@ def understand_letter(db: Session, user_id: int, letter_id: int) -> dict:
             "reply_suggestions": ai_response.get("reply_suggestions", []),
             "risk_level": ai_response.get("risk_level", "normal"),
         },
+    }
+
+
+def _load_letter_in_relation(db: Session, relation_id: int, letter_id: int):
+    """取信件并校验它属于当前关系。"""
+    letter = letter_repo.get_letter_by_id(db, letter_id)
+    if not letter:
+        raise ValueError("60001")
+    if letter.relation_id != relation_id:
+        raise ValueError("60002")
+    return letter
+
+
+def _sender_profile_text(db: Session, sender_id: int) -> str:
+    profile = profile_repo.get_latest_profile(db, sender_id)
+    scores = {}
+    if profile:
+        dims = profile_repo.get_dimension_scores(db, profile.id)
+        scores = {d.dimension_key: d.score for d in dims}
+    return _format_profile(profile, scores)
+
+
+def prepare_understand_letter(
+    db: Session, user_id: int, relation_id: int, letter_id: int
+) -> dict:
+    """流式版「AI 帮我理解」的前处理：校验权限 → 拼 Prompt → 占位生成记录。
+
+    和同步版 `understand_letter` 的关系：**共用同一份 Prompt 文本和同一个
+    输出模型**（`LETTER_UNDERSTAND_PROMPT` + `LetterAnalysisOutput`），
+    只在输出协议上分叉——同步版走 Function Calling 一次性拿 JSON，
+    这里用 `build_structured_stream_prompt` 改成「先流式正文、后附 JSON」。
+
+    必须在请求级 db 存活时调用：`begin()` 要落一条 `streaming` 占位记录，
+    并把它的 id 作为 `generation_id` 交给客户端用于中断。
+    """
+    letter = _load_letter_in_relation(db, relation_id, letter_id)
+    sender_profile_text = _sender_profile_text(db, letter.sender_id)
+
+    base_prompt = LETTER_UNDERSTAND_PROMPT.format(
+        sender_profile=sender_profile_text,
+        letter_title=letter.title,
+        letter_content=letter.content,
+    )
+    prompt = build_structured_stream_prompt(
+        base_prompt,
+        LetterAnalysisOutput,
+        content_instruction=(
+            "像在跟用户逐层拆解这封信：先说清对方此刻的情绪，"
+            "再说他最在意的是什么、期待你怎样回应，最后给出几条可以直接用的回信方向"
+        ),
+        max_content_chars=600,
+    )
+
+    generation_id, cancel_event = ai_generation_service.begin(
+        db,
+        user_id=user_id,
+        relation_id=relation_id,
+        generation_kind=GENERATION_KIND_UNDERSTAND,
+        scene_key="letter_analysis",
+        target_type=TARGET_TYPE_LETTER,
+        target_id=letter_id,
+    )
+
+    return {
+        "generation_id": generation_id,
+        "cancel_event": cancel_event,
+        "generation_kind": GENERATION_KIND_UNDERSTAND,
+        "scene_key": "letter_analysis",
+        "target_type": TARGET_TYPE_LETTER,
+        "target_id": letter_id,
+        "user_id": user_id,
+        "relation_id": relation_id,
+        "prompt": prompt,
+        "output_model": LetterAnalysisOutput,
+        "temperature": 0.7,
+        # 双出口协议下，这条上限要同时容纳「思考 + 正文 + 结构化 JSON」。
+        # 实测推理模型的思考能到 1.1 万字，若上限卡在 2000，正文之后的 JSON
+        # 会被截断，结构化字段整批丢失（2026-09-16 实测）。留足额度。
+        "max_tokens": 4000,
     }
 
 

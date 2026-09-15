@@ -1,6 +1,4 @@
 import logging
-import queue
-import threading
 
 from sqlalchemy.orm import Session
 from typing import Any, Dict, Iterator, List, Optional, Tuple
@@ -25,6 +23,7 @@ from app.services.safety_service import (
 from app.services.rag_service import retrieve_chunks, build_rag_context
 from app.services.memory_service import get_memory_context, distill_in_background
 from app.services.llm_client import llm, LlmError
+from app.services.sse import HEARTBEAT_INTERVAL, stream_with_heartbeat
 
 logger = logging.getLogger("couple.ai")
 
@@ -258,58 +257,22 @@ def prepare_chat(
     }
 
 
-#: 流式心跳间隔（秒）。取值要明显小于客户端 readTimeout 与 Nginx proxy_read_timeout
-_HEARTBEAT_INTERVAL = 8.0
-
-
 def _stream_with_heartbeat(
-    prompt: str, scene_key: str, interval: float = _HEARTBEAT_INTERVAL
+    prompt: str, scene_key: str, interval: float = HEARTBEAT_INTERVAL
 ) -> Iterator[Optional[Tuple[str, str]]]:
     """产出 `(kind, text)` 增量，静默期产出 `None` 作为心跳信号。
 
-    `kind` 为 `llm.KIND_THINKING`（模型推理过程）或 `llm.KIND_CONTENT`（正文）。
-
-    **为什么需要心跳**：推理模型的思考期不产出正文，而 SSE 连接恰恰在静默期
-    最脆弱——客户端 okhttp readTimeout 与 Nginx proxy_read_timeout 都会把
-    「长时间无数据」判定为断连。
-
-    2026-09-14 起思考增量本身也会下推（`event: thinking`），首帧实测约 0.5s，
-    静默期从近 20s 缩短到毫秒级；心跳遂退化为**兜底**：模型连推理都不吐
-    （例如纯文本模型或网络卡顿）时，仍保证连接有字节流动。
-
-    做法：把真正的调用丢到后台线程，主生成器只在队列上等待；超时即产出 `None`，
-    由调用方翻译成 SSE 注释帧。这样连接始终有字节流动，而协议语义不变。
+    真正的实现在 `app.services.sse.stream_with_heartbeat`（心跳机制、取消信号、
+    后台线程的说明都在那边），这里只做一层「单条 system prompt」的适配，
+    免得每个调用方都手写一遍消息结构。
     """
-    q: "queue.Queue[Any]" = queue.Queue()
-    _END = object()
-
-    def _worker() -> None:
-        try:
-            for item in llm.stream_events(
-                [{"role": "system", "content": prompt}],
-                temperature=0.7,
-                max_tokens=1200,
-                scene=scene_key,
-            ):
-                q.put(item)
-        except BaseException as exc:  # noqa: BLE001 —— 原样抛回主线程处理
-            q.put(exc)
-        finally:
-            q.put(_END)
-
-    threading.Thread(target=_worker, daemon=True, name="llm-stream").start()
-
-    while True:
-        try:
-            item = q.get(timeout=interval)
-        except queue.Empty:
-            yield None
-            continue
-        if item is _END:
-            return
-        if isinstance(item, BaseException):
-            raise item
-        yield item
+    return stream_with_heartbeat(
+        [{"role": "system", "content": prompt}],
+        scene_key,
+        temperature=0.7,
+        max_tokens=1200,
+        interval=interval,
+    )
 
 
 def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:

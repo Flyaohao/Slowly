@@ -60,6 +60,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.AiDto
+import com.couple.translator.core.ui.components.AiThinkingPanel
+import com.couple.translator.core.ui.components.AiWaitingBubble
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppFilterChip
 import com.couple.translator.core.ui.components.AppPageHeader
