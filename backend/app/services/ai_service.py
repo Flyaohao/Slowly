@@ -10,12 +10,15 @@ from app.repositories import (
     ai_repo,
     profile_repo,
     couple_repo,
+    safety_repo,
 )
 from app.services.prompt_builder import build_prompt, build_stream_prompt
 from app.services.scene_router import get_scene_config
 from app.services.safety_service import (
     check_input_safety,
     check_output_safety,
+    check_input_safety_detail,
+    check_output_safety_detail,
     get_safety_response,
     merge_risk_levels,
 )
@@ -46,8 +49,10 @@ def _preprocess(
     if not scene:
         raise ValueError("50001")
 
-    input_risk = check_input_safety(user_input)
+    input_risk, input_hits = check_input_safety_detail(user_input)
     if input_risk != "normal":
+        # 审计旁路：自带会话，失败不影响拦截响应
+        safety_repo.log_event(user_id, scene_key, "input", input_risk, input_hits)
         return {
             "blocked": get_safety_response(input_risk),
             "risk_level": input_risk,
@@ -172,8 +177,9 @@ def chat(
     # theory_refs / scene / scene_key 被静默丢弃——两份 schema 并存且互相矛盾。
     structured = ai_response
 
-    output_risk = check_output_safety(str(ai_response))
+    output_risk, output_hits = check_output_safety_detail(str(ai_response))
     if output_risk != "normal":
+        safety_repo.log_event(user_id, scene_key, "output", output_risk, output_hits)
         structured["risk_level"] = output_risk
         safety_resp = get_safety_response(output_risk)
         structured["safety_notice"] = safety_resp
@@ -382,7 +388,11 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
         }
         return
 
-    output_risk = check_output_safety(full_text)
+    output_risk, output_hits = check_output_safety_detail(full_text)
+    if output_risk != "normal":
+        safety_repo.log_event(
+            prepared.get("user_id"), prepared["scene_key"], "output", output_risk, output_hits
+        )
     structured: Dict[str, Any] = {
         "raw_text": full_text,
         "streamed": True,

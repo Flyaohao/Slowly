@@ -8,7 +8,6 @@ from fastapi.exception_handlers import (
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -45,7 +44,6 @@ app = FastAPI(
 
 app.add_middleware(RequestLogMiddleware)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -141,6 +139,19 @@ def _split_detail(status_code: int, detail):
     if isinstance(detail, str):
         return fallback_code, detail, None
     return fallback_code, "请求失败", None
+
+
+@app.exception_handler(RateLimitExceeded)
+async def unified_rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """限流触发（slowapi）。
+
+    不用 slowapi 自带的处理器：它返回 429 + `{"error": ...}`，既绕开了
+    `{code, message, data}` 统一封装，客户端也读不到人话。这里归一化成
+    HTTP 200 + 业务码 10029，文案可读；原始 429 保留在日志里。
+    """
+    return _respond_business_error(
+        request, 429, 10029, "请求太频繁啦，请休息一会儿再试", None
+    )
 
 
 @app.exception_handler(StarletteHTTPException)

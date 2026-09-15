@@ -30,3 +30,8 @@ SMTP_AUTH_CODE: str = os.getenv("SMTP_AUTH_CODE", "")
 EMAIL_FROM: str = os.getenv("EMAIL_FROM", SMTP_USER)
 #: true 时验证码不真实发信：写库+打日志，forgot-password 返回 dev_code 便于联调
 EMAIL_DEV_MODE: bool = os.getenv("EMAIL_DEV_MODE", "false").lower() == "true"
+
+# ---- AI 安全护栏 ----
+#: AI 端点按用户限流（slowapi 语法）。AI 调用是重资源操作（推理模型单次 ~30s），
+#: 防刷同时也是成本保护。0 或空串表示关闭。
+AI_RATE_LIMIT: str = os.getenv("AI_RATE_LIMIT", "20/hour")

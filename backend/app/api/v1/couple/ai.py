@@ -2,12 +2,14 @@ import json
 import logging
 from typing import Any, Dict, Iterator
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.core import config
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.limiter import limiter, get_request_key
 from app.schemas.common import ApiResponse
 from app.schemas.ai_schema import (
     AgentRequest,
@@ -26,6 +28,16 @@ logger = logging.getLogger("couple.ai")
 router = APIRouter(prefix="/ai", tags=["AI 翻译官"])
 
 
+def _ai_limit():
+    """AI 端点限流装饰器。`AI_RATE_LIMIT` 为空或 0 时完全关闭（identity 装饰器）。
+
+    不能直接把 "0/hour" 交给 slowapi——那意味着「每小时 0 次」= 全部拒绝。
+    """
+    if config.AI_RATE_LIMIT and config.AI_RATE_LIMIT not in ("0", "0/hour"):
+        return limiter.limit(config.AI_RATE_LIMIT, key_func=get_request_key)
+    return lambda f: f
+
+
 @router.get("/scenes", response_model=ApiResponse)
 def get_scenes(db: Session = Depends(get_db)):
     scenes = ai_repo.get_all_scenes(db)
@@ -36,7 +48,9 @@ def get_scenes(db: Session = Depends(get_db)):
 
 
 @router.post("/chat", response_model=ApiResponse)
+@_ai_limit()
 def chat(
+    request: Request,
     req: ChatRequest,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -96,7 +110,9 @@ def _sse_encode(events: Iterator[Dict[str, Any]]) -> Iterator[str]:
 
 
 @router.post("/chat/stream")
+@_ai_limit()
 def chat_stream(
+    request: Request,
     req: ChatRequest,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -233,7 +249,9 @@ def delete_session(
 
 
 @router.post("/rewrite", response_model=ApiResponse)
+@_ai_limit()
 def rewrite_expression(
+    request: Request,
     req: RewriteRequest,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -269,7 +287,9 @@ def rewrite_expression(
 
 
 @router.post("/understand-letter", response_model=ApiResponse)
+@_ai_limit()
 def understand_letter(
+    request: Request,
     req: LetterUnderstandRequest,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -292,7 +312,9 @@ def understand_letter(
 
 
 @router.post("/rewrite-letter", response_model=ApiResponse)
+@_ai_limit()
 def rewrite_letter(
+    request: Request,
     req: LetterRewriteRequest,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -317,7 +339,9 @@ def rewrite_letter(
 
 
 @router.post("/generate-reply", response_model=ApiResponse)
+@_ai_limit()
 def generate_reply(
+    request: Request,
     req: LetterReplyRequest,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -340,7 +364,9 @@ def generate_reply(
 
 
 @router.post("/agent", response_model=ApiResponse)
+@_ai_limit()
 def agent_chat(
+    request: Request,
     req: AgentRequest,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),

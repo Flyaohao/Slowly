@@ -38,6 +38,7 @@ from app.models.invite_code import InviteCode
 from app.models.self_practice import SelfPractice, SelfPracticeRecord
 from app.models.email_verification import EmailVerificationCode
 from app.models.presence import PresenceMoment
+from app.models.safety_event import SafetyEvent
 
 __all__ = [
     "User",
@@ -79,4 +80,5 @@ __all__ = [
     "SelfPracticeRecord",
     "EmailVerificationCode",
     "PresenceMoment",
+    "SafetyEvent",
 ]

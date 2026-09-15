@@ -8,7 +8,8 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from app.models.ai import AiChatSession, AiChatMessage
 from app.repositories import ai_repo, couple_repo
-from app.services.safety_service import check_input_safety, get_safety_response
+from app.services.safety_service import check_input_safety_detail, get_safety_response
+from app.repositories import safety_repo
 from app.services.ai_service import _call_llm
 
 logger = logging.getLogger(__name__)
@@ -173,8 +174,9 @@ def submit_input(db: Session, session_id: int, user_id: int, content: str) -> di
     if user_id not in (session.user_id, session.partner_user_id):
         raise ValueError("50002")
 
-    safety_risk = check_input_safety(content)
+    safety_risk, safety_hits = check_input_safety_detail(content)
     if safety_risk != "normal":
+        safety_repo.log_event(user_id, "mediation", "input", safety_risk, safety_hits)
         safety_resp = get_safety_response(safety_risk)
         return {"blocked": True, "risk_level": safety_risk, "safety_response": safety_resp}
 
