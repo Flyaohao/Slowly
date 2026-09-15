@@ -33,10 +33,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.PrimaryButton
 import com.couple.translator.core.ui.components.TextInputField
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextSecondary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,7 +48,7 @@ fun ColdWarScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
-        containerColor = Background,
+        containerColor = AppBackground,
         topBar = {
             TopAppBar(
                 title = { Text("冷战开解") },
@@ -86,7 +86,7 @@ fun ColdWarScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.CenterHorizontally),
-                    color = Accent,
+                    color = AppAccent,
                 )
             }
 
@@ -121,16 +121,16 @@ private fun StepIndicator(currentStep: Int, steps: List<ColdWarStep>) {
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = when {
-                            isActive -> Accent
-                            isCompleted -> Accent.copy(alpha = 0.6f)
-                            else -> Surface
+                            isActive -> AppAccent
+                            isCompleted -> AppAccent.copy(alpha = 0.6f)
+                            else -> AppSurface
                         },
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = if (isActive) 4.dp else 0.dp),
                 ) {
                     Text(
                         text = "${index + 1}",
-                        color = if (isActive || isCompleted) Surface else TextSecondary,
+                        color = if (isActive || isCompleted) AppSurface else AppTextSecondary,
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     )
@@ -139,7 +139,7 @@ private fun StepIndicator(currentStep: Int, steps: List<ColdWarStep>) {
                 Text(
                     text = step.title,
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (isActive) Accent else TextSecondary,
+                    color = if (isActive) AppAccent else AppTextSecondary,
                 )
             }
         }
@@ -154,7 +154,7 @@ private fun GoalStep(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -166,7 +166,7 @@ private fun GoalStep(
             Text(
                 text = "比如：我想和好 / 我想让对方理解我 / 我想解释误会",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
             Spacer(modifier = Modifier.height(16.dp))
             TextInputField(
@@ -191,7 +191,7 @@ private fun FaceVsNeedStep(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -207,7 +207,7 @@ private fun FaceVsNeedStep(
             Text(
                 text = "比如：面子=不想先低头，需求=想被关心",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
             Spacer(modifier = Modifier.height(16.dp))
             TextInputField(
@@ -239,7 +239,7 @@ private fun ApproachStep(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -255,7 +255,7 @@ private fun ApproachStep(
             Text(
                 text = "主动靠近：先打破沉默 / 给空间：等双方冷静",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
             Spacer(modifier = Modifier.height(16.dp))
             TextInputField(
@@ -286,7 +286,7 @@ private fun OpeningLineStep(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -296,7 +296,7 @@ private fun OpeningLineStep(
                 Text(
                     text = if (uiState.approach == "give_space") "建议策略：先给彼此空间" else "建议策略：主动破冰",
                     style = MaterialTheme.typography.titleSmall,
-                    color = Accent,
+                    color = AppAccent,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(text = uiState.approachReason, style = MaterialTheme.typography.bodyMedium)
@@ -330,7 +330,7 @@ private fun OpeningLineStep(
                     Text(
                         text = "• $reminder",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                         modifier = Modifier.padding(top = 4.dp),
                     )
                 }

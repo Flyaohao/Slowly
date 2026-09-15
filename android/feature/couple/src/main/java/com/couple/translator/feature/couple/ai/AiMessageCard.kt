@@ -38,13 +38,13 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.couple.translator.core.data.model.AiDto
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -59,13 +59,13 @@ fun AiMessageCard(
             modifier = Modifier
                 .widthIn(max = screenWidth * 0.85f)
                 .clip(RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp))
-                .background(Surface)
+                .background(AppSurface)
                 .padding(16.dp),
         ) {
             Text(
                 text = content,
                 style = MaterialTheme.typography.bodyLarge,
-                color = TextPrimary,
+                color = AppTextPrimary,
             )
         }
         return
@@ -75,7 +75,7 @@ fun AiMessageCard(
         modifier = Modifier
             .fillMaxWidth()
             .widthIn(max = screenWidth * 0.9f),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         shape = RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
@@ -89,7 +89,7 @@ fun AiMessageCard(
                     Text(
                         text = summary,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TextPrimary,
+                        color = AppTextPrimary,
                     )
                 }
             }
@@ -99,7 +99,7 @@ fun AiMessageCard(
                     Text(
                         text = emotion,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
                 }
             }
@@ -109,7 +109,7 @@ fun AiMessageCard(
                     Text(
                         text = meaning,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
                 }
             }
@@ -117,13 +117,13 @@ fun AiMessageCard(
             structuredOutput.suggestedReply?.let { reply ->
                 CollapsibleSection(title = "建议回复") {
                     Surface(
-                        color = AccentLight,
+                        color = AppAccentLight,
                         shape = RoundedCornerShape(8.dp),
                     ) {
                         Text(
                             text = reply,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = Accent,
+                            color = AppAccent,
                             modifier = Modifier.padding(12.dp),
                         )
                     }
@@ -133,13 +133,13 @@ fun AiMessageCard(
             structuredOutput.doNotSay?.let { doNotSay ->
                 CollapsibleSection(title = "避免说的话") {
                     Surface(
-                        color = com.couple.translator.core.ui.theme.ErrorRed.copy(alpha = 0.1f),
+                        color = com.couple.translator.core.ui.theme.AppErrorRed.copy(alpha = 0.1f),
                         shape = RoundedCornerShape(8.dp),
                     ) {
                         Text(
                             text = doNotSay,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = com.couple.translator.core.ui.theme.ErrorRed,
+                            color = com.couple.translator.core.ui.theme.AppErrorRed,
                             modifier = Modifier.padding(12.dp),
                         )
                     }
@@ -151,7 +151,7 @@ fun AiMessageCard(
                     Text(
                         text = nextStep,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
                 }
             }
@@ -164,7 +164,7 @@ fun AiMessageCard(
                     Text(
                         text = surface,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
                 }
             }
@@ -174,7 +174,7 @@ fun AiMessageCard(
                     Text(
                         text = need,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
                 }
             }
@@ -184,7 +184,7 @@ fun AiMessageCard(
                     Text(
                         text = tone,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
                 }
             }
@@ -201,18 +201,18 @@ fun AiMessageCard(
                                 Text(
                                     text = rewrite.style,
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = Accent,
+                                    color = AppAccent,
                                     fontWeight = FontWeight.Medium,
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Surface(
-                                    color = AccentLight.copy(alpha = 0.5f),
+                                    color = AppAccentLight.copy(alpha = 0.5f),
                                     shape = RoundedCornerShape(8.dp),
                                 ) {
                                     Text(
                                         text = rewrite.content,
                                         style = MaterialTheme.typography.bodyLarge,
-                                        color = TextPrimary,
+                                        color = AppTextPrimary,
                                         modifier = Modifier.padding(12.dp),
                                     )
                                 }
@@ -235,13 +235,13 @@ fun AiMessageCard(
                         ) {
                             refs.forEach { ref ->
                                 Surface(
-                                    color = BorderLight,
+                                    color = AppBorderLight,
                                     shape = RoundedCornerShape(20.dp),
                                 ) {
                                     Text(
                                         text = ref,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = TextSecondary,
+                                        color = AppTextSecondary,
                                         modifier = Modifier.padding(
                                             horizontal = 12.dp,
                                             vertical = 6.dp,
@@ -277,13 +277,13 @@ private fun CollapsibleSection(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
-                color = Accent,
+                color = AppAccent,
                 fontWeight = FontWeight.Bold,
             )
             Icon(
                 imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                 contentDescription = if (expanded) "收起" else "展开",
-                tint = TextTertiary,
+                tint = AppTextTertiary,
                 modifier = Modifier.size(20.dp),
             )
         }

@@ -8,7 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.couple.translator.core.ui.theme.Accent
+import com.couple.translator.core.ui.theme.AppAccent
 
 @Composable
 fun LoadingIndicator(modifier: Modifier = Modifier) {
@@ -18,7 +18,7 @@ fun LoadingIndicator(modifier: Modifier = Modifier) {
     ) {
         CircularProgressIndicator(
             modifier = Modifier.size(40.dp),
-            color = Accent,
+            color = AppAccent,
             strokeWidth = 3.dp,
         )
     }

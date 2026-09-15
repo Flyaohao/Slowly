@@ -41,13 +41,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.couple.data.model.LetterDto
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,15 +68,15 @@ fun MailboxScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onNavigateToCompose,
-                containerColor = Accent,
+                containerColor = AppAccent,
             ) {
-                Icon(Icons.Default.Add, contentDescription = "写信", tint = Surface)
+                Icon(Icons.Default.Add, contentDescription = "写信", tint = AppSurface)
             }
         },
     ) { padding ->
@@ -98,17 +96,17 @@ fun MailboxScreen(
                         .fillMaxWidth()
                         .clickable(onClick = onNavigateToCompose),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Accent),
+                    colors = CardDefaults.cardColors(containerColor = AppAccent),
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(20.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Default.MailOutline, contentDescription = null, tint = Surface)
+                        Icon(Icons.Default.MailOutline, contentDescription = null, tint = AppSurface)
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("写一封信", style = MaterialTheme.typography.titleMedium, color = Surface)
-                            Text("把心里话写下来", style = MaterialTheme.typography.bodySmall, color = Surface.copy(alpha = 0.8f))
+                            Text("写一封信", style = MaterialTheme.typography.titleMedium, color = AppSurface)
+                            Text("把心里话写下来", style = MaterialTheme.typography.bodySmall, color = AppSurface.copy(alpha = 0.8f))
                         }
                     }
                 }
@@ -181,16 +179,16 @@ fun MailboxScreen(
                         Icon(
                             Icons.Default.MailOutline,
                             contentDescription = null,
-                            tint = TextTertiary,
+                            tint = AppTextTertiary,
                             modifier = Modifier.size(48.dp),
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("还没有信件", style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
+                        Text("还没有信件", style = MaterialTheme.typography.bodyLarge, color = AppTextSecondary)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             "点击右下角按钮，写一封给 TA 的信",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextTertiary,
+                            color = AppTextTertiary,
                         )
                     }
                 }
@@ -202,14 +200,14 @@ fun MailboxScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth().clickable(onClick = onNavigateToLetterList),
                     shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface),
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("全部信件", style = MaterialTheme.typography.titleSmall, color = Accent)
+                        Text("全部信件", style = MaterialTheme.typography.titleSmall, color = AppAccent)
                     }
                 }
                 Spacer(modifier = Modifier.height(80.dp))
@@ -228,11 +226,11 @@ private fun SectionHeader(title: String, count: Int, onViewAll: () -> Unit) {
         Text(
             text = "$title ($count)",
             style = MaterialTheme.typography.titleSmall,
-            color = TextSecondary,
+            color = AppTextSecondary,
             fontWeight = FontWeight.Medium,
         )
         TextButton(onClick = onViewAll) {
-            Text("查看全部", style = MaterialTheme.typography.labelMedium, color = Accent)
+            Text("查看全部", style = MaterialTheme.typography.labelMedium, color = AppAccent)
         }
     }
 }
@@ -245,7 +243,7 @@ private fun LetterPreviewCard(
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Row(
@@ -262,7 +260,7 @@ private fun LetterPreviewCard(
                     modifier = Modifier.weight(1f),
                 )
                 if (letter.isFavorite) {
-                    Icon(Icons.Default.Favorite, contentDescription = null, tint = Accent, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Favorite, contentDescription = null, tint = AppAccent, modifier = Modifier.size(16.dp))
                 }
             }
 
@@ -271,7 +269,7 @@ private fun LetterPreviewCard(
             Text(
                 text = letter.content ?: "",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
+                color = AppTextSecondary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -286,12 +284,12 @@ private fun LetterPreviewCard(
                 Text(
                     text = letterTypeName(letter.letterType),
                     style = MaterialTheme.typography.labelSmall,
-                    color = Accent,
+                    color = AppAccent,
                 )
                 Text(
                     text = formatDate(letter.sendTime ?: letter.createdAt),
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                 )
             }
         }

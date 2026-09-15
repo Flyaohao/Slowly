@@ -63,14 +63,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.couple.data.model.LetterDto
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 private val coupleTabs = listOf("全部", "收到", "发出", "草稿", "未来", "冷静", "未说出口", "私密")
 private val diaryTabs = listOf("全部", "本周", "本月", "收藏")
@@ -104,7 +103,7 @@ fun LetterListScreen(
                     showDeleteConfirm = false
                     viewModel.batchDelete()
                 }) {
-                    Text("删除", color = Accent)
+                    Text("删除", color = AppAccent)
                 }
             },
             dismissButton = {
@@ -135,7 +134,7 @@ fun LetterListScreen(
                 actions = {
                     if (uiState.isSelectionMode) {
                         TextButton(onClick = { viewModel.selectAll() }) {
-                            Text("全选", color = Accent)
+                            Text("全选", color = AppAccent)
                         }
                         IconButton(
                             onClick = { showDeleteConfirm = true },
@@ -144,7 +143,7 @@ fun LetterListScreen(
                             if (uiState.isDeleting) {
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             } else {
-                                Icon(Icons.Default.Delete, contentDescription = "删除", tint = if (uiState.selectedIds.isNotEmpty()) Accent else TextTertiary)
+                                Icon(Icons.Default.Delete, contentDescription = "删除", tint = if (uiState.selectedIds.isNotEmpty()) AppAccent else AppTextTertiary)
                             }
                         }
                     } else {
@@ -153,7 +152,7 @@ fun LetterListScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
@@ -179,7 +178,7 @@ fun LetterListScreen(
             when {
                 uiState.isLoading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Accent)
+                        CircularProgressIndicator(color = AppAccent)
                     }
                 }
                 uiState.letters.isEmpty() -> {
@@ -188,10 +187,10 @@ fun LetterListScreen(
                             Text(
                                 text = if (isCoupleMode) "还没有信件" else "还没有日记",
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = TextTertiary,
+                                color = AppTextTertiary,
                             )
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("点击右下角按钮写一封吧", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                            Text("点击右下角按钮写一封吧", style = MaterialTheme.typography.bodySmall, color = AppTextTertiary)
                         }
                     }
                 }
@@ -239,13 +238,13 @@ private fun ScrollableTabRow(
 ) {
     TabRow(
         selectedTabIndex = selectedTabIndex,
-        containerColor = Background,
-        contentColor = Accent,
+        containerColor = AppBackground,
+        contentColor = AppAccent,
         indicator = { tabPositions ->
             if (selectedTabIndex < tabPositions.size) {
                 TabRowDefaults.SecondaryIndicator(
                     modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
-                    color = Accent,
+                    color = AppAccent,
                 )
             }
         },
@@ -255,8 +254,8 @@ private fun ScrollableTabRow(
                 selected = selectedTabIndex == index,
                 onClick = { onTabClick(index, title) },
                 text = { Text(title, style = MaterialTheme.typography.labelMedium) },
-                selectedContentColor = Accent,
-                unselectedContentColor = TextTertiary,
+                selectedContentColor = AppAccent,
+                unselectedContentColor = AppTextTertiary,
             )
         }
     }
@@ -272,8 +271,8 @@ private fun LetterListItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
-    val bgColor = if (isSelected) AccentLight else Surface
-    val borderColor = if (isSelected) Accent else Color.Transparent
+    val bgColor = if (isSelected) AppAccentLight else AppSurface
+    val borderColor = if (isSelected) AppAccent else Color.Transparent
 
     Card(
         modifier = Modifier
@@ -296,7 +295,7 @@ private fun LetterListItem(
                     modifier = Modifier
                         .size(24.dp)
                         .clip(CircleShape)
-                        .background(if (isSelected) Accent else BorderLight),
+                        .background(if (isSelected) AppAccent else AppBorderLight),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (isSelected) {
@@ -322,7 +321,7 @@ private fun LetterListItem(
                         modifier = Modifier.weight(1f),
                     )
                     if (letter.isFavorite) {
-                        Icon(Icons.Default.Favorite, contentDescription = null, tint = Accent, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Favorite, contentDescription = null, tint = AppAccent, modifier = Modifier.size(16.dp))
                     }
                 }
 
@@ -331,7 +330,7 @@ private fun LetterListItem(
                 Text(
                     text = letter.content ?: "",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
+                    color = AppTextSecondary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -350,13 +349,13 @@ private fun LetterListItem(
                         }
                         // Status badge (draft)
                         if (letter.status == "draft") {
-                            TypeBadge("草稿", color = TextTertiary)
+                            TypeBadge("草稿", color = AppTextTertiary)
                         }
                     }
                     Text(
                         text = formatDate(letter.createdAt),
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary,
+                        color = AppTextTertiary,
                     )
                 }
             }
@@ -365,11 +364,11 @@ private fun LetterListItem(
 }
 
 @Composable
-private fun TypeBadge(text: String, color: Color = Accent) {
+private fun TypeBadge(text: String, color: Color = AppAccent) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(if (color == Accent) AccentLight else color.copy(alpha = 0.1f))
+            .background(if (color == AppAccent) AppAccentLight else color.copy(alpha = 0.1f))
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         Text(text, style = MaterialTheme.typography.labelSmall, color = color)

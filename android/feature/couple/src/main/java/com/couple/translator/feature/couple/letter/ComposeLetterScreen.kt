@@ -46,11 +46,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 private val letterTemplates = listOf(
     "道歉信" to "我想对你说声对不起。我知道我的行为让你感到难过，这并不是我的本意。",
@@ -117,7 +117,7 @@ fun ComposeLetterScreen(
                         Text(
                             text = "信件已保存为草稿，绑定情侣后可以发送。",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextTertiary,
+                            color = AppTextTertiary,
                         )
                     }
                 },
@@ -138,7 +138,7 @@ fun ComposeLetterScreen(
                         Text(
                             text = "发送后将无法编辑或撤回",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextTertiary,
+                            color = AppTextTertiary,
                         )
                     }
                 },
@@ -147,7 +147,7 @@ fun ComposeLetterScreen(
                         showSendConfirm = false
                         viewModel.sendLetter()
                     }) {
-                        Text("发送", color = Accent)
+                        Text("发送", color = AppAccent)
                     }
                 },
                 dismissButton = {
@@ -205,7 +205,7 @@ fun ComposeLetterScreen(
                             Text(
                                 text = "草稿已自动保存",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = TextTertiary,
+                                color = AppTextTertiary,
                             )
                         }
                     }
@@ -228,7 +228,7 @@ fun ComposeLetterScreen(
                             Icon(
                                 Icons.Default.Send,
                                 contentDescription = "发送",
-                                tint = if (uiState.content.isNotBlank() && !uiState.isSending) Accent else TextSecondary,
+                                tint = if (uiState.content.isNotBlank() && !uiState.isSending) AppAccent else AppTextSecondary,
                             )
                         }
                     } else {
@@ -242,12 +242,12 @@ fun ComposeLetterScreen(
                         ) {
                             Text(
                                 text = if (uiState.isSaving) "保存中..." else "保存",
-                                color = if (uiState.content.isNotBlank()) Accent else TextSecondary,
+                                color = if (uiState.content.isNotBlank()) AppAccent else AppTextSecondary,
                             )
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
         bottomBar = {
@@ -278,8 +278,8 @@ fun ComposeLetterScreen(
                     label = { Text(letterTypeName(uiState.letterType)) },
                     modifier = Modifier.padding(bottom = 8.dp),
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = AccentLight,
-                        selectedLabelColor = Accent,
+                        selectedContainerColor = AppAccentLight,
+                        selectedLabelColor = AppAccent,
                     ),
                 )
             }
@@ -287,7 +287,7 @@ fun ComposeLetterScreen(
             TextField(
                 value = uiState.title,
                 onValueChange = { viewModel.onTitleChange(it) },
-                placeholder = { Text("标题（可选）", color = TextSecondary) },
+                placeholder = { Text("标题（可选）", color = AppTextSecondary) },
                 modifier = Modifier.fillMaxWidth(),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
@@ -307,7 +307,7 @@ fun ComposeLetterScreen(
                 placeholder = {
                     Text(
                         if (isCoupleMode) "写下你想说的话..." else "写下此刻的心情...",
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                         style = MaterialTheme.typography.bodyLarge,
                     )
                 },
@@ -328,7 +328,7 @@ fun ComposeLetterScreen(
                 Text(
                     text = "${uiState.content.length} 字",
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(end = 4.dp),
@@ -367,13 +367,13 @@ private fun ComposeBottomBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TextButton(onClick = onTemplate) {
-            Text("模板", color = Accent, style = MaterialTheme.typography.labelLarge)
+            Text("模板", color = AppAccent, style = MaterialTheme.typography.labelLarge)
         }
         Spacer(modifier = Modifier.width(4.dp))
         TextButton(onClick = onAiAssist, enabled = !isRewriting) {
             Text(
                 if (isRewriting) "AI 改写中..." else "AI 辅助",
-                color = Accent,
+                color = AppAccent,
                 style = MaterialTheme.typography.labelLarge,
             )
         }
@@ -383,7 +383,7 @@ private fun ComposeBottomBar(
             val nextIndex = (types.indexOf(currentType) + 1) % types.size
             onLetterType(types[nextIndex])
         }) {
-            Text(letterTypeName(currentType), color = Accent, style = MaterialTheme.typography.labelLarge)
+            Text(letterTypeName(currentType), color = AppAccent, style = MaterialTheme.typography.labelLarge)
         }
     }
 }

@@ -40,13 +40,12 @@ import coil.compose.AsyncImage
 import com.couple.translator.core.network.toAbsoluteUrl
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.ErrorRed
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,15 +84,15 @@ fun MuseumItemDetailScreen(
                             Icon(
                                 Icons.Default.PushPin,
                                 contentDescription = if (item.pinned) "取消置顶" else "置顶",
-                                tint = if (item.pinned) Accent else TextTertiary,
+                                tint = if (item.pinned) AppAccent else AppTextTertiary,
                             )
                         }
                         IconButton(onClick = { viewModel.deleteItem(itemId) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除", tint = ErrorRed)
+                            Icon(Icons.Default.Delete, contentDescription = "删除", tint = AppErrorRed)
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
@@ -114,7 +113,7 @@ fun MuseumItemDetailScreen(
             Text(
                 text = museumItemTypeText(item.itemType),
                 style = MaterialTheme.typography.labelMedium,
-                color = Accent,
+                color = AppAccent,
             )
             Spacer(modifier = Modifier.height(8.dp))
             if (item.imageUrl != null) {
@@ -136,7 +135,7 @@ fun MuseumItemDetailScreen(
             Text(
                 text = item.createdAt?.take(10) ?: "",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextTertiary,
+                color = AppTextTertiary,
             )
 
             if (item.story != null) {
@@ -144,13 +143,13 @@ fun MuseumItemDetailScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = "故事",
                             style = MaterialTheme.typography.labelLarge,
-                            color = Accent,
+                            color = AppAccent,
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -166,7 +165,7 @@ fun MuseumItemDetailScreen(
                 Text(
                     text = "来源：${museumItemTypeText(item.sourceType)}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
+                    color = AppTextSecondary,
                 )
             }
         }

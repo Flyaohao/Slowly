@@ -52,7 +52,7 @@ import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.PrimaryButton
 import com.couple.translator.core.ui.components.TextInputField
-import com.couple.translator.core.ui.theme.Accent
+import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppTextPrimary
@@ -206,9 +206,9 @@ private fun GenderDropdown(
             enabled = enabled,
             modifier = Modifier.menuAnchor().fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Accent,
+                focusedBorderColor = AppAccent,
                 unfocusedBorderColor = AppBorderLight,
-                focusedLabelColor = Accent,
+                focusedLabelColor = AppAccent,
                 cursorColor = AppTextPrimary,
             ),
             shape = MaterialTheme.shapes.medium,
@@ -303,9 +303,9 @@ private fun SimpleDropdown(
             enabled = enabled,
             modifier = Modifier.menuAnchor().fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Accent,
+                focusedBorderColor = AppAccent,
                 unfocusedBorderColor = AppBorderLight,
-                focusedLabelColor = Accent,
+                focusedLabelColor = AppAccent,
                 cursorColor = AppTextPrimary,
             ),
             shape = MaterialTheme.shapes.medium,

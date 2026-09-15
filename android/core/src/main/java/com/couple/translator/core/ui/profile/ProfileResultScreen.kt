@@ -53,8 +53,8 @@ import com.couple.translator.core.ui.components.DimensionRadarChart
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.PrimaryButton
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppSurface
@@ -170,7 +170,7 @@ fun ProfileResultScreen(
                         Text(
                             text = uiState.profileTypeName,
                             style = MaterialTheme.typography.headlineMedium,
-                            color = Accent,
+                            color = AppAccent,
                             fontWeight = FontWeight.Bold,
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -341,8 +341,8 @@ private fun SubmissionSelector(
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor().fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Accent,
-                focusedLabelColor = Accent,
+                focusedBorderColor = AppAccent,
+                focusedLabelColor = AppAccent,
             ),
             shape = RoundedCornerShape(12.dp),
         )
@@ -397,7 +397,7 @@ private fun MarkdownCard(markdown: String) {
 private fun HighlightCard(text: String, icon: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = AccentLight),
+        colors = CardDefaults.cardColors(containerColor = AppAccentLight),
         shape = RoundedCornerShape(14.dp),
     ) {
         Row(modifier = Modifier.padding(16.dp)) {
@@ -427,7 +427,7 @@ private fun TipCard(number: Int, text: String) {
                     .height(24.dp)
                     .width(24.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Accent),
+                    .background(AppAccent),
                 contentAlignment = Alignment.Center,
             ) {
                 Text("$number", style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color.White, fontWeight = FontWeight.Bold)
@@ -444,7 +444,7 @@ private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
         "高" -> androidx.compose.ui.graphics.Color(0xFFFF6B6B)
         "中" -> androidx.compose.ui.graphics.Color(0xFFFFA726)
         "低" -> androidx.compose.ui.graphics.Color(0xFF66BB6A)
-        else -> Accent
+        else -> AppAccent
     }
 
     Card(
@@ -469,7 +469,7 @@ private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
                         Text(dim.level, style = MaterialTheme.typography.labelSmall, color = levelColor, fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("${dim.score.toInt()}", style = MaterialTheme.typography.titleMedium, color = Accent, fontWeight = FontWeight.Bold)
+                    Text("${dim.score.toInt()}", style = MaterialTheme.typography.titleMedium, color = AppAccent, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -483,7 +483,7 @@ private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
                         .fillMaxWidth(fraction = (dim.score / 100f).coerceIn(0f, 1f))
                         .height(6.dp)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(Accent),
+                        .background(AppAccent),
                 )
             }
 
@@ -532,7 +532,7 @@ private fun DimensionScoreItem(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                Text("${score.toInt()}", style = MaterialTheme.typography.titleMedium, color = Accent, fontWeight = FontWeight.Bold)
+                Text("${score.toInt()}", style = MaterialTheme.typography.titleMedium, color = AppAccent, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(8.dp))
             Box(
@@ -543,7 +543,7 @@ private fun DimensionScoreItem(
                         .fillMaxWidth(fraction = score / 100f)
                         .height(8.dp)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(Accent),
+                        .background(AppAccent),
                 )
             }
             if (!explanation.isNullOrBlank()) {

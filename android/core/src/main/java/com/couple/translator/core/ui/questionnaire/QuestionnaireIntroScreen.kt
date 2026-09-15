@@ -39,11 +39,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PrimaryButton
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,7 +82,7 @@ fun QuestionnaireIntroScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Background,
+                    containerColor = AppBackground,
                 ),
             )
         },
@@ -126,7 +125,7 @@ fun QuestionnaireIntroScreen(
                         text = uiState.questionnaire?.description
                             ?: "通过回答一系列问题，我们将为你生成专属的关系画像，帮助你们更好地理解彼此。",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                         textAlign = TextAlign.Center,
                     )
 
@@ -139,21 +138,21 @@ fun QuestionnaireIntroScreen(
                         Text(
                             text = "你已完成过此问卷，可以重新作答",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextTertiary,
+                            color = AppTextTertiary,
                             textAlign = TextAlign.Center,
                         )
                     } else if (uiState.answeredCount > 0) {
                         Text(
                             text = "你有未完成的进度（已答 ${uiState.answeredCount}/$total 题），可继续作答",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Accent,
+                            color = AppAccent,
                             textAlign = TextAlign.Center,
                         )
                     } else {
                         Text(
                             text = "问卷共 $total 题，约需 12-15 分钟",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary,
+                            color = AppTextSecondary,
                             textAlign = TextAlign.Center,
                         )
                     }
@@ -174,7 +173,7 @@ fun QuestionnaireIntroScreen(
                         Text(
                             text = "作答历史",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary,
+                            color = AppTextSecondary,
                         )
                     }
                 }

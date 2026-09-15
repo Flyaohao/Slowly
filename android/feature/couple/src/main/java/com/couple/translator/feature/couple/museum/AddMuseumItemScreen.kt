@@ -42,11 +42,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
 
 private val itemTypes = listOf(
     "letter" to "信件",
@@ -86,7 +86,7 @@ fun AddMuseumItemScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
@@ -117,8 +117,8 @@ fun AddMuseumItemScreen(
                         onClick = { viewModel.updateItemType(type) },
                         label = { Text(label, style = MaterialTheme.typography.labelSmall) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = AccentLight,
-                            selectedLabelColor = Accent,
+                            selectedContainerColor = AppAccentLight,
+                            selectedLabelColor = AppAccent,
                         ),
                     )
                 }
@@ -134,10 +134,10 @@ fun AddMuseumItemScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Accent,
-                    unfocusedBorderColor = BorderLight,
-                    focusedContainerColor = Surface,
-                    unfocusedContainerColor = Surface,
+                    focusedBorderColor = AppAccent,
+                    unfocusedBorderColor = AppBorderLight,
+                    focusedContainerColor = AppSurface,
+                    unfocusedContainerColor = AppSurface,
                 ),
                 singleLine = true,
             )
@@ -154,10 +154,10 @@ fun AddMuseumItemScreen(
                     .height(120.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Accent,
-                    unfocusedBorderColor = BorderLight,
-                    focusedContainerColor = Surface,
-                    unfocusedContainerColor = Surface,
+                    focusedBorderColor = AppAccent,
+                    unfocusedBorderColor = AppBorderLight,
+                    focusedContainerColor = AppSurface,
+                    unfocusedContainerColor = AppSurface,
                 ),
             )
 
@@ -210,7 +210,7 @@ fun AddMuseumItemScreen(
             Button(
                 onClick = { viewModel.createItem() },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Accent),
+                colors = ButtonDefaults.buttonColors(containerColor = AppAccent),
                 shape = RoundedCornerShape(12.dp),
             ) {
                 Text("收藏", modifier = Modifier.padding(vertical = 8.dp))

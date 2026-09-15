@@ -43,7 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.couple.translator.core.navigation.Screen
-import com.couple.translator.core.ui.theme.Accent
+import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
@@ -196,7 +196,7 @@ private fun DrawerIdentitySection(
             Icon(
                 imageVector = Icons.Outlined.Person,
                 contentDescription = null,
-                tint = Accent,
+                tint = AppAccent,
                 modifier = Modifier.size(24.dp),
             )
         }
@@ -234,14 +234,14 @@ private fun DrawerNavItem(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (highlight) Accent else AppTextSecondary,
+            tint = if (highlight) AppAccent else AppTextSecondary,
             modifier = Modifier.size(20.dp),
         )
         Spacer(modifier = Modifier.width(14.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = if (highlight) Accent else AppTextPrimary,
+            color = if (highlight) AppAccent else AppTextPrimary,
         )
     }
 }

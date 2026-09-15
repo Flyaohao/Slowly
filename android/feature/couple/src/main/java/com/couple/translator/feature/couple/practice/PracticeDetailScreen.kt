@@ -34,12 +34,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextSecondary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextSecondary
 
 private val practiceSteps = mapOf(
     "listening" to listOf("写下你想对伴侣说的话", "用你自己的话复述你理解的对方的意思"),
@@ -83,7 +83,7 @@ fun PracticeDetailScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
@@ -108,8 +108,8 @@ fun PracticeDetailScreen(
                     .fillMaxWidth()
                     .height(4.dp)
                     .clip(RoundedCornerShape(2.dp)),
-                color = Accent,
-                trackColor = AccentLight,
+                color = AppAccent,
+                trackColor = AppAccentLight,
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -117,13 +117,13 @@ fun PracticeDetailScreen(
                 Text(
                     text = "步骤 ${currentStep + 1}",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Accent,
+                    color = AppAccent,
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = "/ ${steps.size}",
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextSecondary,
+                    color = AppTextSecondary,
                 )
             }
 
@@ -145,10 +145,10 @@ fun PracticeDetailScreen(
                     .weight(1f),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Accent,
-                    unfocusedBorderColor = BorderLight,
-                    focusedContainerColor = Surface,
-                    unfocusedContainerColor = Surface,
+                    focusedBorderColor = AppAccent,
+                    unfocusedBorderColor = AppBorderLight,
+                    focusedContainerColor = AppSurface,
+                    unfocusedContainerColor = AppSurface,
                 ),
             )
 
@@ -158,7 +158,7 @@ fun PracticeDetailScreen(
                 Button(
                     onClick = { viewModel.nextStep() },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Accent),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppAccent),
                     shape = RoundedCornerShape(12.dp),
                 ) {
                     Text("下一步", modifier = Modifier.padding(vertical = 8.dp))
@@ -167,7 +167,7 @@ fun PracticeDetailScreen(
                 Button(
                     onClick = { viewModel.submitPractice(recordId) },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Accent),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppAccent),
                     shape = RoundedCornerShape(12.dp),
                 ) {
                     Text("提交练习", modifier = Modifier.padding(vertical = 8.dp))

@@ -24,8 +24,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PrimaryButton
 import com.couple.translator.core.ui.components.TextInputField
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.TextSecondary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppTextSecondary
 
 @Composable
 fun LoginScreen(
@@ -64,7 +64,7 @@ fun LoginScreen(
             Text(
                 text = "登录",
                 style = MaterialTheme.typography.headlineLarge,
-                color = Accent,
+                color = AppAccent,
             )
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -92,7 +92,7 @@ fun LoginScreen(
             Text(
                 text = "忘记密码？",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
+                color = AppTextSecondary,
                 modifier = Modifier
                     .align(Alignment.End)
                     .clickable { onNavigateToForgotPassword() },
@@ -111,7 +111,7 @@ fun LoginScreen(
             Text(
                 text = "没有账号？去注册",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
+                color = AppTextSecondary,
                 modifier = Modifier.clickable { onNavigateToRegister() },
             )
         }

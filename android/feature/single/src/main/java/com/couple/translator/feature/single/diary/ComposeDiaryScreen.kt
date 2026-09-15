@@ -43,13 +43,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
+import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
-import com.couple.translator.core.ui.theme.Surface
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -127,8 +126,8 @@ fun ComposeDiaryScreen(
                 placeholder = { Text("给日记起个名字") },
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Accent,
-                    focusedLabelColor = Accent,
+                    focusedBorderColor = AppAccent,
+                    focusedLabelColor = AppAccent,
                 ),
                 singleLine = true,
             )
@@ -162,8 +161,8 @@ fun ComposeDiaryScreen(
                     .fillMaxWidth()
                     .height(240.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Accent,
-                    focusedLabelColor = Accent,
+                    focusedBorderColor = AppAccent,
+                    focusedLabelColor = AppAccent,
                 ),
             )
 
@@ -184,12 +183,12 @@ fun ComposeDiaryScreen(
                     Surface(
                         onClick = { viewModel.updateMood(if (isSelected) null else mood) },
                         shape = RoundedCornerShape(50),
-                        color = if (isSelected) Accent else AppSurface,
+                        color = if (isSelected) AppAccent else AppSurface,
                     ) {
                         Text(
                             text = mood,
                             style = MaterialTheme.typography.labelMedium,
-                            color = if (isSelected) Surface else AppTextSecondary,
+                            color = if (isSelected) AppSurface else AppTextSecondary,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         )
                     }
@@ -213,12 +212,12 @@ fun ComposeDiaryScreen(
                     Surface(
                         onClick = { viewModel.updateWeather(if (isSelected) null else weather) },
                         shape = RoundedCornerShape(50),
-                        color = if (isSelected) Accent else AppSurface,
+                        color = if (isSelected) AppAccent else AppSurface,
                     ) {
                         Text(
                             text = weather,
                             style = MaterialTheme.typography.labelMedium,
-                            color = if (isSelected) Surface else AppTextSecondary,
+                            color = if (isSelected) AppSurface else AppTextSecondary,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         )
                     }
@@ -246,7 +245,7 @@ fun ComposeDiaryScreen(
                 shape = RoundedCornerShape(50),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = AppTextPrimary,
-                    contentColor = Surface,
+                    contentColor = AppSurface,
                 ),
                 enabled = !uiState.isSaving,
             ) {

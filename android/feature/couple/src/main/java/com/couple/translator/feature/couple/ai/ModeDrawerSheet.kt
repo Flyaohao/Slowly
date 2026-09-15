@@ -21,10 +21,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
 
 /**
  * 模式选择抽屉。
@@ -48,7 +48,7 @@ fun ModeDrawerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Background,
+        containerColor = AppBackground,
     ) {
         Column(
             modifier = Modifier
@@ -59,7 +59,7 @@ fun ModeDrawerSheet(
             Text(
                 text = "选择模式",
                 style = MaterialTheme.typography.labelMedium,
-                color = TextSecondary,
+                color = AppTextSecondary,
                 modifier = Modifier.padding(bottom = 10.dp),
             )
 
@@ -69,7 +69,7 @@ fun ModeDrawerSheet(
                     onClick = { onModeSelected(scene) },
                 )
                 if (index < scenes.lastIndex) {
-                    HorizontalDivider(color = BorderLight)
+                    HorizontalDivider(color = AppBorderLight)
                 }
             }
         }
@@ -92,14 +92,14 @@ private fun ModeItem(
             // 目录里没配图标的场景（后端新加、客户端还没补样式）用中性图标兜底
             imageVector = scene.icon ?: Icons.Outlined.AutoAwesome,
             contentDescription = null,
-            tint = TextSecondary,
+            tint = AppTextSecondary,
             modifier = Modifier.size(20.dp),
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = scene.label,
             style = MaterialTheme.typography.bodyLarge,
-            color = TextPrimary,
+            color = AppTextPrimary,
         )
     }
 }

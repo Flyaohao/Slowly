@@ -41,12 +41,12 @@ import com.couple.translator.feature.couple.data.model.WishlistDto
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.ErrorRed
-import com.couple.translator.core.ui.theme.SuccessGreen
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppSuccessGreen
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,16 +70,16 @@ fun WishlistScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onNavigateToAdd,
-                containerColor = Accent,
+                containerColor = AppAccent,
                 shape = CircleShape,
             ) {
-                Icon(Icons.Default.Add, contentDescription = "许愿", tint = Surface)
+                Icon(Icons.Default.Add, contentDescription = "许愿", tint = AppSurface)
             }
         },
     ) { padding ->
@@ -104,13 +104,13 @@ fun WishlistScreen(
                 Text(
                     text = "还没有愿望",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "许下你们想一起做的事",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                 )
             }
             return@PullToRefreshLayout
@@ -131,7 +131,7 @@ fun WishlistScreen(
                     Text(
                         text = "想做的事",
                         style = MaterialTheme.typography.titleSmall,
-                        color = Accent,
+                        color = AppAccent,
                     )
                 }
                 items(pending) { item ->
@@ -149,7 +149,7 @@ fun WishlistScreen(
                     Text(
                         text = "已完成",
                         style = MaterialTheme.typography.titleSmall,
-                        color = SuccessGreen,
+                        color = AppSuccessGreen,
                     )
                 }
                 items(completed) { item ->
@@ -180,9 +180,9 @@ private fun WishlistItemCard(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isCompleted) {
-                Surface.copy(alpha = 0.7f)
+                AppSurface.copy(alpha = 0.7f)
             } else {
-                Surface
+                AppSurface
             },
         ),
     ) {
@@ -202,7 +202,7 @@ private fun WishlistItemCard(
                     Text(
                         text = item.description,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
+                        color = AppTextTertiary,
                         maxLines = 2,
                     )
                 }
@@ -211,7 +211,7 @@ private fun WishlistItemCard(
                     Text(
                         text = "完成于 ${item.completedAt.take(10)}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = SuccessGreen,
+                        color = AppSuccessGreen,
                     )
                 }
             }
@@ -220,12 +220,12 @@ private fun WishlistItemCard(
                     Icon(
                         Icons.Default.Check,
                         contentDescription = "标记完成",
-                        tint = SuccessGreen,
+                        tint = AppSuccessGreen,
                     )
                 }
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "删除", tint = ErrorRed)
+                Icon(Icons.Default.Delete, contentDescription = "删除", tint = AppErrorRed)
             }
         }
     }

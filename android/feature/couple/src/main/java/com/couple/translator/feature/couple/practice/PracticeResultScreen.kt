@@ -30,12 +30,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSurface
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,7 +62,7 @@ fun PracticeResultScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
@@ -90,7 +88,7 @@ fun PracticeResultScreen(
             Text(
                 text = practiceStatusText(record.status),
                 style = MaterialTheme.typography.labelMedium,
-                color = Accent,
+                color = AppAccent,
             )
 
             if (record.mySubmission != null) {
@@ -98,13 +96,13 @@ fun PracticeResultScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = "我的提交",
                             style = MaterialTheme.typography.labelLarge,
-                            color = Accent,
+                            color = AppAccent,
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -120,13 +118,13 @@ fun PracticeResultScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = AccentLight),
+                    colors = CardDefaults.cardColors(containerColor = AppAccentLight),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = "对方的提交",
                             style = MaterialTheme.typography.labelLarge,
-                            color = Accent,
+                            color = AppAccent,
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -142,13 +140,13 @@ fun PracticeResultScreen(
                 Text(
                     text = "AI 总结",
                     style = MaterialTheme.typography.titleSmall,
-                    color = Accent,
+                    color = AppAccent,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface),
                 ) {
                     Text(
                         text = record.summary,

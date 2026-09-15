@@ -21,10 +21,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.couple.translator.feature.couple.data.model.LetterDto
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextSecondary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppTextSecondary
 
 @Composable
 fun LetterUnderstandingCard(
@@ -34,7 +33,7 @@ fun LetterUnderstandingCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = AccentLight),
+        colors = CardDefaults.cardColors(containerColor = AppAccentLight),
     ) {
         Column(
             modifier = Modifier
@@ -48,7 +47,7 @@ fun LetterUnderstandingCard(
                 Text(
                     text = "AI 理解",
                     style = MaterialTheme.typography.titleSmall,
-                    color = Accent,
+                    color = AppAccent,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = onDismiss) {
@@ -64,14 +63,14 @@ fun LetterUnderstandingCard(
                 Text(
                     text = "关键关注点",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Accent,
+                    color = AppAccent,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 understanding.keyConcerns.forEach { concern ->
                     Text(
                         text = "• $concern",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
                 }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -85,19 +84,19 @@ fun LetterUnderstandingCard(
                 Text(
                     text = "容易误解的句子",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Accent,
+                    color = AppAccent,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 understanding.misunderstandable.forEach { item ->
                     Text(
                         text = "\"${item.sentence}\"",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
                     Text(
                         text = "→ ${item.note}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Accent,
+                        color = AppAccent,
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                 }
@@ -108,14 +107,14 @@ fun LetterUnderstandingCard(
                 Text(
                     text = "回信建议",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Accent,
+                    color = AppAccent,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 understanding.replySuggestions.forEach { suggestion ->
                     Text(
                         text = "• $suggestion",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
                 }
             }
@@ -129,13 +128,13 @@ private fun SectionItem(label: String, value: String) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = Accent,
+            color = AppAccent,
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = value,
             style = MaterialTheme.typography.bodySmall,
-            color = TextSecondary,
+            color = AppTextSecondary,
         )
     }
 }

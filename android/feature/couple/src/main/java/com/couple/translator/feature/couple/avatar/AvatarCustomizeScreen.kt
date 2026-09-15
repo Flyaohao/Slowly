@@ -46,14 +46,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -90,13 +90,13 @@ fun AvatarCustomizeScreen(
                         onClick = { viewModel.save() },
                         enabled = !uiState.isSaving,
                     ) {
-                        Text("保存", color = Accent)
+                        Text("保存", color = AppAccent)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
-        containerColor = Background,
+        containerColor = AppBackground,
     ) { padding ->
         Column(
             modifier = Modifier
@@ -142,7 +142,7 @@ fun AvatarCustomizeScreen(
                 onSelect = { viewModel.updateBlushStyle(it) },
             )
 
-            HorizontalDivider(color = BorderLight, modifier = Modifier.padding(vertical = 16.dp))
+            HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(vertical = 16.dp))
 
             SettingRow(
                 label = "语气设置",
@@ -167,7 +167,7 @@ private fun CustomizeSection(
         Text(
             text = title,
             style = MaterialTheme.typography.labelSmall,
-            color = TextTertiary,
+            color = AppTextTertiary,
             modifier = Modifier.padding(bottom = 10.dp),
         )
         FlowRow(
@@ -179,10 +179,10 @@ private fun CustomizeSection(
                     modifier = Modifier
                         .size(64.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (index == selectedIndex) AccentLight else Surface)
+                        .background(if (index == selectedIndex) AppAccentLight else AppSurface)
                         .border(
                             width = if (index == selectedIndex) 1.5.dp else 0.5.dp,
-                            color = if (index == selectedIndex) Accent else BorderLight,
+                            color = if (index == selectedIndex) AppAccent else AppBorderLight,
                             shape = RoundedCornerShape(8.dp),
                         )
                         .clickable { onSelect(index) },
@@ -191,7 +191,7 @@ private fun CustomizeSection(
                     Text(
                         text = item,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (index == selectedIndex) Accent else TextSecondary,
+                        color = if (index == selectedIndex) AppAccent else AppTextSecondary,
                         textAlign = TextAlign.Center,
                     )
                 }
@@ -217,21 +217,21 @@ private fun SettingRow(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = TextPrimary,
+            color = AppTextPrimary,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = value,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextTertiary,
+                color = AppTextTertiary,
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = "›",
                 style = MaterialTheme.typography.bodyLarge,
-                color = TextTertiary,
+                color = AppTextTertiary,
             )
         }
     }
-    HorizontalDivider(color = BorderLight, modifier = Modifier.padding(horizontal = 20.dp))
+    HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(horizontal = 20.dp))
 }

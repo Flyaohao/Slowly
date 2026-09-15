@@ -53,13 +53,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.theme.Accent
+import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
-import com.couple.translator.core.ui.theme.Surface
 import io.noties.markwon.Markwon
 import kotlinx.coroutines.launch
 
@@ -159,7 +158,7 @@ fun DiaryDetailScreen(
                                 Icon(
                                     imageVector = if (diary.isFavorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
                                     contentDescription = if (diary.isFavorite) "取消收藏" else "收藏",
-                                    tint = if (diary.isFavorite) Accent else AppTextSecondary,
+                                    tint = if (diary.isFavorite) AppAccent else AppTextSecondary,
                                 )
                             }
                             IconButton(onClick = { onNavigateToEdit(diaryId) }) {

@@ -41,14 +41,12 @@ import com.couple.translator.core.data.model.ProfileDto
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,7 +73,7 @@ fun CoupleProfileScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Background,
+                    containerColor = AppBackground,
                 ),
             )
         },
@@ -101,7 +99,7 @@ fun CoupleProfileScreen(
                 Text(
                     text = "双方都完成问卷后才能查看组合画像",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = TextSecondary,
+                    color = AppTextSecondary,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 32.dp),
                 )
@@ -119,7 +117,7 @@ fun CoupleProfileScreen(
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = AccentLight),
+                colors = CardDefaults.cardColors(containerColor = AppAccentLight),
                 shape = RoundedCornerShape(16.dp),
             ) {
                 Column(
@@ -131,7 +129,7 @@ fun CoupleProfileScreen(
                     Text(
                         text = uiState.conflictPatternName,
                         style = MaterialTheme.typography.titleLarge,
-                        color = Accent,
+                        color = AppAccent,
                         fontWeight = FontWeight.Bold,
                     )
 
@@ -140,7 +138,7 @@ fun CoupleProfileScreen(
                     Text(
                         text = uiState.conflictPatternDescription,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                         textAlign = TextAlign.Center,
                     )
                 }
@@ -158,7 +156,7 @@ fun CoupleProfileScreen(
                 Text(
                     text = summary,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = TextSecondary,
+                    color = AppTextSecondary,
                 )
                 Spacer(modifier = Modifier.height(24.dp))
             }
@@ -205,7 +203,7 @@ private fun ProfileMiniCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
@@ -218,7 +216,7 @@ private fun ProfileMiniCard(
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelLarge,
-                color = TextTertiary,
+                color = AppTextTertiary,
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -226,7 +224,7 @@ private fun ProfileMiniCard(
             Text(
                 text = profileTypeName,
                 style = MaterialTheme.typography.titleMedium,
-                color = Accent,
+                color = AppAccent,
                 fontWeight = FontWeight.Bold,
             )
 
@@ -249,7 +247,7 @@ private fun ProfileMiniCard(
                     Text(
                         text = name,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
                     Text(
                         text = "${dim.score.toInt()}",

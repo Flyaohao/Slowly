@@ -32,9 +32,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PrimaryButton
 import com.couple.translator.core.ui.components.TextInputField
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.TextSecondary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppTextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,7 +69,7 @@ fun ForgotPasswordScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Background,
+                    containerColor = AppBackground,
                 ),
             )
         },
@@ -90,7 +90,7 @@ fun ForgotPasswordScreen(
                     Text(
                         text = "输入注册邮箱，我们将发送验证码",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -117,7 +117,7 @@ fun ForgotPasswordScreen(
                     Text(
                         text = "验证码已发送到 ${uiState.email}",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -166,7 +166,7 @@ fun ForgotPasswordScreen(
                     Text(
                         text = "密码重置成功",
                         style = MaterialTheme.typography.headlineMedium,
-                        color = Accent,
+                        color = AppAccent,
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -174,7 +174,7 @@ fun ForgotPasswordScreen(
                     Text(
                         text = "请使用新密码登录",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
 
                     Spacer(modifier = Modifier.height(32.dp))

@@ -37,13 +37,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,7 +62,7 @@ fun SettingsScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
@@ -79,13 +79,13 @@ fun SettingsScreen(
             Text(
                 text = "账号",
                 style = MaterialTheme.typography.labelMedium,
-                color = TextTertiary,
+                color = AppTextTertiary,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
             )
 
             Card(
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Surface),
+                colors = CardDefaults.cardColors(containerColor = AppSurface),
             ) {
                 Column {
                     SettingsItem(
@@ -104,13 +104,13 @@ fun SettingsScreen(
                 Text(
                     text = "通用",
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
                 )
 
                 Card(
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface),
                 ) {
                     Column {
                         SettingsItem(
@@ -119,7 +119,7 @@ fun SettingsScreen(
                             subtitle = "管理推送通知",
                             onClick = { },
                         )
-                        HorizontalDivider(color = BorderLight, modifier = Modifier.padding(horizontal = 16.dp))
+                        HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(horizontal = 16.dp))
                         SettingsItem(
                             icon = Icons.Outlined.Lock,
                             title = "隐私设置",
@@ -136,13 +136,13 @@ fun SettingsScreen(
             Text(
                 text = "关于",
                 style = MaterialTheme.typography.labelMedium,
-                color = TextTertiary,
+                color = AppTextTertiary,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
             )
 
             Card(
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Surface),
+                colors = CardDefaults.cardColors(containerColor = AppSurface),
             ) {
                 Column {
                     SettingsItem(
@@ -159,7 +159,7 @@ fun SettingsScreen(
             // 退出登录
             Card(
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Surface),
+                colors = CardDefaults.cardColors(containerColor = AppSurface),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
@@ -168,7 +168,7 @@ fun SettingsScreen(
                 Text(
                     text = "退出登录",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Accent,
+                    color = AppAccent,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
@@ -199,7 +199,7 @@ private fun SettingsItem(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = TextSecondary,
+            tint = AppTextSecondary,
             modifier = Modifier.size(24.dp),
         )
         Spacer(modifier = Modifier.width(16.dp))
@@ -207,13 +207,13 @@ private fun SettingsItem(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
-                color = TextPrimary,
+                color = AppTextPrimary,
             )
             if (subtitle != null) {
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                 )
             }
         }

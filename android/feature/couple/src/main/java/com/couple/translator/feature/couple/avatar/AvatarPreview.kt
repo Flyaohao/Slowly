@@ -18,9 +18,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @Composable
 fun AvatarPreview(
@@ -40,13 +40,13 @@ fun AvatarPreview(
             modifier = Modifier
                 .size(100.dp)
                 .clip(CircleShape)
-                .background(AccentLight),
+                .background(AppAccentLight),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = Icons.Outlined.AutoAwesome,
                 contentDescription = null,
-                tint = Accent,
+                tint = AppAccent,
                 modifier = Modifier.size(48.dp),
             )
         }
@@ -56,7 +56,7 @@ fun AvatarPreview(
         Text(
             text = "翻译官",
             style = MaterialTheme.typography.titleMedium,
-            color = Accent,
+            color = AppAccent,
         )
 
         Text(
@@ -66,7 +66,7 @@ fun AvatarPreview(
                 "嘴巴 ${mouthStyle + 1}",
             ).joinToString(" · "),
             style = MaterialTheme.typography.bodySmall,
-            color = TextTertiary,
+            color = AppTextTertiary,
         )
     }
 }

@@ -39,12 +39,11 @@ import com.couple.translator.feature.couple.data.model.DualPerspectiveDto
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,16 +68,16 @@ fun DualPerspectiveListScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onNavigateToCreate,
-                containerColor = Accent,
+                containerColor = AppAccent,
                 shape = CircleShape,
             ) {
-                Icon(Icons.Default.Add, contentDescription = "创建事件", tint = Surface)
+                Icon(Icons.Default.Add, contentDescription = "创建事件", tint = AppSurface)
             }
         },
     ) { padding ->
@@ -103,13 +102,13 @@ fun DualPerspectiveListScreen(
                 Text(
                     text = "还没有记录",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "点击右下角创建第一个事件",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                 )
             }
             return@PullToRefreshLayout
@@ -144,7 +143,7 @@ private fun DualEventListItem(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
     ) {
         Row(
             modifier = Modifier
@@ -163,19 +162,19 @@ private fun DualEventListItem(
                     Text(
                         text = eventStatusText(event.status),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Accent,
+                        color = AppAccent,
                     )
                     Text(
                         text = event.eventTime?.take(10) ?: "",
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary,
+                        color = AppTextTertiary,
                     )
                 }
             }
             Text(
                 text = eventStatusText(event.status),
                 style = MaterialTheme.typography.labelSmall,
-                color = if (event.status == "completed") Accent else TextSecondary,
+                color = if (event.status == "completed") AppAccent else AppTextSecondary,
             )
         }
     }

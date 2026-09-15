@@ -18,9 +18,11 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.couple.translator.core.ui.theme.AppIsDark
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
@@ -33,8 +35,8 @@ import kotlin.math.PI
 fun DimensionRadarChart(
     dimensions: List<Triple<String, String, Float>>,
     modifier: Modifier = Modifier,
-    accentColor: Color = Color(0xFF6C5CE7),
-    gridColor: Color = Color(0xFFE0E0E0),
+    accentColor: Color = if (AppIsDark) Color(0xFF9E8CFF) else Color(0xFF6C5CE7),
+    gridColor: Color = if (AppIsDark) Color(0xFF3A3A3C) else Color(0xFFE0E0E0),
 ) {
     val animProgress = remember { Animatable(0f) }
     LaunchedEffect(dimensions) {
@@ -44,7 +46,9 @@ fun DimensionRadarChart(
 
     val density = LocalDensity.current
     val textSizePx = with(density) { 11.sp.toPx() }
-    val labelColor = android.graphics.Color.parseColor("#888888")
+    val labelColor = if (AppIsDark) android.graphics.Color.parseColor("#9A9A9E")
+    else android.graphics.Color.parseColor("#888888")
+    val accentArgb = accentColor.toArgb()
 
     Box(modifier = modifier.fillMaxWidth()) {
         Canvas(
@@ -152,7 +156,7 @@ fun DimensionRadarChart(
 
                     // Score value below label
                     val scorePaint = android.graphics.Paint().apply {
-                        color = android.graphics.Color.parseColor("#6C5CE7")
+                        color = accentArgb
                         textSize = textSizePx * 0.9f
                         textAlign = paint.textAlign
                         isAntiAlias = true

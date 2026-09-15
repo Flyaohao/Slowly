@@ -40,12 +40,11 @@ import com.couple.translator.core.data.model.AiDto
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 // 场景名不再本地硬编码：此前这里只有 3 个，比后端少一半，
 // 陌生场景的会话就退化成显示原始 scene_key。改由 AiSceneCatalog 统一提供
@@ -81,7 +80,7 @@ fun AiSessionListScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Background,
+                    containerColor = AppBackground,
                 ),
             )
         },
@@ -106,7 +105,7 @@ fun AiSessionListScreen(
                 Text(
                     text = "还没有会话记录",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = TextSecondary,
+                    color = AppTextSecondary,
                 )
             }
             return@PullToRefreshLayout
@@ -146,7 +145,7 @@ private fun SessionItem(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
@@ -171,14 +170,14 @@ private fun SessionItem(
                     Text(
                         text = sceneLabel(session.sceneKey),
                         style = MaterialTheme.typography.bodySmall,
-                        color = Accent,
+                        color = AppAccent,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     session.createdAt?.let {
                         Text(
                             text = it.take(10),
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextTertiary,
+                            color = AppTextTertiary,
                         )
                     }
                 }
@@ -188,7 +187,7 @@ private fun SessionItem(
                 Icon(
                     Icons.Default.Delete,
                     contentDescription = "删除",
-                    tint = TextTertiary,
+                    tint = AppTextTertiary,
                 )
             }
         }

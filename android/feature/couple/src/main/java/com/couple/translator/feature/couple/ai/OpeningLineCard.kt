@@ -23,9 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Surface
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
 
 @Composable
 fun OpeningLineCard(
@@ -39,7 +38,7 @@ fun OpeningLineCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = AccentLight),
+        colors = CardDefaults.cardColors(containerColor = AppAccentLight),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -59,7 +58,7 @@ fun OpeningLineCard(
                     Icon(
                         Icons.Default.ContentCopy,
                         contentDescription = "复制",
-                        tint = Accent,
+                        tint = AppAccent,
                     )
                 }
                 Spacer(modifier = Modifier.width(4.dp))
@@ -67,7 +66,7 @@ fun OpeningLineCard(
                     Icon(
                         Icons.Default.Edit,
                         contentDescription = "编辑",
-                        tint = Accent,
+                        tint = AppAccent,
                     )
                 }
                 Spacer(modifier = Modifier.width(4.dp))
@@ -75,7 +74,7 @@ fun OpeningLineCard(
                     Icon(
                         Icons.Default.Send,
                         contentDescription = "发送为信件",
-                        tint = Accent,
+                        tint = AppAccent,
                     )
                 }
             }

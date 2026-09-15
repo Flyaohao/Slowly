@@ -27,10 +27,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.couple.translator.core.navigation.BottomTab
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @Composable
 fun BottomTabBar(
@@ -42,14 +42,14 @@ fun BottomTabBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Background)
+            .background(AppBackground)
             .padding(horizontal = 24.dp, vertical = 12.dp),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(50))
-                .background(Surface)
+                .background(AppSurface)
                 .padding(4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
@@ -88,7 +88,7 @@ private fun TabItem(
         modifier = modifier
             .height(44.dp)
             .clip(RoundedCornerShape(50))
-            .background(if (isActive) TextPrimary else Surface)
+            .background(if (isActive) AppTextPrimary else AppSurface)
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
@@ -104,13 +104,13 @@ private fun TabItem(
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = if (isActive) Surface else TextTertiary,
+                tint = if (isActive) AppSurface else AppTextTertiary,
             )
             if (isActive) {
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelMedium,
-                    color = Surface,
+                    color = AppSurface,
                     modifier = Modifier.padding(start = 4.dp),
                 )
             }

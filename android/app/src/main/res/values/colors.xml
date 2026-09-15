@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 窗口底色：必须与 Color.kt 中 LightAppColors.background 保持一致 -->
+    <color name="app_window_background">#FAF9F7</color>
+</resources>

@@ -43,10 +43,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PrimaryButton
-import com.couple.translator.core.ui.theme.Accent
+import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.TextSecondary
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.feature.couple.data.repository.AppMode
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
 
@@ -115,7 +115,7 @@ fun CoupleInfoScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Background,
+                    containerColor = AppBackground,
                 ),
             )
         },
@@ -145,7 +145,7 @@ fun CoupleInfoScreen(
                             Icon(
                                 imageVector = Icons.Outlined.Person,
                                 contentDescription = null,
-                                tint = Accent,
+                                tint = AppAccent,
                                 modifier = Modifier
                                     .size(56.dp)
                                     .clip(CircleShape),
@@ -158,7 +158,7 @@ fun CoupleInfoScreen(
                             Text(
                                 text = "我",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary,
+                                color = AppTextSecondary,
                             )
                         }
 
@@ -166,7 +166,7 @@ fun CoupleInfoScreen(
                         Text(
                             text = "&",
                             style = MaterialTheme.typography.headlineLarge,
-                            color = Accent,
+                            color = AppAccent,
                         )
 
                         // Partner profile
@@ -174,7 +174,7 @@ fun CoupleInfoScreen(
                             Icon(
                                 imageVector = Icons.Outlined.Person,
                                 contentDescription = null,
-                                tint = Accent,
+                                tint = AppAccent,
                                 modifier = Modifier
                                     .size(56.dp)
                                     .clip(CircleShape),
@@ -187,7 +187,7 @@ fun CoupleInfoScreen(
                             Text(
                                 text = "伴侣",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary,
+                                color = AppTextSecondary,
                             )
                         }
                     }
@@ -217,13 +217,13 @@ fun CoupleInfoScreen(
                                 Text(
                                     text = "绑定时间：$it",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = TextSecondary,
+                                    color = AppTextSecondary,
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = "在一起的时光",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Accent,
+                                    color = AppAccent,
                                 )
                             }
 
@@ -238,7 +238,7 @@ fun CoupleInfoScreen(
                                 Text(
                                     text = "申请发起 72 小时后，由对方确认解绑；期间任意一方可取消。",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary,
+                                    color = AppTextSecondary,
                                 )
                             }
                         }
@@ -300,7 +300,7 @@ fun CoupleInfoScreen(
                     Text(
                         text = "这个空间还差一个人",
                         style = MaterialTheme.typography.headlineMedium,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
                 }
             }

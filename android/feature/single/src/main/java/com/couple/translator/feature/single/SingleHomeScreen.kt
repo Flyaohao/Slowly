@@ -41,8 +41,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.single.data.model.DiaryDto
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
+import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
@@ -50,7 +49,6 @@ import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
-import com.couple.translator.core.ui.theme.Surface
 
 @Composable
 fun SingleHomeScreen(
@@ -148,7 +146,7 @@ private fun SingleHomeTopBar(onOpenDrawer: () -> Unit) {
                 Icon(
                     imageVector = Icons.Outlined.Person,
                     contentDescription = "打开侧边栏",
-                    tint = Accent,
+                    tint = AppAccent,
                     modifier = Modifier.size(16.dp),
                 )
             }
@@ -225,7 +223,7 @@ private fun QuickActionItem(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = Accent,
+                tint = AppAccent,
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -270,7 +268,7 @@ private fun SingleHomeRecentDiaries(
             Text(
                 text = "查看全部",
                 style = MaterialTheme.typography.labelSmall,
-                color = Accent,
+                color = AppAccent,
                 modifier = Modifier.clickable(onClick = onNavigateToDiary),
             )
         }
@@ -330,7 +328,7 @@ private fun SingleHomeDiaryEntry(onClick: () -> Unit) {
         shape = RoundedCornerShape(50),
         colors = ButtonDefaults.buttonColors(
             containerColor = AppTextPrimary,
-            contentColor = Surface,
+            contentColor = AppSurface,
         ),
     ) {
         Icon(

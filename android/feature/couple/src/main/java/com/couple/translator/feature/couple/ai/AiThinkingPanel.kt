@@ -42,11 +42,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 /**
  * 推理模型的「深度思考」面板。
@@ -99,7 +99,7 @@ fun AiThinkingPanel(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
+            .background(AppSurface)
             .clickable { expanded = !expanded }
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
@@ -111,7 +111,7 @@ fun AiThinkingPanel(
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelMedium,
-                color = if (isLive) Accent else TextSecondary,
+                color = if (isLive) AppAccent else AppTextSecondary,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
             )
@@ -119,7 +119,7 @@ fun AiThinkingPanel(
             Icon(
                 imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                 contentDescription = if (expanded) "收起思考过程" else "展开思考过程",
-                tint = TextTertiary,
+                tint = AppTextTertiary,
                 modifier = Modifier.size(18.dp),
             )
         }
@@ -130,7 +130,7 @@ fun AiThinkingPanel(
                 Text(
                     text = thinking.trim(),
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                     modifier = Modifier
                         // 思考过程动辄数千字，限高避免把正文挤到屏幕外
                         .heightIn(max = 220.dp)
@@ -164,7 +164,7 @@ private fun ThinkingIndicator(isLive: Boolean) {
         modifier = Modifier
             .size(18.dp)
             .clip(CircleShape)
-            .background(AccentLight),
+            .background(AppAccentLight),
         contentAlignment = Alignment.Center,
     ) {
         if (isLive) {
@@ -173,13 +173,13 @@ private fun ThinkingIndicator(isLive: Boolean) {
                     .size(7.dp)
                     .alpha(alpha)
                     .clip(CircleShape)
-                    .background(Accent),
+                    .background(AppAccent),
             )
         } else {
             Icon(
                 imageVector = Icons.Outlined.AutoAwesome,
                 contentDescription = null,
-                tint = Accent,
+                tint = AppAccent,
                 modifier = Modifier.size(11.dp),
             )
         }
@@ -200,7 +200,7 @@ fun AiWaitingBubble(modifier: Modifier = Modifier) {
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(4.dp, 16.dp, 16.dp, 16.dp))
-                .background(Surface)
+                .background(AppSurface)
                 .padding(horizontal = 16.dp, vertical = 14.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -221,7 +221,7 @@ fun AiWaitingBubble(modifier: Modifier = Modifier) {
                             .size(6.dp)
                             .alpha(alpha)
                             .clip(CircleShape)
-                            .background(TextTertiary),
+                            .background(AppTextTertiary),
                     )
                     if (index < 2) Spacer(modifier = Modifier.width(5.dp))
                 }

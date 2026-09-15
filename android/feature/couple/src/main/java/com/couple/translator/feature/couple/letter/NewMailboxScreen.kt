@@ -45,14 +45,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.couple.data.model.LetterDto
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @Composable
 fun NewMailboxScreen(
@@ -70,7 +70,7 @@ fun NewMailboxScreen(
     }
 
     if (uiState.isLoading) {
-        Box(modifier = Modifier.fillMaxSize().background(Background)) {
+        Box(modifier = Modifier.fillMaxSize().background(AppBackground)) {
             LoadingIndicator()
         }
         return
@@ -83,7 +83,7 @@ fun NewMailboxScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(AppBackground)
             .verticalScroll(rememberScrollState()),
     ) {
         // Top bar
@@ -125,7 +125,7 @@ private fun CoupleMailboxContent(
     Text(
         text = "信箱",
         style = MaterialTheme.typography.displayMedium,
-        color = TextPrimary,
+        color = AppTextPrimary,
         modifier = Modifier.padding(horizontal = 20.dp),
     )
 
@@ -136,7 +136,7 @@ private fun CoupleMailboxContent(
         onClick = onNavigateToCompose,
         modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(52.dp),
         shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = TextPrimary, contentColor = Surface),
+        colors = ButtonDefaults.buttonColors(containerColor = AppTextPrimary, contentColor = AppSurface),
     ) {
         Icon(Icons.Outlined.MailOutline, contentDescription = null, modifier = Modifier.size(20.dp))
         Spacer(modifier = Modifier.width(8.dp))
@@ -196,7 +196,7 @@ private fun SingleDiaryContent(
     Text(
         text = "我的日记",
         style = MaterialTheme.typography.displayMedium,
-        color = TextPrimary,
+        color = AppTextPrimary,
         modifier = Modifier.padding(horizontal = 20.dp),
     )
 
@@ -207,7 +207,7 @@ private fun SingleDiaryContent(
         onClick = onNavigateToCompose,
         modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(52.dp),
         shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = TextPrimary, contentColor = Surface),
+        colors = ButtonDefaults.buttonColors(containerColor = AppTextPrimary, contentColor = AppSurface),
     ) {
         Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(20.dp))
         Spacer(modifier = Modifier.width(8.dp))
@@ -256,10 +256,10 @@ private fun MailboxTopBar(onOpenDrawer: () -> Unit) {
     ) {
         IconButton(onClick = onOpenDrawer) {
             Box(
-                modifier = Modifier.size(30.dp).clip(CircleShape).background(AccentLight),
+                modifier = Modifier.size(30.dp).clip(CircleShape).background(AppAccentLight),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Outlined.Person, contentDescription = "打开侧边栏", tint = Accent, modifier = Modifier.size(16.dp))
+                Icon(Icons.Outlined.Person, contentDescription = "打开侧边栏", tint = AppAccent, modifier = Modifier.size(16.dp))
             }
         }
         Spacer(modifier = Modifier.size(48.dp))
@@ -271,7 +271,7 @@ private fun SectionHeader(title: String, count: Int) {
     Text(
         text = "$title ($count)",
         style = MaterialTheme.typography.labelSmall,
-        color = TextTertiary,
+        color = AppTextTertiary,
         fontWeight = FontWeight.Medium,
         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
     )
@@ -284,24 +284,24 @@ private fun LetterRow(letter: LetterDto.LetterResponse, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)).background(AccentLight),
+            modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)).background(AppAccentLight),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Outlined.Person, contentDescription = null, tint = Accent, modifier = Modifier.size(18.dp))
+            Icon(Icons.Outlined.Person, contentDescription = null, tint = AppAccent, modifier = Modifier.size(18.dp))
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = letter.title?.ifBlank { "无标题" } ?: "无标题",
                 style = MaterialTheme.typography.titleSmall,
-                color = TextPrimary,
+                color = AppTextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = letter.content?.take(50) ?: "",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
+                color = AppTextSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -310,10 +310,10 @@ private fun LetterRow(letter: LetterDto.LetterResponse, onClick: () -> Unit) {
         Text(
             text = formatDateShort(letter.sendTime ?: letter.createdAt),
             style = MaterialTheme.typography.labelSmall,
-            color = TextTertiary,
+            color = AppTextTertiary,
         )
     }
-    HorizontalDivider(color = BorderLight, modifier = Modifier.padding(horizontal = 20.dp))
+    HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(horizontal = 20.dp))
 }
 
 @Composable
@@ -323,7 +323,7 @@ private fun DiaryRow(letter: LetterDto.LetterResponse, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)).background(AccentLight),
+            modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)).background(AppAccentLight),
             contentAlignment = Alignment.Center,
         ) {
             Text("📝", style = MaterialTheme.typography.titleMedium)
@@ -333,14 +333,14 @@ private fun DiaryRow(letter: LetterDto.LetterResponse, onClick: () -> Unit) {
             Text(
                 text = letter.title?.ifBlank { "无标题" } ?: "无标题",
                 style = MaterialTheme.typography.titleSmall,
-                color = TextPrimary,
+                color = AppTextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = letter.content?.take(50) ?: "",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
+                color = AppTextSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -349,10 +349,10 @@ private fun DiaryRow(letter: LetterDto.LetterResponse, onClick: () -> Unit) {
         Text(
             text = formatDateShort(letter.createdAt),
             style = MaterialTheme.typography.labelSmall,
-            color = TextTertiary,
+            color = AppTextTertiary,
         )
     }
-    HorizontalDivider(color = BorderLight, modifier = Modifier.padding(horizontal = 20.dp))
+    HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(horizontal = 20.dp))
 }
 
 @Composable
@@ -364,20 +364,20 @@ private fun MailboxEmptyState(isCoupleMode: Boolean) {
         Icon(
             if (isCoupleMode) Icons.Outlined.MailOutline else Icons.Outlined.Edit,
             contentDescription = null,
-            tint = TextTertiary,
+            tint = AppTextTertiary,
             modifier = Modifier.size(48.dp),
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = if (isCoupleMode) "还没有信件" else "还没有日记",
             style = MaterialTheme.typography.bodyLarge,
-            color = TextSecondary,
+            color = AppTextSecondary,
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = if (isCoupleMode) "可以从第一句认真话开始。" else "记录此刻的心情。",
             style = MaterialTheme.typography.bodySmall,
-            color = TextTertiary,
+            color = AppTextTertiary,
         )
     }
 }
@@ -389,8 +389,8 @@ private fun AllLettersLink(onClick: () -> Unit, label: String = "全部信件") 
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, style = MaterialTheme.typography.titleSmall, color = TextSecondary)
-        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = TextTertiary, modifier = Modifier.size(16.dp))
+        Text(label, style = MaterialTheme.typography.titleSmall, color = AppTextSecondary)
+        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = AppTextTertiary, modifier = Modifier.size(16.dp))
     }
 }
 

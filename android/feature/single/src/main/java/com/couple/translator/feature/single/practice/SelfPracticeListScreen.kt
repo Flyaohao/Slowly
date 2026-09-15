@@ -45,13 +45,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.single.data.model.SelfPracticeDto
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,7 +89,7 @@ private fun PracticeListScreen(
     onStartPractice: (Long) -> Unit,
 ) {
     Scaffold(
-        containerColor = Background,
+        containerColor = AppBackground,
         topBar = {
             TopAppBar(
                 title = { Text("自我练习") },
@@ -99,9 +99,9 @@ private fun PracticeListScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Background,
-                    titleContentColor = TextPrimary,
-                    navigationIconContentColor = TextPrimary,
+                    containerColor = AppBackground,
+                    titleContentColor = AppTextPrimary,
+                    navigationIconContentColor = AppTextPrimary,
                 ),
             )
         },
@@ -121,7 +121,7 @@ private fun PracticeListScreen(
                 Text(
                     text = "选择一个练习开始",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 uiState.practices.forEach { practice ->
@@ -147,7 +147,7 @@ private fun PracticeCard(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        color = Surface,
+        color = AppSurface,
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -157,13 +157,13 @@ private fun PracticeCard(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(AccentLight),
+                    .background(AppAccentLight),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Outlined.SelfImprovement,
                     contentDescription = null,
-                    tint = Accent,
+                    tint = AppAccent,
                     modifier = Modifier.size(24.dp),
                 )
             }
@@ -172,13 +172,13 @@ private fun PracticeCard(
                 Text(
                     text = practice.title,
                     style = MaterialTheme.typography.titleSmall,
-                    color = TextPrimary,
+                    color = AppTextPrimary,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = practice.description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
+                    color = AppTextSecondary,
                     maxLines = 2,
                 )
             }
@@ -197,7 +197,7 @@ private fun PracticeDetailScreen(
     onBack: () -> Unit,
 ) {
     Scaffold(
-        containerColor = Background,
+        containerColor = AppBackground,
         topBar = {
             TopAppBar(
                 title = { Text(practice.title) },
@@ -207,9 +207,9 @@ private fun PracticeDetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Background,
-                    titleContentColor = TextPrimary,
-                    navigationIconContentColor = TextPrimary,
+                    containerColor = AppBackground,
+                    titleContentColor = AppTextPrimary,
+                    navigationIconContentColor = AppTextPrimary,
                 ),
             )
         },
@@ -225,20 +225,20 @@ private fun PracticeDetailScreen(
             if (practice.guidance != null) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = AccentLight,
+                    color = AppAccentLight,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = "练习指引",
                             style = MaterialTheme.typography.labelMedium,
-                            color = Accent,
+                            color = AppAccent,
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = practice.guidance,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextPrimary,
+                            color = AppTextPrimary,
                         )
                     }
                 }
@@ -249,7 +249,7 @@ private fun PracticeDetailScreen(
             Text(
                 text = "练习记录",
                 style = MaterialTheme.typography.labelMedium,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
@@ -260,7 +260,7 @@ private fun PracticeDetailScreen(
                     .fillMaxWidth()
                     .height(150.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Accent,
+                    focusedBorderColor = AppAccent,
                 ),
             )
 
@@ -270,7 +270,7 @@ private fun PracticeDetailScreen(
             Text(
                 text = "反思感悟",
                 style = MaterialTheme.typography.labelMedium,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
@@ -281,7 +281,7 @@ private fun PracticeDetailScreen(
                     .fillMaxWidth()
                     .height(120.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Accent,
+                    focusedBorderColor = AppAccent,
                 ),
             )
 
@@ -302,7 +302,7 @@ private fun PracticeDetailScreen(
                     .fillMaxWidth()
                     .height(48.dp),
                 shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.buttonColors(containerColor = TextPrimary, contentColor = Surface),
+                colors = ButtonDefaults.buttonColors(containerColor = AppTextPrimary, contentColor = AppSurface),
                 enabled = !uiState.isSubmitting,
             ) {
                 Text(
@@ -321,7 +321,7 @@ private fun PracticeCompletedScreen(onFinish: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(AppBackground)
             .padding(40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -329,26 +329,26 @@ private fun PracticeCompletedScreen(onFinish: () -> Unit) {
         Icon(
             imageVector = Icons.Outlined.CheckCircle,
             contentDescription = null,
-            tint = Accent,
+            tint = AppAccent,
             modifier = Modifier.size(64.dp),
         )
         Spacer(modifier = Modifier.height(24.dp))
         Text(
             text = "练习完成",
             style = MaterialTheme.typography.headlineSmall,
-            color = TextPrimary,
+            color = AppTextPrimary,
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = "坚持练习，你会遇见更好的自己",
             style = MaterialTheme.typography.bodyMedium,
-            color = TextSecondary,
+            color = AppTextSecondary,
         )
         Spacer(modifier = Modifier.height(32.dp))
         Button(
             onClick = onFinish,
             shape = RoundedCornerShape(50),
-            colors = ButtonDefaults.buttonColors(containerColor = TextPrimary, contentColor = Surface),
+            colors = ButtonDefaults.buttonColors(containerColor = AppTextPrimary, contentColor = AppSurface),
         ) {
             Text("返回练习列表")
         }

@@ -47,14 +47,14 @@ import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.feature.couple.data.model.PresenceDto
 import com.couple.translator.feature.couple.presence.MeetCountdown
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @Composable
 fun NewHomeScreen(
@@ -70,7 +70,7 @@ fun NewHomeScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     if (uiState.isLoading) {
-        Box(modifier = Modifier.fillMaxSize().background(Background)) {
+        Box(modifier = Modifier.fillMaxSize().background(AppBackground)) {
             LoadingIndicator()
         }
         return
@@ -83,7 +83,7 @@ fun NewHomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(AppBackground)
             .verticalScroll(rememberScrollState()),
     ) {
         HomeTopBar(
@@ -180,20 +180,20 @@ private fun PartnerMomentCard(
         androidx.compose.material3.Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp),
-            colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = AccentLight),
+            colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = AppAccentLight),
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Text(
                     text = if (moment.momentType == "companion_request") "TA 需要你的陪伴"
                     else "TA 此刻",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Accent,
+                    color = AppAccent,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = moment.content,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextPrimary,
+                    color = AppTextPrimary,
                 )
                 if (moment.momentType != "companion_request") {
                     Spacer(modifier = Modifier.height(8.dp))
@@ -201,7 +201,7 @@ private fun PartnerMomentCard(
                         Text(
                             text = if (companionSent) "陪伴请求已发出" else "TA 需要我 · 发陪伴请求",
                             style = MaterialTheme.typography.labelMedium,
-                            color = Accent,
+                            color = AppAccent,
                         )
                     }
                 }
@@ -228,13 +228,13 @@ private fun HomeTopBar(
                 modifier = Modifier
                     .size(30.dp)
                     .clip(CircleShape)
-                    .background(AccentLight),
+                    .background(AppAccentLight),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Person,
                     contentDescription = "打开侧边栏",
-                    tint = Accent,
+                    tint = AppAccent,
                     modifier = Modifier.size(16.dp),
                 )
             }
@@ -243,7 +243,7 @@ private fun HomeTopBar(
         Text(
             text = spaceName ?: if (isCoupleMode) "我们的空间" else "我的空间",
             style = MaterialTheme.typography.titleMedium,
-            color = TextPrimary,
+            color = AppTextPrimary,
         )
 
         if (isCoupleMode) {
@@ -251,7 +251,7 @@ private fun HomeTopBar(
                 Icon(
                     imageVector = Icons.Outlined.Notifications,
                     contentDescription = "通知",
-                    tint = TextSecondary,
+                    tint = AppTextSecondary,
                 )
             }
         } else {
@@ -272,7 +272,7 @@ private fun HomeIdentitySection(
         Text(
             text = spaceName,
             style = MaterialTheme.typography.displayMedium,
-            color = TextPrimary,
+            color = AppTextPrimary,
         )
         Spacer(modifier = Modifier.height(6.dp))
         if (daysCount > 0) {
@@ -280,17 +280,17 @@ private fun HomeIdentitySection(
                 Text(
                     text = "第 ",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = TextSecondary,
+                    color = AppTextSecondary,
                 )
                 Text(
                     text = daysCount.toString(),
                     style = MaterialTheme.typography.headlineLarge,
-                    color = TextPrimary,
+                    color = AppTextPrimary,
                 )
                 Text(
                     text = " 天",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = TextSecondary,
+                    color = AppTextSecondary,
                 )
             }
         }
@@ -298,7 +298,7 @@ private fun HomeIdentitySection(
         Text(
             text = heroText,
             style = MaterialTheme.typography.bodyMedium,
-            color = TextTertiary,
+            color = AppTextTertiary,
         )
     }
 }
@@ -315,8 +315,8 @@ private fun HomePrimaryButton(
             .height(48.dp),
         shape = RoundedCornerShape(50),
         colors = ButtonDefaults.buttonColors(
-            containerColor = TextPrimary,
-            contentColor = Surface,
+            containerColor = AppTextPrimary,
+            contentColor = AppSurface,
         ),
     ) {
         Text(
@@ -335,7 +335,7 @@ private fun HomeRecentSection(
         Text(
             text = "最近",
             style = MaterialTheme.typography.labelSmall,
-            color = TextTertiary,
+            color = AppTextTertiary,
             modifier = Modifier.padding(bottom = 8.dp),
         )
         items.forEachIndexed { index, item ->
@@ -350,13 +350,13 @@ private fun HomeRecentSection(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(RoundedCornerShape(6.dp))
-                        .background(Background),
+                        .background(AppBackground),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Person,
                         contentDescription = null,
-                        tint = TextSecondary,
+                        tint = AppTextSecondary,
                         modifier = Modifier.size(16.dp),
                     )
                 }
@@ -365,24 +365,24 @@ private fun HomeRecentSection(
                     Text(
                         text = item.title,
                         style = MaterialTheme.typography.titleSmall,
-                        color = TextPrimary,
+                        color = AppTextPrimary,
                         maxLines = 1,
                     )
                     Text(
                         text = item.excerpt,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                         maxLines = 1,
                     )
                 }
                 Text(
                     text = item.timeLabel,
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                 )
             }
             if (index < items.lastIndex) {
-                HorizontalDivider(color = BorderLight)
+                HorizontalDivider(color = AppBorderLight)
             }
         }
     }
@@ -397,7 +397,7 @@ private fun HomeAiHint(onClick: () -> Unit) {
             .padding(horizontal = 20.dp)
             .padding(top = 13.dp),
     ) {
-        HorizontalDivider(color = BorderLight)
+        HorizontalDivider(color = AppBorderLight)
         Spacer(modifier = Modifier.height(13.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -405,18 +405,18 @@ private fun HomeAiHint(onClick: () -> Unit) {
             Text(
                 text = "需要整理表达时，可以找",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
             Text(
                 text = "翻译官",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextPrimary,
+                color = AppTextPrimary,
             )
             Spacer(modifier = Modifier.weight(1f))
             Icon(
                 imageVector = Icons.Outlined.ChevronRight,
                 contentDescription = null,
-                tint = TextTertiary,
+                tint = AppTextTertiary,
                 modifier = Modifier.size(16.dp),
             )
         }
@@ -439,7 +439,7 @@ private fun HomeSingleModeSection(
         Text(
             text = "这个空间还差一个人",
             style = MaterialTheme.typography.headlineSmall,
-            color = TextPrimary,
+            color = AppTextPrimary,
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -447,7 +447,7 @@ private fun HomeSingleModeSection(
         Text(
             text = "绑定情侣后解锁完整功能",
             style = MaterialTheme.typography.bodyLarge,
-            color = TextSecondary,
+            color = AppTextSecondary,
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -455,7 +455,7 @@ private fun HomeSingleModeSection(
         Button(
             onClick = onNavigateToBind,
             colors = ButtonDefaults.buttonColors(
-                containerColor = Accent,
+                containerColor = AppAccent,
             ),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth(),
@@ -472,7 +472,7 @@ private fun HomeSingleModeSection(
         Text(
             text = "或者",
             style = MaterialTheme.typography.bodySmall,
-            color = TextTertiary,
+            color = AppTextTertiary,
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -480,7 +480,7 @@ private fun HomeSingleModeSection(
         Button(
             onClick = onNavigateToComposeLetter,
             colors = ButtonDefaults.buttonColors(
-                containerColor = Surface,
+                containerColor = AppSurface,
             ),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth(),
@@ -488,7 +488,7 @@ private fun HomeSingleModeSection(
             Text(
                 text = "写给自己",
                 style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary,
+                color = AppTextPrimary,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
         }
@@ -571,27 +571,27 @@ private fun QuickInfoCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
+            .background(AppSurface)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = Accent,
+            tint = AppAccent,
             modifier = Modifier.size(20.dp),
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = TextPrimary,
+            color = AppTextPrimary,
             modifier = Modifier.weight(1f),
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodySmall,
-            color = TextSecondary,
+            color = AppTextSecondary,
         )
     }
 }

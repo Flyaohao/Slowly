@@ -27,9 +27,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.ErrorRed
-import com.couple.translator.core.ui.theme.Surface
+import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppIsDark
 
 enum class SafetyRiskLevel {
     HEATED_CONFLICT,
@@ -88,12 +87,25 @@ fun SafetyWarningCard(
     modifier: Modifier = Modifier,
 ) {
     val warning = safetyWarnings[riskLevel] ?: return
+    val isDark = AppIsDark
+    // 深色模式不能沿用浅色警示底（会在黑底上炸出一块白），改为同色系的深底 + 提亮图标色
     val (containerColor, iconTint) = when (riskLevel) {
-        SafetyRiskLevel.HEATED_CONFLICT -> Color(0xFFFFF3E0) to Color(0xFFE65100)
-        SafetyRiskLevel.MANIPULATION_RISK -> Color(0xFFFFF8E1) to Color(0xFFF9A825)
-        SafetyRiskLevel.ABUSE_RISK -> Color(0xFFFFEBEE) to ErrorRed
-        SafetyRiskLevel.SELF_HARM_RISK -> Color(0xFFFFCDD2) to Color(0xFFB71C1C)
+        SafetyRiskLevel.HEATED_CONFLICT ->
+            if (isDark) Color(0xFF3A2A12) to Color(0xFFFFB74D)
+            else Color(0xFFFFF3E0) to Color(0xFFE65100)
+        SafetyRiskLevel.MANIPULATION_RISK ->
+            if (isDark) Color(0xFF3A3212) to Color(0xFFFFD54F)
+            else Color(0xFFFFF8E1) to Color(0xFFF9A825)
+        SafetyRiskLevel.ABUSE_RISK ->
+            if (isDark) Color(0xFF3A1A1E) to AppErrorRed
+            else Color(0xFFFFEBEE) to AppErrorRed
+        SafetyRiskLevel.SELF_HARM_RISK ->
+            if (isDark) Color(0xFF4A1A1C) to Color(0xFFFF8A80)
+            else Color(0xFFFFCDD2) to Color(0xFFB71C1C)
     }
+    // 深色下按钮底是提亮色，文字改用深底同色；浅色保持原有取色不变
+    val buttonContentColor =
+        if (isDark) containerColor else MaterialTheme.colorScheme.onSurface
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -149,7 +161,10 @@ fun SafetyWarningCard(
             if (warning.actionLabel != null && onAction != null) {
                 Button(
                     onClick = onAction,
-                    colors = ButtonDefaults.buttonColors(containerColor = iconTint),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = iconTint,
+                        contentColor = buttonContentColor,
+                    ),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(warning.actionLabel)

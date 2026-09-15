@@ -44,10 +44,10 @@ import com.couple.translator.core.common.copyToClipboard
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PrimaryButton
 import com.couple.translator.core.ui.components.TextInputField
-import com.couple.translator.core.ui.theme.Accent
+import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.TextSecondary
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.feature.couple.data.repository.AppMode
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
 
@@ -115,7 +115,7 @@ fun CoupleBindScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Background,
+                    containerColor = AppBackground,
                 ),
             )
         },
@@ -174,7 +174,7 @@ private fun AlreadyBoundContent(
                 Icon(
                     imageVector = Icons.Outlined.Person,
                     contentDescription = null,
-                    tint = Accent,
+                    tint = AppAccent,
                     modifier = Modifier
                         .size(64.dp)
                         .clip(CircleShape),
@@ -193,7 +193,7 @@ private fun AlreadyBoundContent(
                     Text(
                         text = "绑定时间：$it",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
                 }
 
@@ -202,7 +202,7 @@ private fun AlreadyBoundContent(
                 Text(
                     text = if (isUnbinding) "解绑冷静期中" else "已绑定",
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (isUnbinding) MaterialTheme.colorScheme.error else TextSecondary,
+                    color = if (isUnbinding) MaterialTheme.colorScheme.error else AppTextSecondary,
                 )
             }
         }
@@ -262,7 +262,7 @@ private fun NotBoundContent(
             Text(
                 text = uiState.generatedCode,
                 style = MaterialTheme.typography.displayMedium,
-                color = Accent,
+                color = AppAccent,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -272,7 +272,7 @@ private fun NotBoundContent(
             Text(
                 text = "有效期至：${uiState.codeExpiresAt}",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
 
             Spacer(modifier = Modifier.height(12.dp))

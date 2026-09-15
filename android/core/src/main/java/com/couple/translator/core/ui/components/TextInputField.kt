@@ -13,10 +13,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @Composable
 fun TextInputField(
@@ -39,7 +39,7 @@ fun TextInputField(
         onValueChange = onValueChange,
         label = { Text(label) },
         placeholder = {
-            Text(placeholder, color = TextTertiary)
+            Text(placeholder, color = AppTextTertiary)
         },
         modifier = modifier.fillMaxWidth(),
         singleLine = singleLine,
@@ -61,10 +61,10 @@ fun TextInputField(
             onAny = { onImeAction() },
         ),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = Accent,
-            unfocusedBorderColor = BorderLight,
-            focusedLabelColor = Accent,
-            cursorColor = TextPrimary,
+            focusedBorderColor = AppAccent,
+            unfocusedBorderColor = AppBorderLight,
+            focusedLabelColor = AppAccent,
+            cursorColor = AppTextPrimary,
         ),
         shape = MaterialTheme.shapes.medium,
     )

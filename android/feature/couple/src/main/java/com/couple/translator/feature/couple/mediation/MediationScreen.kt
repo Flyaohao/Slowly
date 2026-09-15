@@ -33,10 +33,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.PrimaryButton
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextSecondary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,7 +45,7 @@ fun MediationExplanationScreen(
     onNavigateBack: () -> Unit,
 ) {
     Scaffold(
-        containerColor = Background,
+        containerColor = AppBackground,
         topBar = {
             TopAppBar(
                 title = { Text("双人调解室") },
@@ -67,7 +67,7 @@ fun MediationExplanationScreen(
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Surface),
+                colors = CardDefaults.cardColors(containerColor = AppSurface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             ) {
                 Column(
@@ -78,7 +78,7 @@ fun MediationExplanationScreen(
                         text = "什么是双人调解室？",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
-                        color = Accent,
+                        color = AppAccent,
                     )
 
                     Text(
@@ -97,14 +97,14 @@ fun MediationExplanationScreen(
                         Text(
                             text = step,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary,
+                            color = AppTextSecondary,
                         )
                     }
 
                     Text(
                         text = "AI 不会站队，不会判定对错，只是帮助你们更好地理解彼此。",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -153,7 +153,7 @@ fun MediationInviteScreen(
     }
 
     Scaffold(
-        containerColor = Background,
+        containerColor = AppBackground,
         topBar = {
             TopAppBar(
                 title = { Text("调解邀请") },
@@ -174,13 +174,13 @@ fun MediationInviteScreen(
             verticalArrangement = Arrangement.Center,
         ) {
             if (uiState.isLoading) {
-                CircularProgressIndicator(color = Accent)
+                CircularProgressIndicator(color = AppAccent)
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Surface),
+                colors = CardDefaults.cardColors(containerColor = AppSurface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             ) {
                 Column(
@@ -199,7 +199,7 @@ fun MediationInviteScreen(
                         Text(
                             text = "邀请已发送，请耐心等待对方接受",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary,
+                            color = AppTextSecondary,
                             textAlign = TextAlign.Center,
                         )
                     } else {
@@ -211,7 +211,7 @@ fun MediationInviteScreen(
                         Text(
                             text = "对方希望和你一起进行双人调解，帮助你们更好地沟通",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary,
+                            color = AppTextSecondary,
                             textAlign = TextAlign.Center,
                         )
 
@@ -270,7 +270,7 @@ fun MediationInputScreen(
     }
 
     Scaffold(
-        containerColor = Background,
+        containerColor = AppBackground,
         topBar = {
             TopAppBar(
                 title = { Text("表达你的感受") },
@@ -295,7 +295,7 @@ fun MediationInputScreen(
             Text(
                 text = "请写下你的感受和诉求，AI 会帮你改写为对方更容易接受的表达",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
 
             InputField(
@@ -371,7 +371,7 @@ fun MediationConfirmScreen(
     }
 
     Scaffold(
-        containerColor = Background,
+        containerColor = AppBackground,
         topBar = {
             TopAppBar(
                 title = { Text("确认改写") },
@@ -396,27 +396,27 @@ fun MediationConfirmScreen(
             Text(
                 text = "AI 将你的表达改写为对方更容易接受的版本",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
 
             if (uiState.isLoading) {
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.CenterHorizontally),
-                    color = Accent,
+                    color = AppAccent,
                 )
             }
 
             uiState.myRewrite?.let { rewrite ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = "你的原话",
                             style = MaterialTheme.typography.labelMedium,
-                            color = TextSecondary,
+                            color = AppTextSecondary,
                         )
                         Text(
                             text = rewrite.original,
@@ -427,7 +427,7 @@ fun MediationConfirmScreen(
                         Text(
                             text = "AI 改写后",
                             style = MaterialTheme.typography.labelMedium,
-                            color = Accent,
+                            color = AppAccent,
                         )
                         Text(
                             text = rewrite.rewritten,
@@ -489,7 +489,7 @@ fun MediationResultScreen(
     }
 
     Scaffold(
-        containerColor = Background,
+        containerColor = AppBackground,
         topBar = {
             TopAppBar(
                 title = { Text("调解结果") },
@@ -514,7 +514,7 @@ fun MediationResultScreen(
             if (uiState.isLoading) {
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.CenterHorizontally),
-                    color = Accent,
+                    color = AppAccent,
                 )
             }
 
@@ -522,7 +522,7 @@ fun MediationResultScreen(
                 ResultSection(
                     title = "共同点",
                     items = uiState.commonPoints,
-                    accentColor = Accent,
+                    accentColor = AppAccent,
                 )
             }
 
@@ -530,7 +530,7 @@ fun MediationResultScreen(
                 ResultSection(
                     title = "分歧点",
                     items = uiState.diffPoints,
-                    accentColor = TextSecondary,
+                    accentColor = AppTextSecondary,
                 )
             }
 
@@ -538,7 +538,7 @@ fun MediationResultScreen(
                 ResultSection(
                     title = "下一步行动",
                     items = uiState.nextActions,
-                    accentColor = Accent,
+                    accentColor = AppAccent,
                 )
             }
 
@@ -593,7 +593,7 @@ private fun ResultSection(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {

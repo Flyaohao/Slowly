@@ -51,7 +51,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.single.data.model.DiaryDto
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.theme.Accent
+import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
@@ -59,7 +59,6 @@ import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
-import com.couple.translator.core.ui.theme.Surface
 
 @Composable
 fun DiaryListScreen(
@@ -141,8 +140,8 @@ fun DiaryListScreen(
         if (!uiState.isSelectionMode) {
             FloatingActionButton(
                 onClick = onNavigateToCompose,
-                containerColor = Accent,
-                contentColor = Surface,
+                containerColor = AppAccent,
+                contentColor = AppSurface,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(16.dp),
@@ -208,7 +207,7 @@ private fun DiaryTopBar(
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = onSelectAll) {
-                Text("全选", color = Accent)
+                Text("全选", color = AppAccent)
             }
             IconButton(onClick = onDeleteSelected) {
                 Icon(
@@ -229,7 +228,7 @@ private fun DiaryTopBar(
                     Icon(
                         imageVector = Icons.Outlined.Book,
                         contentDescription = "打开侧边栏",
-                        tint = Accent,
+                        tint = AppAccent,
                         modifier = Modifier.size(16.dp),
                     )
                 }
@@ -280,7 +279,7 @@ private fun DiaryFilterTabs(
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (isSelected) Surface else AppTextSecondary,
+                    color = if (isSelected) AppSurface else AppTextSecondary,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 )
             }
@@ -315,7 +314,7 @@ private fun DiaryItem(
                 Icon(
                     imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
                     contentDescription = if (isSelected) "已选择" else "未选择",
-                    tint = if (isSelected) Accent else AppTextTertiary,
+                    tint = if (isSelected) AppAccent else AppTextTertiary,
                     modifier = Modifier.size(24.dp).padding(end = 8.dp),
                 )
             }
@@ -339,7 +338,7 @@ private fun DiaryItem(
                     Icon(
                         imageVector = if (diary.isFavorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
                         contentDescription = if (diary.isFavorite) "取消收藏" else "收藏",
-                        tint = if (diary.isFavorite) Accent else AppTextTertiary,
+                        tint = if (diary.isFavorite) AppAccent else AppTextTertiary,
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -398,12 +397,12 @@ private fun DiaryEmptyState(onCompose: () -> Unit) {
         Surface(
             onClick = onCompose,
             shape = RoundedCornerShape(50),
-            color = Accent,
+            color = AppAccent,
         ) {
             Text(
                 text = "写第一篇日记",
                 style = MaterialTheme.typography.titleSmall,
-                color = Surface,
+                color = AppSurface,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
             )
         }

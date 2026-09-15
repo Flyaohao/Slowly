@@ -39,7 +39,7 @@ import com.couple.translator.feature.couple.navigation.DrawerContent
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
 import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.ui.components.BottomTabBar
-import com.couple.translator.core.ui.theme.Background
+import com.couple.translator.core.ui.theme.AppBackground
 import kotlinx.coroutines.launch
 
 /**
@@ -111,7 +111,7 @@ fun CoupleShell(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(drawerContainerColor = Background) {
+            ModalDrawerSheet(drawerContainerColor = AppBackground) {
                 DrawerContent(
                     onNavigateToRoute = { route ->
                         closeDrawer()
@@ -132,7 +132,7 @@ fun CoupleShell(
         gesturesEnabled = drawerState.isOpen,
     ) {
         Scaffold(
-            containerColor = Background,
+            containerColor = AppBackground,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
                 BottomTabBar(

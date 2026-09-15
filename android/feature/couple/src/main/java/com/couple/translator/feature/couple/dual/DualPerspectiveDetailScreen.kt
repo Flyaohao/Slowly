@@ -40,12 +40,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.couple.data.model.DualPerspectiveDto
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,7 +73,7 @@ fun DualPerspectiveDetailScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
@@ -100,7 +99,7 @@ fun DualPerspectiveDetailScreen(
             Text(
                 text = event.eventTime?.take(10) ?: "",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextTertiary,
+                color = AppTextTertiary,
             )
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -113,13 +112,13 @@ fun DualPerspectiveDetailScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = AccentLight),
+                    colors = CardDefaults.cardColors(containerColor = AppAccentLight),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = "我的视角",
                             style = MaterialTheme.typography.labelLarge,
-                            color = Accent,
+                            color = AppAccent,
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -132,7 +131,7 @@ fun DualPerspectiveDetailScreen(
                 Text(
                     text = "对方尚未提交，双方都提交后可并排查看",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                 )
             }
 
@@ -142,7 +141,7 @@ fun DualPerspectiveDetailScreen(
                 Button(
                     onClick = { onNavigateToSubmitRecord(eventId) },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Accent),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppAccent),
                     shape = RoundedCornerShape(12.dp),
                 ) {
                     Text("提交我的视角", modifier = Modifier.padding(vertical = 8.dp))
@@ -156,7 +155,7 @@ fun DualPerspectiveDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                 ) {
-                    Text("确认公开，查看对方视角", color = Accent)
+                    Text("确认公开，查看对方视角", color = AppAccent)
                 }
             }
         }
@@ -194,13 +193,13 @@ private fun PerspectiveCard(
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelLarge,
-                color = Accent,
+                color = AppAccent,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(

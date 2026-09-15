@@ -42,12 +42,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.couple.data.model.MemoryDto
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.ErrorRed
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextSecondary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,7 +57,7 @@ fun MemoryScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
-        containerColor = Background,
+        containerColor = AppBackground,
         topBar = {
             TopAppBar(
                 title = { Text("AI 记忆管理") },
@@ -79,7 +78,7 @@ fun MemoryScreen(
             CircularProgressIndicator(
                 modifier = Modifier
                     .fillMaxSize(),
-                color = Accent,
+                color = AppAccent,
             )
         } else if (uiState.memories.isEmpty()) {
             Column(
@@ -91,7 +90,7 @@ fun MemoryScreen(
                 Text(
                     text = "暂无 AI 记忆",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = TextSecondary,
+                    color = AppTextSecondary,
                 )
             }
         } else {
@@ -126,7 +125,7 @@ private fun MemoryItemCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -169,7 +168,7 @@ private fun MemoryItemCard(
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = "删除",
-                        tint = ErrorRed,
+                        tint = AppErrorRed,
                     )
                 }
             }
@@ -183,7 +182,7 @@ private fun MemoryItemCard(
             Text(
                 text = memory.memoryType,
                 style = MaterialTheme.typography.labelSmall,
-                color = Accent,
+                color = AppAccent,
             )
         }
     }

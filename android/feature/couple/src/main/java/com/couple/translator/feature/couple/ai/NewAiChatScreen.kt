@@ -59,14 +59,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.AiDto
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,7 +95,7 @@ fun NewAiChatScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(AppBackground)
             .imePadding(),
     ) {
         AiTopBar(
@@ -119,7 +119,7 @@ fun NewAiChatScreen(
                     Text(
                         text = "可以直接说你想说的话。\n我会帮你表达，也会帮你理解 TA。",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextTertiary,
+                        color = AppTextTertiary,
                         modifier = Modifier.padding(vertical = 24.dp),
                     )
                 }
@@ -237,13 +237,13 @@ private fun AiTopBar(
                 modifier = Modifier
                     .size(30.dp)
                     .clip(CircleShape)
-                    .background(AccentLight),
+                    .background(AppAccentLight),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Person,
                     contentDescription = "打开侧边栏",
-                    tint = Accent,
+                    tint = AppAccent,
                     modifier = Modifier.size(16.dp),
                 )
             }
@@ -252,14 +252,14 @@ private fun AiTopBar(
         Text(
             text = modeLabel,
             style = MaterialTheme.typography.titleMedium,
-            color = TextPrimary,
+            color = AppTextPrimary,
         )
 
         IconButton(onClick = onOpenHistory) {
             Icon(
                 imageVector = Icons.Outlined.History,
                 contentDescription = "历史会话",
-                tint = TextSecondary,
+                tint = AppTextSecondary,
             )
         }
     }
@@ -275,13 +275,13 @@ private fun UserBubble(content: String) {
             modifier = Modifier
                 .widthIn(max = 280.dp)
                 .clip(RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp))
-                .background(TextPrimary)
+                .background(AppTextPrimary)
                 .padding(12.dp),
         ) {
             Text(
                 text = content,
                 style = MaterialTheme.typography.bodyLarge,
-                color = Surface,
+                color = AppSurface,
             )
         }
     }
@@ -313,14 +313,14 @@ private fun AiReplyBubble(
                 modifier = Modifier
                     .widthIn(max = 280.dp)
                     .clip(RoundedCornerShape(4.dp, 16.dp, 16.dp, 16.dp))
-                    .background(Surface)
+                    .background(AppSurface)
                     .padding(12.dp),
             ) {
                 Text(
                     // 流式过程中补一个光标，让"还在写"这件事可见
                     text = if (isStreaming) "$content▍" else content,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = TextPrimary,
+                    color = AppTextPrimary,
                 )
             }
         }
@@ -342,7 +342,7 @@ private fun AiInputBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Surface)
+            .background(AppSurface)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -350,12 +350,12 @@ private fun AiInputBar(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.weight(1f),
-            placeholder = { Text("想说点什么…", color = TextTertiary) },
+            placeholder = { Text("想说点什么…", color = AppTextTertiary) },
             shape = RoundedCornerShape(24.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Accent,
-                unfocusedBorderColor = BorderLight,
-                cursorColor = TextPrimary,
+                focusedBorderColor = AppAccent,
+                unfocusedBorderColor = AppBorderLight,
+                cursorColor = AppTextPrimary,
             ),
             maxLines = 4,
         )
@@ -369,7 +369,7 @@ private fun AiInputBar(
             Icon(
                 imageVector = Icons.Outlined.AutoAwesome,
                 contentDescription = "模式",
-                tint = TextSecondary,
+                tint = AppTextSecondary,
             )
         }
 
@@ -382,7 +382,7 @@ private fun AiInputBar(
                 Icon(
                     imageVector = Icons.Outlined.Edit,
                     contentDescription = "改写",
-                    tint = Accent,
+                    tint = AppAccent,
                 )
             }
         }
@@ -397,7 +397,7 @@ private fun AiInputBar(
                 Icon(
                     imageVector = Icons.Outlined.Psychology,
                     contentDescription = "Agent 深度提问",
-                    tint = Accent,
+                    tint = AppAccent,
                 )
             }
         }
@@ -409,7 +409,7 @@ private fun AiInputBar(
             Icon(
                 imageVector = Icons.Outlined.Link,
                 contentDescription = "引用",
-                tint = TextSecondary,
+                tint = AppTextSecondary,
             )
         }
 
@@ -419,12 +419,12 @@ private fun AiInputBar(
             modifier = Modifier
                 .size(38.dp)
                 .clip(CircleShape)
-                .background(if (value.isNotBlank() && !isLoading) TextPrimary else BorderLight),
+                .background(if (value.isNotBlank() && !isLoading) AppTextPrimary else AppBorderLight),
         ) {
             Icon(
                 Icons.AutoMirrored.Filled.Send,
                 contentDescription = "发送",
-                tint = Surface,
+                tint = AppSurface,
                 modifier = Modifier.size(18.dp),
             )
         }
@@ -437,26 +437,26 @@ private fun AgentTraceCard(toolCalls: List<AiDto.AgentToolCall>, steps: Int) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = AccentLight),
+        colors = CardDefaults.cardColors(containerColor = AppAccentLight),
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
             Text(
                 text = "Agent 深度提问 · " + (if (steps > 0) "$steps 轮" else "已完成"),
                 style = MaterialTheme.typography.labelSmall,
-                color = Accent,
+                color = AppAccent,
             )
             if (toolCalls.isEmpty()) {
                 Text(
                     text = "本轮未调用工具，直接作答",
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextSecondary,
+                    color = AppTextSecondary,
                 )
             } else {
                 toolCalls.forEach { call ->
                     Text(
                         text = "· " + toolLabel(call.name),
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
                 }
             }
@@ -496,8 +496,8 @@ private fun QuickSceneChips(
                     )
                 },
                 colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = AccentLight,
-                    selectedLabelColor = Accent,
+                    selectedContainerColor = AppAccentLight,
+                    selectedLabelColor = AppAccent,
                 ),
             )
         }
@@ -518,7 +518,7 @@ private fun RewriteResultSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Background,
+        containerColor = AppBackground,
     ) {
         Column(
             modifier = Modifier
@@ -530,7 +530,7 @@ private fun RewriteResultSheet(
                 text = "改写结果",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = TextPrimary,
+                color = AppTextPrimary,
             )
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -538,7 +538,7 @@ private fun RewriteResultSheet(
             Text(
                 text = "原文：${original.take(50)}${if (original.length > 50) "..." else ""}",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextTertiary,
+                color = AppTextTertiary,
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -549,7 +549,7 @@ private fun RewriteResultSheet(
                         .fillMaxWidth()
                         .padding(bottom = 12.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 ) {
                     Column(
@@ -560,21 +560,21 @@ private fun RewriteResultSheet(
                         Text(
                             text = version.style,
                             style = MaterialTheme.typography.labelLarge,
-                            color = Accent,
+                            color = AppAccent,
                             fontWeight = FontWeight.Medium,
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = version.content,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextPrimary,
+                            color = AppTextPrimary,
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         TextButton(
                             onClick = { onApply(version.content) },
                             modifier = Modifier.align(Alignment.End),
                         ) {
-                            Text("使用这个版本", color = Accent)
+                            Text("使用这个版本", color = AppAccent)
                         }
                     }
                 }

@@ -30,10 +30,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,7 +63,7 @@ fun CreateDualEventScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
@@ -81,7 +81,7 @@ fun CreateDualEventScreen(
             Text(
                 text = "记录一次事件，双方分别写下自己的视角",
                 style = MaterialTheme.typography.bodyMedium,
-                color = com.couple.translator.core.ui.theme.TextSecondary,
+                color = com.couple.translator.core.ui.theme.AppTextSecondary,
             )
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -93,10 +93,10 @@ fun CreateDualEventScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Accent,
-                    unfocusedBorderColor = BorderLight,
-                    focusedContainerColor = Surface,
-                    unfocusedContainerColor = Surface,
+                    focusedBorderColor = AppAccent,
+                    unfocusedBorderColor = AppBorderLight,
+                    focusedContainerColor = AppSurface,
+                    unfocusedContainerColor = AppSurface,
                 ),
                 singleLine = true,
             )
@@ -110,10 +110,10 @@ fun CreateDualEventScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Accent,
-                    unfocusedBorderColor = BorderLight,
-                    focusedContainerColor = Surface,
-                    unfocusedContainerColor = Surface,
+                    focusedBorderColor = AppAccent,
+                    unfocusedBorderColor = AppBorderLight,
+                    focusedContainerColor = AppSurface,
+                    unfocusedContainerColor = AppSurface,
                 ),
                 singleLine = true,
             )
@@ -123,7 +123,7 @@ fun CreateDualEventScreen(
             Button(
                 onClick = { viewModel.createEvent() },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Accent),
+                colors = ButtonDefaults.buttonColors(containerColor = AppAccent),
                 shape = RoundedCornerShape(12.dp),
             ) {
                 Text("创建并记录我的视角", modifier = Modifier.padding(vertical = 8.dp))

@@ -84,13 +84,14 @@ import com.couple.translator.core.data.model.QuestionnaireDto
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PrimaryButton
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -190,7 +191,7 @@ fun QuestionnaireScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Background,
+                    containerColor = AppBackground,
                 ),
             )
         },
@@ -207,7 +208,7 @@ fun QuestionnaireScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("暂无题目", style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
+                Text("暂无题目", style = MaterialTheme.typography.bodyLarge, color = AppTextSecondary)
             }
             return@Scaffold
         }
@@ -235,14 +236,14 @@ fun QuestionnaireScreen(
                         .fillMaxWidth()
                         .height(6.dp)
                         .clip(RoundedCornerShape(3.dp)),
-                    color = Accent,
-                    trackColor = BorderLight,
+                    color = AppAccent,
+                    trackColor = AppBorderLight,
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "已答 $answeredCount 题",
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                 )
             }
 
@@ -279,13 +280,13 @@ fun QuestionnaireScreen(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(AccentLight)
+                                .background(AppAccentLight)
                                 .padding(horizontal = 12.dp, vertical = 4.dp),
                         ) {
                             Text(
                                 text = "第 ${targetIndex + 1} 题",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = Accent,
+                                color = AppAccent,
                                 fontWeight = FontWeight.Medium,
                             )
                         }
@@ -335,7 +336,7 @@ fun QuestionnaireScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Background)
+                    .background(AppBackground)
                     .padding(horizontal = 24.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
@@ -390,7 +391,7 @@ private fun SubmitValidationDialog(
             Icon(
                 Icons.Default.Close,
                 contentDescription = null,
-                tint = Color(0xFFFF6B6B),
+                tint = AppErrorRed,
                 modifier = Modifier.size(32.dp),
             )
         },
@@ -406,7 +407,7 @@ private fun SubmitValidationDialog(
                 Text(
                     text = "完成所有必答题后才能提交，以下是未作答的题目：",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
+                    color = AppTextSecondary,
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 FlowRow(
@@ -417,14 +418,14 @@ private fun SubmitValidationDialog(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .border(1.dp, Accent, RoundedCornerShape(8.dp))
+                                .border(1.dp, AppAccent, RoundedCornerShape(8.dp))
                                 .clickable { onJumpTo(index) }
                                 .padding(horizontal = 12.dp, vertical = 6.dp),
                         ) {
                             Text(
                                 text = "第 ${index + 1} 题",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = Accent,
+                                color = AppAccent,
                                 fontWeight = FontWeight.Medium,
                             )
                         }
@@ -433,7 +434,7 @@ private fun SubmitValidationDialog(
                         Text(
                             text = "等共 ${unansweredIndices.size} 题",
                             style = MaterialTheme.typography.labelMedium,
-                            color = TextTertiary,
+                            color = AppTextTertiary,
                         )
                     }
                 }
@@ -463,7 +464,7 @@ private fun QuestionOverviewSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Background,
+        containerColor = AppBackground,
     ) {
         Column(
             modifier = Modifier
@@ -482,7 +483,7 @@ private fun QuestionOverviewSheet(
             Text(
                 text = "已答 $answeredCount / ${questions.size} 题",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -497,19 +498,19 @@ private fun QuestionOverviewSheet(
                     val isAnswered = answers.containsKey(question.id)
                     val isCurrent = index == currentIndex
                     val bgColor = when {
-                        isCurrent -> Accent
-                        isAnswered -> AccentLight
+                        isCurrent -> AppAccent
+                        isAnswered -> AppAccentLight
                         else -> Color.Transparent
                     }
                     val textColor = when {
                         isCurrent -> Color.White
-                        isAnswered -> Accent
-                        else -> TextTertiary
+                        isAnswered -> AppAccent
+                        else -> AppTextTertiary
                     }
                     val borderColor = when {
-                        isCurrent -> Accent
-                        isAnswered -> Accent
-                        else -> BorderLight
+                        isCurrent -> AppAccent
+                        isAnswered -> AppAccent
+                        else -> AppBorderLight
                     }
 
                     Box(
@@ -525,7 +526,7 @@ private fun QuestionOverviewSheet(
                             Icon(
                                 Icons.Default.Check,
                                 contentDescription = null,
-                                tint = Accent,
+                                tint = AppAccent,
                                 modifier = Modifier.size(20.dp),
                             )
                         } else {
@@ -551,30 +552,30 @@ private fun QuestionOverviewSheet(
                         modifier = Modifier
                             .size(16.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .background(Accent),
+                            .background(AppAccent),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("当前", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                    Text("当前", style = MaterialTheme.typography.labelSmall, color = AppTextTertiary)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
                             .size(16.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .background(AccentLight),
+                            .background(AppAccentLight),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("已答", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                    Text("已答", style = MaterialTheme.typography.labelSmall, color = AppTextTertiary)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
                             .size(16.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .border(1.dp, BorderLight, RoundedCornerShape(4.dp)),
+                            .border(1.dp, AppBorderLight, RoundedCornerShape(4.dp)),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("未答", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                    Text("未答", style = MaterialTheme.typography.labelSmall, color = AppTextTertiary)
                 }
             }
         }
@@ -598,10 +599,10 @@ private fun SingleChoiceContent(
                     .clip(RoundedCornerShape(14.dp))
                     .border(
                         width = if (isSelected) 2.dp else 1.dp,
-                        color = if (isSelected) Accent else BorderLight,
+                        color = if (isSelected) AppAccent else AppBorderLight,
                         shape = RoundedCornerShape(14.dp),
                     )
-                    .background(if (isSelected) AccentLight else Color.Transparent)
+                    .background(if (isSelected) AppAccentLight else Color.Transparent)
                     .clickable { onSelect(option.id) }
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -609,14 +610,14 @@ private fun SingleChoiceContent(
                 RadioButton(
                     selected = isSelected,
                     onClick = { onSelect(option.id) },
-                    colors = RadioButtonDefaults.colors(selectedColor = Accent),
+                    colors = RadioButtonDefaults.colors(selectedColor = AppAccent),
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = option.optionText,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                    color = if (isSelected) Accent else TextPrimary,
+                    color = if (isSelected) AppAccent else AppTextPrimary,
                 )
             }
         }
@@ -640,10 +641,10 @@ private fun MultiChoiceContent(
                     .clip(RoundedCornerShape(14.dp))
                     .border(
                         width = if (isSelected) 2.dp else 1.dp,
-                        color = if (isSelected) Accent else BorderLight,
+                        color = if (isSelected) AppAccent else AppBorderLight,
                         shape = RoundedCornerShape(14.dp),
                     )
-                    .background(if (isSelected) AccentLight else Color.Transparent)
+                    .background(if (isSelected) AppAccentLight else Color.Transparent)
                     .clickable { onToggle(option.id) }
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -651,14 +652,14 @@ private fun MultiChoiceContent(
                 Checkbox(
                     checked = isSelected,
                     onCheckedChange = { onToggle(option.id) },
-                    colors = CheckboxDefaults.colors(checkedColor = Accent),
+                    colors = CheckboxDefaults.colors(checkedColor = AppAccent),
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = option.optionText,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                    color = if (isSelected) Accent else TextPrimary,
+                    color = if (isSelected) AppAccent else AppTextPrimary,
                 )
             }
         }
@@ -668,7 +669,7 @@ private fun MultiChoiceContent(
             Text(
                 text = "已选 ${selectedOptionIds.size} 项",
                 style = MaterialTheme.typography.labelMedium,
-                color = Accent,
+                color = AppAccent,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.End,
             )
@@ -689,8 +690,8 @@ private fun LikertContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("非常不同意", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
-            Text("非常同意", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+            Text("非常不同意", style = MaterialTheme.typography.labelSmall, color = AppTextTertiary)
+            Text("非常同意", style = MaterialTheme.typography.labelSmall, color = AppTextTertiary)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -707,17 +708,17 @@ private fun LikertContent(
                         .clip(CircleShape)
                         .border(
                             width = if (isSelected) 2.5.dp else 1.5.dp,
-                            color = if (isSelected) Accent else BorderLight,
+                            color = if (isSelected) AppAccent else AppBorderLight,
                             shape = CircleShape,
                         )
-                        .background(if (isSelected) Accent else Color.Transparent)
+                        .background(if (isSelected) AppAccent else Color.Transparent)
                         .clickable { onSelect(value) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = value.toString(),
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (isSelected) Color.White else TextPrimary,
+                        color = if (isSelected) Color.White else AppTextPrimary,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                     )
                 }
@@ -743,7 +744,7 @@ private fun LikertContent(
                 Text(
                     text = label,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Accent,
+                    color = AppAccent,
                     fontWeight = FontWeight.Medium,
                 )
             }
@@ -771,7 +772,7 @@ private fun SortContent(
         Text(
             text = "点击箭头调整顺序，排在前面的更重要",
             style = MaterialTheme.typography.bodySmall,
-            color = TextTertiary,
+            color = AppTextTertiary,
         )
 
         displayList.forEachIndexed { index, optionId ->
@@ -783,10 +784,10 @@ private fun SortContent(
                     .clip(RoundedCornerShape(14.dp))
                     .border(
                         width = if (isFirst) 2.dp else 1.dp,
-                        color = if (isFirst) Accent else BorderLight,
+                        color = if (isFirst) AppAccent else AppBorderLight,
                         shape = RoundedCornerShape(14.dp),
                     )
-                    .background(if (isFirst) AccentLight else Color.Transparent)
+                    .background(if (isFirst) AppAccentLight else Color.Transparent)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -795,13 +796,13 @@ private fun SortContent(
                     modifier = Modifier
                         .size(32.dp)
                         .clip(CircleShape)
-                        .background(if (isFirst) Accent else BorderLight),
+                        .background(if (isFirst) AppAccent else AppBorderLight),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = "${index + 1}",
                         style = MaterialTheme.typography.titleSmall,
-                        color = if (isFirst) Color.White else TextPrimary,
+                        color = if (isFirst) Color.White else AppTextPrimary,
                         fontWeight = FontWeight.Bold,
                     )
                 }
@@ -812,7 +813,7 @@ private fun SortContent(
                     text = option.optionText,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = if (isFirst) FontWeight.Medium else FontWeight.Normal,
-                    color = if (isFirst) Accent else TextPrimary,
+                    color = if (isFirst) AppAccent else AppTextPrimary,
                     modifier = Modifier.weight(1f),
                 )
 
@@ -827,7 +828,7 @@ private fun SortContent(
                             Icons.Default.KeyboardArrowUp,
                             contentDescription = "上移",
                             modifier = Modifier.size(22.dp),
-                            tint = if (index > 0) Accent else BorderLight,
+                            tint = if (index > 0) AppAccent else AppBorderLight,
                         )
                     }
                     IconButton(
@@ -839,7 +840,7 @@ private fun SortContent(
                             Icons.Default.KeyboardArrowDown,
                             contentDescription = "下移",
                             modifier = Modifier.size(22.dp),
-                            tint = if (index < displayList.size - 1) Accent else BorderLight,
+                            tint = if (index < displayList.size - 1) AppAccent else AppBorderLight,
                         )
                     }
                 }

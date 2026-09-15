@@ -32,7 +32,7 @@ import com.couple.translator.core.data.repository.TokenStore
 import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.ui.components.BottomTabBar
-import com.couple.translator.core.ui.theme.Background
+import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.feature.couple.ai.NewAiChatScreen
 import com.couple.translator.feature.couple.home.NewHomeScreen
 import com.couple.translator.feature.couple.letter.NewMailboxScreen
@@ -97,7 +97,7 @@ fun MainScreen(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(
-                drawerContainerColor = Background,
+                drawerContainerColor = AppBackground,
             ) {
                 DrawerContent(
                     onNavigateToRoute = { route ->
@@ -118,7 +118,7 @@ fun MainScreen(
         gesturesEnabled = drawerState.isOpen,
     ) {
         Scaffold(
-            containerColor = Background,
+            containerColor = AppBackground,
             bottomBar = {
                 BottomTabBar(
                     currentRoute = currentRoute,

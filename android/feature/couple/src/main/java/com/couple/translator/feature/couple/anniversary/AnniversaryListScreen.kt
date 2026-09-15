@@ -40,11 +40,11 @@ import com.couple.translator.feature.couple.data.model.AnniversaryDto
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.ErrorRed
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,16 +68,16 @@ fun AnniversaryListScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onNavigateToAdd,
-                containerColor = Accent,
+                containerColor = AppAccent,
                 shape = CircleShape,
             ) {
-                Icon(Icons.Default.Add, contentDescription = "新增纪念日", tint = Surface)
+                Icon(Icons.Default.Add, contentDescription = "新增纪念日", tint = AppSurface)
             }
         },
     ) { padding ->
@@ -102,13 +102,13 @@ fun AnniversaryListScreen(
                 Text(
                     text = "还没有纪念日",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "记录你们重要的日子",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                 )
             }
             return@PullToRefreshLayout
@@ -141,7 +141,7 @@ private fun AnniversaryListItem(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
     ) {
         Row(
             modifier = Modifier
@@ -158,20 +158,20 @@ private fun AnniversaryListItem(
                 Text(
                     text = anniversary.anniversaryDate,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Accent,
+                    color = AppAccent,
                 )
                 if (anniversary.description != null) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = anniversary.description,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
+                        color = AppTextTertiary,
                         maxLines = 1,
                     )
                 }
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "删除", tint = ErrorRed)
+                Icon(Icons.Default.Delete, contentDescription = "删除", tint = AppErrorRed)
             }
         }
     }

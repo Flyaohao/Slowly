@@ -9,7 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.couple.translator.core.ui.theme.Accent
+import com.couple.translator.core.ui.theme.AppAccent
 
 @Composable
 fun PrimaryButton(
@@ -26,7 +26,7 @@ fun PrimaryButton(
             .height(52.dp),
         enabled = enabled && !isLoading,
         colors = ButtonDefaults.buttonColors(
-            containerColor = Accent,
+            containerColor = AppAccent,
         ),
         shape = MaterialTheme.shapes.medium,
     ) {

@@ -38,10 +38,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,7 +78,7 @@ fun LetterDetailScreen(
                     showDeleteDialog = false
                     viewModel.deleteLetter()
                 }) {
-                    Text("删除", color = Accent)
+                    Text("删除", color = AppAccent)
                 }
             },
             dismissButton = {
@@ -111,14 +111,14 @@ fun LetterDetailScreen(
                         // 草稿信件显示编辑按钮
                         if (letter.status == "draft") {
                             IconButton(onClick = { onNavigateToEdit(letter.id) }) {
-                                Icon(Icons.Default.Edit, contentDescription = "编辑", tint = Accent)
+                                Icon(Icons.Default.Edit, contentDescription = "编辑", tint = AppAccent)
                             }
                         }
                         IconButton(onClick = { viewModel.toggleFavorite() }) {
                             Icon(
                                 if (letter.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                 contentDescription = "收藏",
-                                tint = if (letter.isFavorite) Accent else TextSecondary,
+                                tint = if (letter.isFavorite) AppAccent else AppTextSecondary,
                             )
                         }
                         IconButton(onClick = { showDeleteDialog = true }) {
@@ -126,7 +126,7 @@ fun LetterDetailScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
@@ -140,7 +140,7 @@ fun LetterDetailScreen(
             Text(
                 text = "信件不存在",
                 modifier = Modifier.padding(padding).padding(24.dp),
-                color = TextTertiary,
+                color = AppTextTertiary,
             )
             return@Scaffold
         }
@@ -165,13 +165,13 @@ fun LetterDetailScreen(
                 Text(
                     text = letterTypeName(letter.letterType),
                     style = MaterialTheme.typography.labelMedium,
-                    color = Accent,
+                    color = AppAccent,
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = letter.createdAt ?: "",
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextTertiary,
+                    color = AppTextTertiary,
                 )
             }
 
@@ -187,7 +187,7 @@ fun LetterDetailScreen(
 
             Row {
                 TextButton(onClick = { onNavigateToComposeReply(letter.id) }) {
-                    Text("回应", color = Accent)
+                    Text("回应", color = AppAccent)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 TextButton(
@@ -196,7 +196,7 @@ fun LetterDetailScreen(
                 ) {
                     Text(
                         if (uiState.isLoadingAi) "AI 理解中..." else "AI 帮我理解",
-                        color = Accent,
+                        color = AppAccent,
                     )
                 }
             }

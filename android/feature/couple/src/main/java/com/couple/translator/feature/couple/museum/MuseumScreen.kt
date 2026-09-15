@@ -47,11 +47,12 @@ import com.couple.translator.feature.couple.data.model.MuseumDto
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 private val typeFilters = listOf(
     null to "全部",
@@ -88,16 +89,16 @@ fun MuseumScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onNavigateToAdd,
-                containerColor = Accent,
+                containerColor = AppAccent,
                 shape = CircleShape,
             ) {
-                Icon(Icons.Default.Add, contentDescription = "新增藏品", tint = Surface)
+                Icon(Icons.Default.Add, contentDescription = "新增藏品", tint = AppSurface)
             }
         },
     ) { padding ->
@@ -120,8 +121,8 @@ fun MuseumScreen(
                         onClick = { viewModel.selectType(type) },
                         label = { Text(label, style = MaterialTheme.typography.labelSmall) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = AccentLight,
-                            selectedLabelColor = Accent,
+                            selectedContainerColor = AppAccentLight,
+                            selectedLabelColor = AppAccent,
                         ),
                     )
                 }
@@ -144,13 +145,13 @@ fun MuseumScreen(
                     Text(
                         text = "博物馆还是空的",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TextTertiary,
+                        color = AppTextTertiary,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "收藏你们珍贵的瞬间",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
+                        color = AppTextTertiary,
                     )
                 }
 
@@ -189,7 +190,7 @@ private fun TimelineMonthHeader(month: String) {
         Text(
             text = month,
             style = MaterialTheme.typography.titleSmall,
-            color = Accent,
+            color = AppAccent,
             modifier = Modifier.padding(vertical = 12.dp),
         )
     }
@@ -200,6 +201,9 @@ private fun TimelineItem(
     item: MuseumDto.MuseumItemResponse,
     onClick: () -> Unit,
 ) {
+    // App* 是 @Composable 取色，必须在 Composable 作用域内先取出来，不能直接写进 Canvas 的绘制 lambda
+    val dotColor = AppAccent
+    val lineColor = AppBorderLight
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -213,11 +217,11 @@ private fun TimelineItem(
         ) {
             Spacer(modifier = Modifier.height(6.dp))
             androidx.compose.foundation.Canvas(modifier = Modifier.size(10.dp)) {
-                drawCircle(color = Accent)
+                drawCircle(color = dotColor)
             }
             Spacer(modifier = Modifier.height(2.dp))
             androidx.compose.foundation.Canvas(modifier = Modifier.size(1.dp, 40.dp)) {
-                drawRect(color = com.couple.translator.core.ui.theme.BorderLight)
+                drawRect(color = lineColor)
             }
         }
 
@@ -226,7 +230,7 @@ private fun TimelineItem(
         Card(
             modifier = Modifier.weight(1f),
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Surface),
+            colors = CardDefaults.cardColors(containerColor = AppSurface),
         ) {
             Row(
                 modifier = Modifier
@@ -255,7 +259,7 @@ private fun TimelineItem(
                         Text(
                             text = item.story,
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextTertiary,
+                            color = AppTextTertiary,
                             maxLines = 2,
                         )
                     }
@@ -263,14 +267,14 @@ private fun TimelineItem(
                     Text(
                         text = museumItemTypeText(item.itemType),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Accent,
+                        color = AppAccent,
                     )
                 }
                 if (item.pinned) {
                     Icon(
                         Icons.Default.PushPin,
                         contentDescription = "已置顶",
-                        tint = Accent,
+                        tint = AppAccent,
                         modifier = Modifier.size(16.dp),
                     )
                 }

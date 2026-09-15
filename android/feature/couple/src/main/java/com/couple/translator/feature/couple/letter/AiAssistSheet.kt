@@ -15,8 +15,8 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.TextSecondary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppTextSecondary
 
 private data class AiStyle(val label: String, val style: String)
 
@@ -57,7 +57,7 @@ fun AiAssistSheet(
             Text(
                 text = "选择一种风格，AI 会帮你改写当前内容",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -66,7 +66,7 @@ fun AiAssistSheet(
                 Text(
                     text = item.label,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Accent,
+                    color = AppAccent,
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onSelectStyle(item.style) }

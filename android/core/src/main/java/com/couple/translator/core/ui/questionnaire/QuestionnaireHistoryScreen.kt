@@ -48,14 +48,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.QuestionnaireDto
 import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -87,7 +85,7 @@ fun QuestionnaireHistoryScreen(
                     viewModel.deleteSubmission(submission.id)
                     deleteTarget = null
                 }) {
-                    Text("删除", color = Accent)
+                    Text("删除", color = AppAccent)
                 }
             },
             dismissButton = {
@@ -104,7 +102,7 @@ fun QuestionnaireHistoryScreen(
             modifier = Modifier.padding(16.dp),
             action = {
                 TextButton(onClick = { viewModel.loadHistory() }) {
-                    Text("重试", color = Accent)
+                    Text("重试", color = AppAccent)
                 }
             },
         ) {
@@ -121,7 +119,7 @@ fun QuestionnaireHistoryScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
@@ -145,13 +143,13 @@ fun QuestionnaireHistoryScreen(
                     Text(
                         text = "暂无作答记录",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary,
+                        color = AppTextSecondary,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "完成问卷后，记录会显示在这里",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextTertiary,
+                        color = AppTextTertiary,
                     )
                 }
             }
@@ -187,7 +185,7 @@ private fun SubmissionCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         shape = RoundedCornerShape(14.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
@@ -214,14 +212,14 @@ private fun SubmissionCard(
                     Text(
                         text = formatDate(submission.createdAt),
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary,
+                        color = AppTextTertiary,
                     )
                 }
                 IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = "删除",
-                        tint = TextTertiary,
+                        tint = AppTextTertiary,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -235,13 +233,13 @@ private fun SubmissionCard(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(AccentLight)
+                        .background(AppAccentLight)
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
                     Text(
                         text = typeName,
                         style = MaterialTheme.typography.labelMedium,
-                        color = Accent,
+                        color = AppAccent,
                         fontWeight = FontWeight.Medium,
                     )
                 }
@@ -261,7 +259,7 @@ private fun SubmissionCard(
                     Text(
                         text = summary,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
+                        color = AppTextTertiary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -279,12 +277,12 @@ private fun StatItem(label: String, value: String) {
             text = value,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
-            color = Accent,
+            color = AppAccent,
         )
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = TextTertiary,
+            color = AppTextTertiary,
         )
     }
 }

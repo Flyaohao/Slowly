@@ -17,11 +17,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -40,26 +39,26 @@ fun MeetCountdown(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(Surface)
+            .background(AppSurface)
             .padding(16.dp),
     ) {
         Text(
             text = "见面倒计时",
             style = MaterialTheme.typography.labelSmall,
-            color = TextTertiary,
+            color = AppTextTertiary,
         )
         Spacer(modifier = Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = daysLeft.toString(),
                 style = MaterialTheme.typography.headlineLarge,
-                color = TextPrimary,
+                color = AppTextPrimary,
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = "天后见面",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
+                color = AppTextSecondary,
                 modifier = Modifier.padding(bottom = 4.dp),
             )
         }

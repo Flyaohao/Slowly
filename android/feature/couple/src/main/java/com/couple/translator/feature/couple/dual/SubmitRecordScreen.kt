@@ -30,11 +30,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextSecondary
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,7 +65,7 @@ fun SubmitRecordScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
@@ -83,13 +83,13 @@ fun SubmitRecordScreen(
             Text(
                 text = "写下你对这件事的感受和想法",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "对方完成前无法看到你的内容",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
+                color = AppTextSecondary,
             )
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -102,10 +102,10 @@ fun SubmitRecordScreen(
                     .weight(1f),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Accent,
-                    unfocusedBorderColor = BorderLight,
-                    focusedContainerColor = Surface,
-                    unfocusedContainerColor = Surface,
+                    focusedBorderColor = AppAccent,
+                    unfocusedBorderColor = AppBorderLight,
+                    focusedContainerColor = AppSurface,
+                    unfocusedContainerColor = AppSurface,
                 ),
             )
 
@@ -114,7 +114,7 @@ fun SubmitRecordScreen(
             Button(
                 onClick = { viewModel.submitRecord(eventId) },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Accent),
+                colors = ButtonDefaults.buttonColors(containerColor = AppAccent),
                 shape = RoundedCornerShape(12.dp),
             ) {
                 Text("提交", modifier = Modifier.padding(vertical = 8.dp))

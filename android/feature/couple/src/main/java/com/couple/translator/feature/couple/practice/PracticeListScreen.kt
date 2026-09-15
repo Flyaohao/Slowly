@@ -38,12 +38,10 @@ import com.couple.translator.feature.couple.data.model.PracticeDto
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
+import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,7 +66,7 @@ fun PracticeListScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
@@ -93,7 +91,7 @@ fun PracticeListScreen(
                 Text(
                     text = "通过结构化练习提升沟通能力",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
+                    color = AppTextSecondary,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -125,7 +123,7 @@ private fun PracticeListItem(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
     ) {
         Row(
             modifier = Modifier
@@ -148,7 +146,7 @@ private fun PracticeListItem(
                     Text(
                         text = practice.description,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
+                        color = AppTextTertiary,
                         maxLines = 2,
                     )
                 }
@@ -156,7 +154,7 @@ private fun PracticeListItem(
             Icon(
                 Icons.Default.ChevronRight,
                 contentDescription = null,
-                tint = TextTertiary,
+                tint = AppTextTertiary,
             )
         }
     }

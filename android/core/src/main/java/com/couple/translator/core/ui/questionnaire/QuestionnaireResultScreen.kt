@@ -58,20 +58,14 @@ import com.couple.translator.core.data.model.QuestionnaireDto
 import com.couple.translator.core.ui.components.DimensionRadarChart
 import com.couple.translator.core.ui.components.PrimaryButton
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.theme.Accent
-import com.couple.translator.core.ui.theme.AccentLight
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
-import com.couple.translator.core.ui.theme.Background
-import com.couple.translator.core.ui.theme.BorderLight
-import com.couple.translator.core.ui.theme.Surface
-import com.couple.translator.core.ui.theme.TextPrimary
-import com.couple.translator.core.ui.theme.TextSecondary
-import com.couple.translator.core.ui.theme.TextTertiary
 import io.noties.markwon.Markwon
 
 private val dimensionNames = mapOf(
@@ -119,7 +113,7 @@ fun QuestionnaireResultScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
@@ -135,11 +129,11 @@ fun QuestionnaireResultScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(48.dp), color = Accent)
+                CircularProgressIndicator(modifier = Modifier.size(48.dp), color = AppAccent)
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("AI 正在分析你的测评结果...", style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
+                Text("AI 正在分析你的测评结果...", style = MaterialTheme.typography.bodyLarge, color = AppTextSecondary)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("这可能需要 10-30 秒，请耐心等待", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                Text("这可能需要 10-30 秒，请耐心等待", style = MaterialTheme.typography.bodySmall, color = AppTextTertiary)
             }
             return@PullToRefreshLayout
         }
@@ -151,9 +145,9 @@ fun QuestionnaireResultScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Text("分析生成失败", style = MaterialTheme.typography.headlineMedium, color = TextSecondary)
+                Text("分析生成失败", style = MaterialTheme.typography.headlineMedium, color = AppTextSecondary)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(uiState.error, style = MaterialTheme.typography.bodyMedium, color = TextTertiary, textAlign = TextAlign.Center)
+                Text(uiState.error, style = MaterialTheme.typography.bodyMedium, color = AppTextTertiary, textAlign = TextAlign.Center)
                 Spacer(modifier = Modifier.height(24.dp))
                 PrimaryButton(text = "重新分析", onClick = { viewModel.retry() })
                 Spacer(modifier = Modifier.height(12.dp))
@@ -169,7 +163,7 @@ fun QuestionnaireResultScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Text("暂无分析结果", style = MaterialTheme.typography.headlineMedium, color = TextSecondary)
+                Text("暂无分析结果", style = MaterialTheme.typography.headlineMedium, color = AppTextSecondary)
                 Spacer(modifier = Modifier.height(24.dp))
                 PrimaryButton(text = "重新分析", onClick = { viewModel.retry() })
             }
@@ -196,7 +190,7 @@ fun QuestionnaireResultScreen(
             ) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface),
                     shape = RoundedCornerShape(16.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 ) {
@@ -204,9 +198,9 @@ fun QuestionnaireResultScreen(
                         modifier = Modifier.fillMaxWidth().padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Text(analysis.profileLabel, style = MaterialTheme.typography.headlineMedium, color = Accent, fontWeight = FontWeight.Bold)
+                        Text(analysis.profileLabel, style = MaterialTheme.typography.headlineMedium, color = AppAccent, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text("置信度 ${(analysis.confidence * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                        Text("置信度 ${(analysis.confidence * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = AppTextTertiary)
                     }
                 }
             }
@@ -219,7 +213,7 @@ fun QuestionnaireResultScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface),
                     shape = RoundedCornerShape(16.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 ) {
@@ -294,13 +288,13 @@ fun QuestionnaireResultScreen(
 
             if (uiState.coupleProfileReady) {
                 Spacer(modifier = Modifier.height(12.dp))
-                Button(onClick = onNavigateToCoupleProfile, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Accent)) {
+                Button(onClick = onNavigateToCoupleProfile, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = AppAccent)) {
                     Text("查看情侣组合画像")
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
-            Button(onClick = onNavigateBack, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Accent)) {
+            Button(onClick = onNavigateBack, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = AppAccent)) {
                 Text("返回首页")
             }
             Spacer(modifier = Modifier.height(32.dp))
@@ -320,10 +314,10 @@ private fun SectionTitle(text: String) {
 private fun BodyCard(text: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         shape = RoundedCornerShape(14.dp),
     ) {
-        val textColor = TextPrimary
+        val textColor = AppTextPrimary
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
                 android.widget.TextView(ctx).apply {
@@ -346,7 +340,7 @@ private fun BodyCard(text: String) {
 private fun HighlightCard(text: String, icon: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = AccentLight),
+        colors = CardDefaults.cardColors(containerColor = AppAccentLight),
         shape = RoundedCornerShape(14.dp),
     ) {
         Row(modifier = Modifier.padding(16.dp)) {
@@ -355,7 +349,7 @@ private fun HighlightCard(text: String, icon: String) {
             Text(
                 text = text.trim(),
                 style = MaterialTheme.typography.bodyLarge,
-                color = TextPrimary,
+                color = AppTextPrimary,
                 lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
                 modifier = Modifier.weight(1f),
             )
@@ -369,12 +363,12 @@ private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
         "高" -> Color(0xFFFF6B6B)
         "中" -> Color(0xFFFFA726)
         "低" -> Color(0xFF66BB6A)
-        else -> Accent
+        else -> AppAccent
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         shape = RoundedCornerShape(14.dp),
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
@@ -395,7 +389,7 @@ private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
                         Text(dim.level, style = MaterialTheme.typography.labelSmall, color = levelColor, fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("${dim.score.toInt()}", style = MaterialTheme.typography.titleMedium, color = Accent, fontWeight = FontWeight.Bold)
+                    Text("${dim.score.toInt()}", style = MaterialTheme.typography.titleMedium, color = AppAccent, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -403,14 +397,14 @@ private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
 
             // Score bar
             Box(
-                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(BorderLight),
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(AppBorderLight),
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(fraction = (dim.score / 100f).coerceIn(0f, 1f))
                         .height(6.dp)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(Accent),
+                        .background(AppAccent),
                 )
             }
 
@@ -418,7 +412,7 @@ private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
 
             // AI analysis text (Markdown)
             if (dim.analysis.isNotBlank()) {
-                val dimTextColor = TextSecondary
+                val dimTextColor = AppTextSecondary
                 androidx.compose.ui.viewinterop.AndroidView(
                     factory = { ctx ->
                         android.widget.TextView(ctx).apply {
@@ -443,18 +437,18 @@ private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
 private fun TipCard(number: Int, text: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         shape = RoundedCornerShape(12.dp),
     ) {
         Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
             Box(
-                modifier = Modifier.size(24.dp).clip(CircleShape).background(Accent),
+                modifier = Modifier.size(24.dp).clip(CircleShape).background(AppAccent),
                 contentAlignment = Alignment.Center,
             ) {
                 Text("$number", style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.width(12.dp))
-            Text(text, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, modifier = Modifier.weight(1f))
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = AppTextPrimary, modifier = Modifier.weight(1f))
         }
     }
 }
