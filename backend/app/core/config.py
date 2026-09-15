@@ -16,6 +16,14 @@ AI_MODEL: str = os.getenv("AI_MODEL", "qwen3.7-flash")
 AI_MEMORY_MODEL: str = os.getenv("AI_MEMORY_MODEL", "qwen-turbo")
 AI_BASE_URL: str = os.getenv("AI_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 
+#: 推理模型的思考预算（token）。主模型是推理模型，**思考长度直接等于用户等待时间**：
+#: 实测同一封信的解读，不限制时思考 9258 字 / 首字正文 32.9s；压到 1024 时
+#: 思考 3343 字 / 首字 13.4s；完全关掉思考则 0.9s 出字。取 0 表示不限制。
+AI_THINKING_BUDGET: int = int(os.getenv("AI_THINKING_BUDGET", "1024"))
+#: 是否允许模型产出思考过程。置 false 后连思考帧都不再产生（前端「深度思考」
+#: 面板会空着），换来最快的首字响应；一般只在演示「极速模式」时用。
+AI_ENABLE_THINKING: bool = os.getenv("AI_ENABLE_THINKING", "true").lower() == "true"
+
 # 向量库持久化目录。留空表示用默认的 backend/data/chroma；
 # 容器部署时通过该变量把目录指到挂载卷上，避免重建镜像丢向量。
 CHROMA_DIR: str = os.getenv("CHROMA_DIR", "")

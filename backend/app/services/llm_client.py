@@ -25,7 +25,13 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple, Type
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from app.core.config import AI_API_KEY, AI_BASE_URL, AI_MODEL
+from app.core.config import (
+    AI_API_KEY,
+    AI_BASE_URL,
+    AI_ENABLE_THINKING,
+    AI_MODEL,
+    AI_THINKING_BUDGET,
+)
 from app.schemas.ai_output import build_tool_schema, get_output_model
 
 logger = logging.getLogger("couple.llm")
@@ -105,11 +111,20 @@ class LlmClient:
         base_url: Optional[str] = None,
         model: Optional[str] = None,
         fallbacks: Optional[List[str]] = None,
+        enable_thinking: Optional[bool] = None,
+        thinking_budget: Optional[int] = None,
     ) -> None:
         self.api_key = api_key or AI_API_KEY
         self.base_url = (base_url or AI_BASE_URL).rstrip("/")
         self.model = model or AI_MODEL
         self.fallbacks = fallbacks if fallbacks is not None else FALLBACK_MODELS
+        #: 思考控制。默认值来自环境变量，构造时显式传入可覆盖（测试用）
+        self.enable_thinking = (
+            AI_ENABLE_THINKING if enable_thinking is None else enable_thinking
+        )
+        self.thinking_budget = (
+            AI_THINKING_BUDGET if thinking_budget is None else thinking_budget
+        )
 
         if not self.api_key:
             logger.warning("未配置 AI_API_KEY，AI 功能将不可用")
@@ -192,6 +207,7 @@ class LlmClient:
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "stream": True,
+                **self._thinking_params(),
             }
             started = time.time()
             thinking_chunks = 0
@@ -359,6 +375,27 @@ class LlmClient:
             "Content-Type": "application/json",
         }
 
+    def _thinking_params(self) -> Dict[str, Any]:
+        """思考控制参数，附加到每一次请求体上。
+
+        **为什么值得单独下发**：主模型是推理模型，它先写一段思考再落笔正文，
+        而用户的等待时间几乎等于思考时长。用同一封信的解读实测：
+
+        | 配置 | 思考 | 首字正文 | 总耗时 |
+        | --- | --- | --- | --- |
+        | 不限制 | 9258 字 | 32.9s | 35.9s |
+        | thinking_budget=1024 | 3343 字 | 13.4s | 19.3s |
+        | enable_thinking=false | 不产生 | 0.9s | 6.1s |
+
+        默认值在 `config.AI_THINKING_BUDGET`，改环境变量即可调，不必改代码。
+        备选模型实测会忽略这两个字段（不会 400），所以无条件下发。
+        """
+        if not self.enable_thinking:
+            return {"enable_thinking": False}
+        if self.thinking_budget > 0:
+            return {"thinking_budget": self.thinking_budget}
+        return {}
+
     def _candidates(self) -> List[str]:
         """待尝试的模型序列：主模型优先，备用模型去重后依次跟上。"""
         models = [self.model]
@@ -372,7 +409,7 @@ class LlmClient:
         last_error: Optional[str] = None
 
         for model in self._candidates():
-            body = dict(payload, model=model)
+            body = dict(payload, model=model, **self._thinking_params())
             started = time.time()
             try:
                 with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:

@@ -27,6 +27,8 @@ import com.couple.translator.core.ui.components.AiStreamingText
 import com.couple.translator.core.ui.components.AiThinkingPanel
 import com.couple.translator.core.ui.components.AiWaitingBubble
 import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppDivider
+import com.couple.translator.core.ui.components.AppMarkdownText
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppTextSecondary
@@ -41,12 +43,14 @@ import com.couple.translator.feature.couple.data.model.LetterDto
  * | 思考中 | [isThinking] | 思考面板展开滚动，正文位置是占位气泡 |
  * | 正文流式 | [isStreaming] 且有 [streamContent] | 逐字正文 + 光标 |
  * | 整理中 | [isStructuring] | 正文定格，提示「正在整理要点」 |
- * | 已完成 | [understanding] 非空 | 要点卡片（对方情绪 / 关注点 / 期待回应…） |
+ * | 已完成 | [understanding] 非空 | 正文（Markdown）+ 解读要点卡片 |
  *
- * **为什么完成态只显示要点卡片、不并列显示正文**：正文本来就是把这些字段
- * 串起来讲一遍，两者并列会让卡片长度翻倍而信息量不变。所以正文的定位是
- * 「过程」，要点卡片的定位是「结果」——过程跑完就被结果替换掉。
- * 例外是中途停止（`structured` 为空）的情况，那时只有正文可看，就保留正文。
+ * **为什么完成态要让正文与要点并存**：两者回答的是不同问题。正文是模型这次
+ * 分析的原始回复，有完整的推理脉络与语气，用户读它才知道结论是怎么来的；
+ * 要点则是同一次调用里抽出来的结构化字段，方便扫读和事后回看。早先的版本
+ * 在完成态用要点替换掉正文，等于把模型花掉大半时间写的那段解读扔掉了——
+ * 现在两份都留：正文在上（Markdown 渲染），要点在下（结构化渲染）。
+ * 中途停止（`structured` 为空）时自然只剩正文，走的是同一条渲染路径。
  *
  * 状态徽标（思考中 / 生成中 / 已中断）是必要的：没有它，用户分不清
  * 「还在跑」和「已经跑完了但内容少」。
@@ -112,8 +116,25 @@ fun LetterUnderstandingCard(
         }
 
         when {
-            // 结果已经出来了：渲染要点
-            understanding != null -> UnderstandingSections(understanding)
+            // 结果已经出来了：正文（模型原始解读）在上，要点在下，两份都留
+            understanding != null -> {
+                if (streamContent.isNotBlank()) {
+                    AppMarkdownText(
+                        markdown = streamContent,
+                        color = AppTextSecondary,
+                        textSizeSp = 14f,
+                    )
+                    // 只在真的要渲染要点时才画分隔线，否则正文下面会挂一条孤零零的线
+                    if (understanding.hasAnySection()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        AppDivider()
+                        Spacer(modifier = Modifier.height(12.dp))
+                        SectionLabel("解读要点")
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+                UnderstandingSections(understanding)
+            }
 
             // 正文还在流：逐字显示
             streamContent.isNotBlank() -> AiStreamingText(
@@ -131,6 +152,28 @@ fun LetterUnderstandingCard(
             AiStructuringHint()
         }
     }
+}
+
+/**
+ * 结构化要点里是否有任何一段要渲染。
+ *
+ * 用来决定正文与要点之间要不要画那条分隔线：模型偶尔会整段 JSON 都没吐出
+ * （被截断或格式跑偏），这时只有正文可看，多一条线就显得莫名其妙。
+ */
+private fun LetterDto.LetterUnderstanding.hasAnySection(): Boolean =
+    emotion.isNotEmpty() ||
+        keyConcerns.isNotEmpty() ||
+        expectedResponse.isNotEmpty() ||
+        misunderstandable.isNotEmpty() ||
+        replySuggestions.isNotEmpty()
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        color = AppAccent,
+    )
 }
 
 @Composable
