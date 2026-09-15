@@ -1,15 +1,12 @@
 package com.couple.translator.feature.couple.letter
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,9 +26,9 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -44,8 +41,6 @@ import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -61,15 +56,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.couple.translator.feature.couple.data.model.LetterDto
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppEmptyState
+import com.couple.translator.core.ui.components.AppLinkText
+import com.couple.translator.core.ui.components.AppTopBarAction
 import com.couple.translator.core.ui.components.PullToRefreshLayout
+import com.couple.translator.core.ui.components.SkeletonListCard
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppOnAccent
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
+import com.couple.translator.feature.couple.data.model.LetterDto
 
 private val coupleTabs = listOf("全部", "收到", "发出", "草稿", "未来", "冷静", "未说出口", "私密")
 private val diaryTabs = listOf("全部", "本周", "本月", "收藏")
@@ -115,44 +119,35 @@ fun LetterListScreen(
     }
 
     Scaffold(
+        containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = {
-                    if (uiState.isSelectionMode) {
-                        Text("已选 ${uiState.selectedIds.size} 项", style = MaterialTheme.typography.titleMedium)
-                    } else {
-                        Text(if (isCoupleMode) "全部信件" else "全部日记", style = MaterialTheme.typography.titleLarge)
-                    }
+            AppBackTopBar(
+                onBack = {
+                    if (uiState.isSelectionMode) viewModel.toggleSelectionMode() else onNavigateBack()
                 },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        if (uiState.isSelectionMode) viewModel.toggleSelectionMode() else onNavigateBack()
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
+                title = if (uiState.isSelectionMode) {
+                    "已选 ${uiState.selectedIds.size} 项"
+                } else {
+                    if (isCoupleMode) "全部信件" else "全部日记"
                 },
-                actions = {
+                trailing = {
                     if (uiState.isSelectionMode) {
-                        TextButton(onClick = { viewModel.selectAll() }) {
-                            Text("全选", color = AppAccent)
-                        }
-                        IconButton(
+                        AppLinkText(label = "全选", onClick = { viewModel.selectAll() })
+                        AppTopBarAction(
+                            icon = Icons.Default.Delete,
+                            contentDescription = "删除",
+                            tint = AppErrorRed,
                             onClick = { showDeleteConfirm = true },
-                            enabled = uiState.selectedIds.isNotEmpty() && !uiState.isDeleting,
-                        ) {
-                            if (uiState.isDeleting) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            } else {
-                                Icon(Icons.Default.Delete, contentDescription = "删除", tint = if (uiState.selectedIds.isNotEmpty()) AppAccent else AppTextTertiary)
-                            }
-                        }
+                        )
                     } else {
-                        IconButton(onClick = { viewModel.toggleSelectionMode() }) {
-                            Icon(Icons.Default.CheckCircle, contentDescription = "选择")
-                        }
+                        AppTopBarAction(
+                            icon = Icons.Default.CheckCircle,
+                            contentDescription = "选择",
+                            tint = AppTextSecondary,
+                            onClick = { viewModel.toggleSelectionMode() },
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
@@ -161,71 +156,69 @@ fun LetterListScreen(
             onRefresh = { viewModel.refresh() },
             modifier = Modifier.padding(padding),
         ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize(),
-        ) {
-            // Tabs
-            ScrollableTabRow(
-                selectedTabIndex = safeTabIndex,
-                tabs = tabs,
-                onTabClick = { index, title ->
-                    viewModel.selectTab(index)
-                    viewModel.loadLetters(title)
-                },
-            )
+            Column(
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                // Tabs
+                ScrollableTabRow(
+                    selectedTabIndex = safeTabIndex,
+                    tabs = tabs,
+                    onTabClick = { index, title ->
+                        viewModel.selectTab(index)
+                        viewModel.loadLetters(title)
+                    },
+                )
 
-            when {
-                uiState.isLoading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = AppAccent)
+                when {
+                    uiState.isLoading -> {
+                        SkeletonListCard(rows = 4)
                     }
-                }
-                uiState.letters.isEmpty() -> {
-                    Box(modifier = Modifier.fillMaxSize().padding(48.dp), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = if (isCoupleMode) "还没有信件" else "还没有日记",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = AppTextTertiary,
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("点击右下角按钮写一封吧", style = MaterialTheme.typography.bodySmall, color = AppTextTertiary)
-                        }
-                    }
-                }
-                else -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        item { Spacer(modifier = Modifier.height(8.dp)) }
-                        items(uiState.letters, key = { it.id }) { letter ->
-                            LetterListItem(
-                                letter = letter,
-                                isCoupleMode = isCoupleMode,
-                                isSelectionMode = uiState.isSelectionMode,
-                                isSelected = uiState.selectedIds.contains(letter.id),
-                                onClick = {
-                                    if (uiState.isSelectionMode) {
-                                        viewModel.toggleSelect(letter.id)
-                                    } else {
-                                        onNavigateToLetterDetail(letter.id)
-                                    }
-                                },
-                                onLongClick = {
-                                    if (!uiState.isSelectionMode) {
-                                        viewModel.toggleSelectionMode()
-                                        viewModel.toggleSelect(letter.id)
-                                    }
-                                },
+                    uiState.letters.isEmpty() -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            AppEmptyState(
+                                icon = if (isCoupleMode) Icons.Outlined.MailOutline else Icons.Outlined.Edit,
+                                title = if (isCoupleMode) "还没有信件" else "还没有日记",
+                                subtitle = "点击右下角按钮写一封吧",
                             )
                         }
-                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = AppSpacing.screenH),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            item { Spacer(modifier = Modifier.height(8.dp)) }
+                            items(uiState.letters, key = { it.id }) { letter ->
+                                LetterListItem(
+                                    letter = letter,
+                                    isCoupleMode = isCoupleMode,
+                                    isSelectionMode = uiState.isSelectionMode,
+                                    isSelected = uiState.selectedIds.contains(letter.id),
+                                    onClick = {
+                                        if (uiState.isSelectionMode) {
+                                            viewModel.toggleSelect(letter.id)
+                                        } else {
+                                            onNavigateToLetterDetail(letter.id)
+                                        }
+                                    },
+                                    onLongClick = {
+                                        if (!uiState.isSelectionMode) {
+                                            viewModel.toggleSelectionMode()
+                                            viewModel.toggleSelect(letter.id)
+                                        }
+                                    },
+                                )
+                            }
+                            item { Spacer(modifier = Modifier.height(16.dp)) }
+                        }
                     }
                 }
             }
-        }
         }
     }
 }
@@ -272,21 +265,21 @@ private fun LetterListItem(
     onLongClick: () -> Unit,
 ) {
     val bgColor = if (isSelected) AppAccentLight else AppSurface
-    val borderColor = if (isSelected) AppAccent else Color.Transparent
+    val borderColor = if (isSelected) AppAccent else AppBorderLight
 
-    Card(
+    AppCard(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,
             ),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = bgColor),
-        border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, borderColor) else null,
+        containerColor = bgColor,
+        borderColor = borderColor,
+        contentPadding = PaddingValues(14.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Selection checkbox
@@ -299,7 +292,7 @@ private fun LetterListItem(
                     contentAlignment = Alignment.Center,
                 ) {
                     if (isSelected) {
-                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Check, contentDescription = null, tint = AppOnAccent, modifier = Modifier.size(16.dp))
                     }
                 }
                 Spacer(modifier = Modifier.width(12.dp))

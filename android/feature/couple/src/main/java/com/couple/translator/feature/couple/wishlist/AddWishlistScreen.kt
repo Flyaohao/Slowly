@@ -7,11 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -19,8 +14,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -28,15 +21,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppPrimaryButton
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.SkeletonBlock
+import com.couple.translator.core.ui.components.SkeletonPageHeader
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSize
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextSecondary
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddWishlistScreen(
     onNavigateBack: () -> Unit,
@@ -54,20 +52,30 @@ fun AddWishlistScreen(
     }
 
     Scaffold(
+        containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("许愿", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
-            )
+            AppBackTopBar(onBack = onNavigateBack, title = "许愿")
         },
     ) { padding ->
         if (uiState.isLoading) {
-            LoadingIndicator()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = AppSpacing.screenH),
+            ) {
+                SkeletonPageHeader()
+                Spacer(modifier = Modifier.height(AppSpacing.section))
+                SkeletonBlock(modifier = Modifier.fillMaxWidth().height(56.dp))
+                Spacer(modifier = Modifier.height(AppSpacing.md))
+                SkeletonBlock(modifier = Modifier.fillMaxWidth().height(120.dp))
+                Spacer(modifier = Modifier.height(AppSpacing.section))
+                SkeletonBlock(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(AppSize.button),
+                )
+            }
             return@Scaffold
         }
 
@@ -75,7 +83,7 @@ fun AddWishlistScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(20.dp),
+                .padding(horizontal = AppSpacing.screenH),
         ) {
             Text(
                 text = "写下你们想一起做的事",
@@ -90,7 +98,7 @@ fun AddWishlistScreen(
                 label = { Text("愿望") },
                 placeholder = { Text("例如：一起去日本看樱花") },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(AppRadius.md),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = AppAccent,
                     unfocusedBorderColor = AppBorderLight,
@@ -110,7 +118,7 @@ fun AddWishlistScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(120.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(AppRadius.md),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = AppAccent,
                     unfocusedBorderColor = AppBorderLight,
@@ -121,14 +129,10 @@ fun AddWishlistScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            Button(
+            AppPrimaryButton(
+                text = "许愿",
                 onClick = { viewModel.createWishlist() },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = AppAccent),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Text("许愿", modifier = Modifier.padding(vertical = 8.dp))
-            }
+            )
         }
     }
 }

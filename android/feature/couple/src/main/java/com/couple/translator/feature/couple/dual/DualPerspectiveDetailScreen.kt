@@ -1,34 +1,20 @@
 package com.couple.translator.feature.couple.dual
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,12 +24,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.couple.data.model.DualPerspectiveDto
+import com.couple.translator.core.ui.components.AppAccentButton
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppPageHeader
+import com.couple.translator.core.ui.components.AppSecondaryButton
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.SkeletonDetailPage
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
-import com.couple.translator.core.ui.theme.AppBackground
-import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,24 +54,19 @@ fun DualPerspectiveDetailScreen(
         ErrorDialog(message = uiState.error, onDismiss = { viewModel.loadEvent(eventId) })
     }
 
+    if (uiState.isLoading) {
+        SkeletonDetailPage()
+        return
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("事件详情", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = "事件详情",
             )
         },
     ) { padding ->
-        if (uiState.isLoading) {
-            LoadingIndicator()
-            return@Scaffold
-        }
-
         val event = uiState.event ?: return@Scaffold
 
         Column(
@@ -89,17 +74,11 @@ fun DualPerspectiveDetailScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp),
+                .padding(horizontal = AppSpacing.screenH, vertical = AppSpacing.screenH),
         ) {
-            Text(
-                text = event.title,
-                style = MaterialTheme.typography.headlineSmall,
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = event.eventTime?.take(10) ?: "",
-                style = MaterialTheme.typography.bodySmall,
-                color = AppTextTertiary,
+            AppPageHeader(
+                title = event.title,
+                subtitle = event.eventTime?.take(10),
             )
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -109,23 +88,21 @@ fun DualPerspectiveDetailScreen(
                     record2 = event.records[1],
                 )
             } else if (event.records.isNotEmpty()) {
-                Card(
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = AppAccentLight),
+                    containerColor = AppAccentLight,
+                    contentPadding = PaddingValues(16.dp),
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "我的视角",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = AppAccent,
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = event.records.first().content,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
+                    Text(
+                        text = "我的视角",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = AppAccent,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = event.records.first().content,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
@@ -138,25 +115,18 @@ fun DualPerspectiveDetailScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             if (event.records.isEmpty() || (event.records.size == 1 && !uiState.revealed)) {
-                Button(
+                AppAccentButton(
+                    text = "提交我的视角",
                     onClick = { onNavigateToSubmitRecord(eventId) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = AppAccent),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text("提交我的视角", modifier = Modifier.padding(vertical = 8.dp))
-                }
+                )
             }
 
             if (event.status == "both_sides" && !uiState.revealed) {
                 Spacer(modifier = Modifier.height(12.dp))
-                OutlinedButton(
+                AppSecondaryButton(
+                    text = "确认公开，查看对方视角",
                     onClick = { viewModel.revealRecords(eventId) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text("确认公开，查看对方视角", color = AppAccent)
-                }
+                )
             }
         }
     }
@@ -190,22 +160,19 @@ private fun PerspectiveCard(
     content: String,
     modifier: Modifier = Modifier,
 ) {
-    Card(
+    AppCard(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = AppSurface),
+        contentPadding = PaddingValues(12.dp),
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge,
-                color = AppAccent,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = content,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = AppAccent,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = content,
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }

@@ -1,8 +1,8 @@
 package com.couple.translator.feature.couple.museum
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,21 +18,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -43,16 +36,22 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.couple.translator.core.network.toAbsoluteUrl
-import com.couple.translator.feature.couple.data.model.MuseumDto
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppEmptyState
+import com.couple.translator.core.ui.components.AppFilterChip
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.SkeletonPlainListPage
+import com.couple.translator.core.ui.components.pressFeedback
 import com.couple.translator.core.ui.theme.AppAccent
-import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextTertiary
+import com.couple.translator.feature.couple.data.model.MuseumDto
 
 private val typeFilters = listOf(
     null to "全部",
@@ -66,7 +65,6 @@ private val typeFilters = listOf(
     "dual_perspective" to "双视角",
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MuseumScreen(
     onNavigateBack: () -> Unit,
@@ -80,17 +78,14 @@ fun MuseumScreen(
         ErrorDialog(message = uiState.error, onDismiss = { viewModel.clearError() })
     }
 
+    if (uiState.isLoading) {
+        SkeletonPlainListPage(cardRows = 4)
+        return
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("关系博物馆", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
-            )
+            AppBackTopBar(onBack = onNavigateBack, title = "关系博物馆")
         },
         floatingActionButton = {
             FloatingActionButton(
@@ -98,7 +93,7 @@ fun MuseumScreen(
                 containerColor = AppAccent,
                 shape = CircleShape,
             ) {
-                Icon(Icons.Default.Add, contentDescription = "新增藏品", tint = AppSurface)
+                Icon(Icons.Filled.Add, contentDescription = "新增藏品", tint = AppSurface)
             }
         },
     ) { padding ->
@@ -107,79 +102,67 @@ fun MuseumScreen(
             onRefresh = { viewModel.refresh() },
             modifier = Modifier.padding(padding),
         ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize(),
-        ) {
-            LazyRow(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(typeFilters) { (type, label) ->
-                    FilterChip(
-                        selected = uiState.selectedType == type,
-                        onClick = { viewModel.selectType(type) },
-                        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = AppAccentLight,
-                            selectedLabelColor = AppAccent,
-                        ),
-                    )
-                }
-            }
-
-            // 注意：此处不能写 return@Column —— Column 是 inline composable，
-            // qualified return 会触发 Compose 编译器 group 错位 bug（compose-jb#2230，
-            // 症状为进入页面即 ArrayIndexOutOfBoundsException: index=-5 闪退），
-            // 必须用 when 分支结构代替提前返回。
-            when {
-                uiState.isLoading -> LoadingIndicator()
-
-                uiState.items.isEmpty() -> Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(48.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(
-                        text = "博物馆还是空的",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = AppTextTertiary,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "收藏你们珍贵的瞬间",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTextTertiary,
-                    )
-                }
-
-                else -> LazyColumn(
+            Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(1.dp),
+                    .fillMaxSize(),
             ) {
-                item { Spacer(modifier = Modifier.height(8.dp)) }
+                LazyRow(
+                    modifier = Modifier.padding(horizontal = AppSpacing.screenH, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(typeFilters) { (type, label) ->
+                        AppFilterChip(
+                            text = label,
+                            selected = uiState.selectedType == type,
+                            onClick = { viewModel.selectType(type) },
+                        )
+                    }
+                }
 
-                uiState.items.groupBy { it.createdAt?.take(7) ?: "" }
-                    .forEach { (month, monthItems) ->
-                        item {
-                            TimelineMonthHeader(month)
-                        }
-                        items(monthItems) { item ->
-                            TimelineItem(
-                                item = item,
-                                onClick = { onNavigateToDetail(item.id) },
-                            )
-                        }
+                // 注意：此处不能写 return@Column —— Column 是 inline composable，
+                // qualified return 会触发 Compose 编译器 group 错位 bug（compose-jb#2230，
+                // 症状为进入页面即 ArrayIndexOutOfBoundsException: index=-5 闪退），
+                // 必须用 when 分支结构代替提前返回。
+                when {
+                    uiState.items.isEmpty() -> Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(48.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        AppEmptyState(
+                            icon = Icons.Outlined.Collections,
+                            title = "博物馆还是空的",
+                            subtitle = "收藏你们珍贵的瞬间",
+                        )
                     }
 
-                item { Spacer(modifier = Modifier.height(16.dp)) }
+                    else -> LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = AppSpacing.screenH),
+                        verticalArrangement = Arrangement.spacedBy(1.dp),
+                    ) {
+                        item { Spacer(modifier = Modifier.height(8.dp)) }
+
+                        uiState.items.groupBy { it.createdAt?.take(7) ?: "" }
+                            .forEach { (month, monthItems) ->
+                                item {
+                                    TimelineMonthHeader(month)
+                                }
+                                items(monthItems) { item ->
+                                    TimelineItem(
+                                        item = item,
+                                        onClick = { onNavigateToDetail(item.id) },
+                                    )
+                                }
+                            }
+
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                    }
+                }
             }
-            }
-        }
         }
     }
 }
@@ -206,8 +189,8 @@ private fun TimelineItem(
     val lineColor = AppBorderLight
     Row(
         modifier = Modifier
+            .pressFeedback(onClick = onClick)
             .fillMaxWidth()
-            .clickable(onClick = onClick)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -227,15 +210,14 @@ private fun TimelineItem(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        Card(
+        AppCard(
             modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = AppSurface),
+            shape = RoundedCornerShape(AppRadius.md),
+            contentPadding = PaddingValues(12.dp),
         ) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
+                    .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (item.imageUrl != null) {
@@ -272,7 +254,7 @@ private fun TimelineItem(
                 }
                 if (item.pinned) {
                     Icon(
-                        Icons.Default.PushPin,
+                        Icons.Filled.PushPin,
                         contentDescription = "已置顶",
                         tint = AppAccent,
                         modifier = Modifier.size(16.dp),

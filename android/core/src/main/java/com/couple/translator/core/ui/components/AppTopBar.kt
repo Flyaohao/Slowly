@@ -6,13 +6,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -127,6 +130,17 @@ fun AppTopBar(
  *
  * 标题放在这里是对的 —— 二级页是「从某处进来的」，标题起的是"我在哪"的作用，
  * 不需要像一级页那样在正文里再放大一次。
+ *
+ * ⚠️ 会自己吃掉状态栏高度（[applyStatusBarInset]）。原因：这些页面挂在根 NavHost 上，
+ * 顶上没有外壳 Scaffold 帮忙让位，而 Material3 的 `Scaffold(topBar = ...)`
+ * **不会**给 topBar 槽位补 inset（只有 TopAppBar 自己会）。不补的话顶栏会和状态栏叠在一起。
+ * 旧的 TopAppBar 自带 inset，所以换成自绘顶栏后必须显式补上。
+ *
+ * 如果调用点本身已经处在"外壳 Scaffold 的内容区"里（例如 tab 页内的选择态顶栏），
+ * 传 `applyStatusBarInset = false`，否则会被垫高两次。
+ *
+ * @param applyStatusBarInset 是否补状态栏顶部间距，默认 true
+ * @param trailing 右侧动作区
  */
 @Composable
 fun AppBackTopBar(
@@ -134,11 +148,19 @@ fun AppBackTopBar(
     modifier: Modifier = Modifier,
     title: String? = null,
     subtitle: String? = null,
+    applyStatusBarInset: Boolean = true,
     trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .then(
+                if (applyStatusBarInset) {
+                    Modifier.windowInsetsPadding(WindowInsets.statusBars)
+                } else {
+                    Modifier
+                }
+            )
             .heightIn(min = AppSize.topBar)
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,

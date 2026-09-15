@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,10 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.outlined.Quiz
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -31,8 +30,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -49,13 +46,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.QuestionnaireDto
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppEmptyState
+import com.couple.translator.core.ui.components.AppPrimaryButton
+import com.couple.translator.core.ui.components.AppSecondaryButton
 import com.couple.translator.core.ui.components.DimensionRadarChart
-import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.components.PrimaryButton
+import com.couple.translator.core.ui.components.SkeletonBlock
+import com.couple.translator.core.ui.components.SkeletonPageHeader
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppOnAccent
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
@@ -89,16 +94,9 @@ fun ProfileResultScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("我的关系画像") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AppBackground,
-                ),
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = "我的关系画像",
             )
         },
     ) { padding ->
@@ -108,7 +106,19 @@ fun ProfileResultScreen(
             modifier = Modifier.padding(padding),
         ) {
         if (uiState.isLoading) {
-            LoadingIndicator()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(AppBackground)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = AppSpacing.screenH),
+            ) {
+                SkeletonPageHeader()
+                Spacer(modifier = Modifier.height(AppSpacing.section))
+                SkeletonBlock(modifier = Modifier.fillMaxWidth().height(120.dp))
+                Spacer(modifier = Modifier.height(AppSpacing.section))
+                SkeletonBlock(modifier = Modifier.fillMaxWidth().height(200.dp))
+            }
             return@PullToRefreshLayout
         }
 
@@ -116,24 +126,18 @@ fun ProfileResultScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = AppSpacing.screenH),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Text(
-                    text = "还没有关系画像",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = AppTextSecondary,
+                AppEmptyState(
+                    icon = Icons.Outlined.Quiz,
+                    title = "还没有关系画像",
+                    subtitle = "完成问卷后，AI 会根据你们的回答生成专属画像",
+                    action = {
+                        AppPrimaryButton(text = "去完成问卷", onClick = onNavigateBack)
+                    },
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "完成问卷后，AI 会根据你们的回答生成专属画像",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AppTextTertiary,
-                    textAlign = TextAlign.Center,
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                PrimaryButton(text = "去完成问卷", onClick = onNavigateBack)
             }
             return@PullToRefreshLayout
         }
@@ -141,7 +145,7 @@ fun ProfileResultScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = AppSpacing.screenH)
                 .verticalScroll(rememberScrollState()),
         ) {
             Spacer(modifier = Modifier.height(16.dp))
@@ -157,14 +161,14 @@ fun ProfileResultScreen(
 
             // === 画像类型卡片 ===
             uiState.profile?.let { profile ->
-                Card(
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = AppSurface),
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    containerColor = AppSurface,
+                    shape = RoundedCornerShape(AppRadius.xl),
+                    contentPadding = PaddingValues(24.dp),
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text(
@@ -192,6 +196,7 @@ fun ProfileResultScreen(
                     text = "AI 分析报告",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
+                    color = AppTextPrimary,
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -264,18 +269,19 @@ fun ProfileResultScreen(
                     text = "维度总览",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
+                    color = AppTextPrimary,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                Card(
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = AppSurface),
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    containerColor = AppSurface,
+                    shape = RoundedCornerShape(AppRadius.xl),
+                    contentPadding = PaddingValues(16.dp),
                 ) {
                     val chartData = uiState.dimensions.map { dim ->
                         Triple(dim.dimensionKey, dimensionNames[dim.dimensionKey] ?: dim.dimensionKey, dim.score)
                     }
-                    DimensionRadarChart(dimensions = chartData, modifier = Modifier.padding(16.dp))
+                    DimensionRadarChart(dimensions = chartData, modifier = Modifier.fillMaxWidth())
                 }
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -284,6 +290,7 @@ fun ProfileResultScreen(
                     text = "维度详情",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
+                    color = AppTextPrimary,
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 uiState.dimensions.sortedByDescending { it.score }.forEach { dimension ->
@@ -299,13 +306,10 @@ fun ProfileResultScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             if (isCoupleMode) {
-                androidx.compose.material3.OutlinedButton(
+                AppSecondaryButton(
+                    text = "查看情侣组合画像",
                     onClick = onNavigateToCoupleProfile,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text("查看情侣组合画像")
-                }
+                )
             }
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -369,10 +373,10 @@ private fun SubmissionSelector(
 
 @Composable
 private fun MarkdownCard(markdown: String) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = AppSurface),
-        shape = RoundedCornerShape(14.dp),
+        containerColor = AppSurface,
+        contentPadding = PaddingValues(16.dp),
     ) {
         val textColor = AppTextPrimary
         AndroidView(
@@ -388,19 +392,19 @@ private fun MarkdownCard(markdown: String) {
                 markwon.setMarkdown(textView, markdown.trim())
                 textView.setTextColor(textColor.toArgb())
             },
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
 
 @Composable
 private fun HighlightCard(text: String, icon: String) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = AppAccentLight),
-        shape = RoundedCornerShape(14.dp),
+        containerColor = AppAccentLight,
+        contentPadding = PaddingValues(16.dp),
     ) {
-        Row(modifier = Modifier.padding(16.dp)) {
+        Row(modifier = Modifier.fillMaxWidth()) {
             Text(icon, style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.width(12.dp))
             Text(
@@ -416,12 +420,12 @@ private fun HighlightCard(text: String, icon: String) {
 
 @Composable
 private fun TipCard(number: Int, text: String) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = AppSurface),
-        shape = RoundedCornerShape(12.dp),
+        containerColor = AppSurface,
+        contentPadding = PaddingValues(14.dp),
     ) {
-        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Box(
                 modifier = Modifier
                     .height(24.dp)
@@ -430,7 +434,7 @@ private fun TipCard(number: Int, text: String) {
                     .background(AppAccent),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("$number", style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color.White, fontWeight = FontWeight.Bold)
+                Text("$number", style = MaterialTheme.typography.labelSmall, color = AppOnAccent, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.width(12.dp))
             Text(text, style = MaterialTheme.typography.bodyMedium, color = AppTextPrimary, modifier = Modifier.weight(1f))
@@ -447,18 +451,18 @@ private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
         else -> AppAccent
     }
 
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = AppSurface),
-        shape = RoundedCornerShape(14.dp),
+        containerColor = AppSurface,
+        contentPadding = PaddingValues(16.dp),
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(dim.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(dim.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = AppTextPrimary, modifier = Modifier.weight(1f))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
@@ -518,13 +522,13 @@ private fun DimensionScoreItem(
     score: Float,
     explanation: String?,
 ) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = AppSurface),
-        shape = RoundedCornerShape(12.dp),
+        containerColor = AppSurface,
+        contentPadding = PaddingValues(16.dp),
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

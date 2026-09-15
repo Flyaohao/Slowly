@@ -11,13 +11,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,8 +24,6 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,9 +37,14 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppPrimaryButton
+import com.couple.translator.core.ui.components.SkeletonDetailPage
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
@@ -89,7 +89,7 @@ fun ComposeDiaryScreen(
     }
 
     if (uiState.isLoading) {
-        LoadingIndicator()
+        SkeletonDetailPage()
         return
     }
 
@@ -98,18 +98,9 @@ fun ComposeDiaryScreen(
             .fillMaxSize()
             .background(AppBackground),
     ) {
-        TopAppBar(
-            title = { Text(if (uiState.isEditMode) "编辑日记" else "写日记") },
-            navigationIcon = {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = AppBackground,
-                titleContentColor = AppTextPrimary,
-                navigationIconContentColor = AppTextPrimary,
-            ),
+        AppBackTopBar(
+            onBack = onNavigateBack,
+            title = if (uiState.isEditMode) "编辑日记" else "写日记",
         )
 
         Column(
@@ -180,16 +171,16 @@ fun ComposeDiaryScreen(
             ) {
                 MOOD_OPTIONS.forEach { mood ->
                     val isSelected = uiState.mood == mood
-                    Surface(
+                    AppCard(
                         onClick = { viewModel.updateMood(if (isSelected) null else mood) },
-                        shape = RoundedCornerShape(50),
-                        color = if (isSelected) AppAccent else AppSurface,
+                        shape = RoundedCornerShape(AppRadius.pill),
+                        containerColor = if (isSelected) AppAccent else AppSurface,
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     ) {
                         Text(
                             text = mood,
                             style = MaterialTheme.typography.labelMedium,
                             color = if (isSelected) AppSurface else AppTextSecondary,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         )
                     }
                 }
@@ -209,16 +200,16 @@ fun ComposeDiaryScreen(
             ) {
                 WEATHER_OPTIONS.forEach { weather ->
                     val isSelected = uiState.weather == weather
-                    Surface(
+                    AppCard(
                         onClick = { viewModel.updateWeather(if (isSelected) null else weather) },
-                        shape = RoundedCornerShape(50),
-                        color = if (isSelected) AppAccent else AppSurface,
+                        shape = RoundedCornerShape(AppRadius.pill),
+                        containerColor = if (isSelected) AppAccent else AppSurface,
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     ) {
                         Text(
                             text = weather,
                             style = MaterialTheme.typography.labelMedium,
                             color = if (isSelected) AppSurface else AppTextSecondary,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         )
                     }
                 }
@@ -230,34 +221,22 @@ fun ComposeDiaryScreen(
                 Text(
                     text = uiState.error!!,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
+                    color = AppErrorRed,
                 )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
             // 保存按钮
-            Button(
+            AppPrimaryButton(
+                text = when {
+                    uiState.isSaving -> "保存中..."
+                    uiState.isEditMode -> "更新日记"
+                    else -> "保存日记"
+                },
                 onClick = viewModel::save,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AppTextPrimary,
-                    contentColor = AppSurface,
-                ),
                 enabled = !uiState.isSaving,
-            ) {
-                Text(
-                    text = when {
-                        uiState.isSaving -> "保存中..."
-                        uiState.isEditMode -> "更新日记"
-                        else -> "保存日记"
-                    },
-                    style = MaterialTheme.typography.titleSmall,
-                )
-            }
+            )
 
             Spacer(modifier = Modifier.height(40.dp))
         }
@@ -355,7 +334,7 @@ private fun wrapSelection(
     val end = selection.max
     val selectedText = text.substring(start, end)
     val before = text.substring(0, start)
-    val after = text.substring(end)
+    val after = text.substring(end, text.length)
 
     if (start == end) {
         // 没有选中文本，插入 marker 对，光标放在中间

@@ -1,7 +1,6 @@
 package com.couple.translator.core.ui.guide
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,12 +11,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.AutoAwesome
@@ -36,17 +35,12 @@ import androidx.compose.material.icons.outlined.Quiz
 import androidx.compose.material.icons.outlined.SelfImprovement
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.ViewSidebar
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +48,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.couple.translator.core.navigation.Screen
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppDivider
+import com.couple.translator.core.ui.components.pressFeedback
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
@@ -86,14 +84,9 @@ fun GuideScreen(
     Scaffold(
         containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("使用指南") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = "使用指南",
             )
         },
     ) { padding ->
@@ -419,21 +412,18 @@ private fun SectionTitle(title: String, subtitle: String? = null) {
 
 @Composable
 private fun GuideCard(content: @Composable () -> Unit) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = AppSurface),
+        contentPadding = PaddingValues(0.dp),
     ) {
-        Column { content() }
+        content()
     }
 }
 
 @Composable
 private fun GuideDivider() {
-    HorizontalDivider(
-        color = AppBorderLight,
-        modifier = Modifier.padding(start = 60.dp, end = 16.dp),
-    )
+    AppDivider(modifier = Modifier.padding(start = 60.dp, end = 16.dp))
 }
 
 @Composable
@@ -447,14 +437,14 @@ private fun StepRow(
 ) {
     Row(
         modifier = Modifier
-            .fillMaxWidth()
             .then(
                 if (route != null) {
-                    Modifier.clickable { onNavigateToRoute(route) }
+                    Modifier.pressFeedback(onClick = { onNavigateToRoute(route) })
                 } else {
                     Modifier
                 }
             )
+            .fillMaxWidth()
             .padding(16.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -516,8 +506,8 @@ private fun GuideEntryRow(
 ) {
     Row(
         modifier = Modifier
+            .pressFeedback(onClick = { onNavigateToRoute(route) })
             .fillMaxWidth()
-            .clickable { onNavigateToRoute(route) }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

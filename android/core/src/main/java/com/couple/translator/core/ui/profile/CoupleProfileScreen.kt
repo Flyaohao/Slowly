@@ -10,41 +10,45 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.ProfileDto
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PullToRefreshLayout
+import com.couple.translator.core.ui.components.SkeletonListCard
+import com.couple.translator.core.ui.components.SkeletonPageHeader
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
 
@@ -65,16 +69,9 @@ fun CoupleProfileScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("情侣组合画像") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AppBackground,
-                ),
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = "情侣组合画像",
             )
         },
     ) { padding ->
@@ -84,7 +81,17 @@ fun CoupleProfileScreen(
             modifier = Modifier.padding(padding),
         ) {
         if (uiState.isLoading) {
-            LoadingIndicator()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(AppBackground)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = AppSpacing.screenH),
+            ) {
+                SkeletonPageHeader()
+                Spacer(modifier = Modifier.height(AppSpacing.section))
+                SkeletonListCard(rows = 4)
+            }
             return@PullToRefreshLayout
         }
 
@@ -96,11 +103,9 @@ fun CoupleProfileScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Text(
-                    text = "双方都完成问卷后才能查看组合画像",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = AppTextSecondary,
-                    textAlign = TextAlign.Center,
+                AppEmptyState(
+                    icon = Icons.Outlined.Info,
+                    title = "双方都完成问卷后才能查看组合画像",
                     modifier = Modifier.padding(horizontal = 32.dp),
                 )
             }
@@ -110,20 +115,20 @@ fun CoupleProfileScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = AppSpacing.screenH)
                 .verticalScroll(rememberScrollState()),
         ) {
             Spacer(modifier = Modifier.height(24.dp))
 
-            Card(
+            AppCard(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = AppAccentLight),
-                shape = RoundedCornerShape(16.dp),
+                containerColor = AppAccentLight,
+                shape = RoundedCornerShape(AppRadius.xl),
+                contentPadding = PaddingValues(24.dp),
             ) {
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
+                        .fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
@@ -151,6 +156,7 @@ fun CoupleProfileScreen(
                     text = "画像摘要",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
+                    color = AppTextPrimary,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -201,16 +207,15 @@ private fun ProfileMiniCard(
         else -> "未知"
     }
 
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = AppSurface),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        containerColor = AppSurface,
+        shape = RoundedCornerShape(AppRadius.lg),
+        contentPadding = PaddingValues(16.dp),
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+                .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(

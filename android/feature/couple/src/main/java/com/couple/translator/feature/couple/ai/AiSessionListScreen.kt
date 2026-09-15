@@ -1,32 +1,29 @@
 package com.couple.translator.feature.couple.ai
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -37,11 +34,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.AiDto
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.SkeletonListCard
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
@@ -71,17 +72,11 @@ fun AiSessionListScreen(
     }
 
     Scaffold(
+        containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("历史会话") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AppBackground,
-                ),
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = "历史会话",
             )
         },
     ) { padding ->
@@ -90,46 +85,46 @@ fun AiSessionListScreen(
             onRefresh = { viewModel.refresh() },
             modifier = Modifier.padding(padding),
         ) {
-        if (uiState.isLoading) {
-            LoadingIndicator()
-            return@PullToRefreshLayout
-        }
+            Box(modifier = Modifier.fillMaxSize()) {
+                when {
+                    uiState.isLoading -> {
+                        SkeletonListCard(rows = 4)
+                    }
+                    uiState.sessions.isEmpty() -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            AppEmptyState(
+                                icon = Icons.Outlined.Psychology,
+                                title = "还没有会话记录",
+                                subtitle = "开始一段对话，AI 会陪你梳理关系。",
+                            )
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = AppSpacing.screenH),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            item { Spacer(modifier = Modifier.height(8.dp)) }
 
-        if (uiState.sessions.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text(
-                    text = "还没有会话记录",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = AppTextSecondary,
-                )
+                            items(uiState.sessions) { session ->
+                                SessionItem(
+                                    session = session,
+                                    sceneLabel = sceneLabel,
+                                    onClick = { onNavigateToSession(session.id, session.sceneKey) },
+                                    onDelete = { viewModel.deleteSession(session.id) },
+                                )
+                            }
+
+                            item { Spacer(modifier = Modifier.height(8.dp)) }
+                        }
+                    }
+                }
             }
-            return@PullToRefreshLayout
-        }
-
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            item { Spacer(modifier = Modifier.height(8.dp)) }
-
-            items(uiState.sessions) { session ->
-                SessionItem(
-                    session = session,
-                    sceneLabel = sceneLabel,
-                    onClick = { onNavigateToSession(session.id, session.sceneKey) },
-                    onDelete = { viewModel.deleteSession(session.id) },
-                )
-            }
-
-            item { Spacer(modifier = Modifier.height(8.dp)) }
-        }
         }
     }
 }
@@ -141,18 +136,13 @@ private fun SessionItem(
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        colors = CardDefaults.cardColors(containerColor = AppSurface),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
+        contentPadding = PaddingValues(16.dp),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {

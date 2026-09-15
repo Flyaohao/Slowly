@@ -2,7 +2,6 @@ package com.couple.translator.feature.couple.avatar
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,10 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -32,8 +28,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -45,7 +39,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppDivider
 import com.couple.translator.core.ui.components.ErrorDialog
+import com.couple.translator.core.ui.components.pressFeedback
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
@@ -78,14 +75,10 @@ fun AvatarCustomizeScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = { Text("AI 形象") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = "AI 形象",
+                trailing = {
                     TextButton(
                         onClick = { viewModel.save() },
                         enabled = !uiState.isSaving,
@@ -93,7 +86,6 @@ fun AvatarCustomizeScreen(
                         Text("保存", color = AppAccent)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
         containerColor = AppBackground,
@@ -142,7 +134,7 @@ fun AvatarCustomizeScreen(
                 onSelect = { viewModel.updateBlushStyle(it) },
             )
 
-            HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(vertical = 16.dp))
+            AppDivider(modifier = Modifier.padding(vertical = 16.dp))
 
             SettingRow(
                 label = "语气设置",
@@ -177,6 +169,7 @@ private fun CustomizeSection(
             items.forEachIndexed { index, item ->
                 Box(
                     modifier = Modifier
+                        .pressFeedback(onClick = { onSelect(index) })
                         .size(64.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (index == selectedIndex) AppAccentLight else AppSurface)
@@ -184,8 +177,7 @@ private fun CustomizeSection(
                             width = if (index == selectedIndex) 1.5.dp else 0.5.dp,
                             color = if (index == selectedIndex) AppAccent else AppBorderLight,
                             shape = RoundedCornerShape(8.dp),
-                        )
-                        .clickable { onSelect(index) },
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -208,8 +200,8 @@ private fun SettingRow(
 ) {
     Row(
         modifier = Modifier
+            .pressFeedback(onClick = onClick)
             .fillMaxWidth()
-            .clickable(onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 15.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -233,5 +225,5 @@ private fun SettingRow(
             )
         }
     }
-    HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(horizontal = 20.dp))
+    AppDivider(modifier = Modifier.padding(horizontal = 20.dp))
 }

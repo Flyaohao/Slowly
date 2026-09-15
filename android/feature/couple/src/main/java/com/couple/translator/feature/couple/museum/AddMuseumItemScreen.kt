@@ -14,23 +14,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -40,12 +28,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppFilterChip
+import com.couple.translator.core.ui.components.AppPrimaryButton
+import com.couple.translator.core.ui.components.AppSecondaryButton
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.SkeletonBlock
+import com.couple.translator.core.ui.components.SkeletonPageHeader
 import com.couple.translator.core.ui.theme.AppAccent
-import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSize
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 
 private val itemTypes = listOf(
@@ -60,7 +55,7 @@ private val itemTypes = listOf(
     "chat" to "聊天",
 )
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddMuseumItemScreen(
     onNavigateBack: () -> Unit,
@@ -78,20 +73,38 @@ fun AddMuseumItemScreen(
     }
 
     Scaffold(
+        containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("新增藏品", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
-            )
+            AppBackTopBar(onBack = onNavigateBack, title = "新增藏品")
         },
     ) { padding ->
         if (uiState.isLoading) {
-            LoadingIndicator()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = AppSpacing.screenH),
+            ) {
+                SkeletonPageHeader()
+                Spacer(modifier = Modifier.height(AppSpacing.section))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    repeat(4) {
+                        SkeletonBlock(modifier = Modifier.height(34.dp).weight(1f))
+                    }
+                }
+                Spacer(modifier = Modifier.height(AppSpacing.section))
+                SkeletonBlock(modifier = Modifier.fillMaxWidth().height(56.dp))
+                Spacer(modifier = Modifier.height(AppSpacing.md))
+                SkeletonBlock(modifier = Modifier.fillMaxWidth().height(120.dp))
+                Spacer(modifier = Modifier.height(AppSpacing.section))
+                SkeletonBlock(modifier = Modifier.fillMaxWidth().height(180.dp))
+                Spacer(modifier = Modifier.height(AppSpacing.section))
+                SkeletonBlock(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(AppSize.button),
+                )
+            }
             return@Scaffold
         }
 
@@ -99,7 +112,7 @@ fun AddMuseumItemScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(20.dp),
+                .padding(horizontal = AppSpacing.screenH),
         ) {
             Text(
                 text = "选择藏品类型",
@@ -112,14 +125,10 @@ fun AddMuseumItemScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 itemTypes.forEach { (type, label) ->
-                    FilterChip(
+                    AppFilterChip(
+                        text = label,
                         selected = uiState.itemType == type,
                         onClick = { viewModel.updateItemType(type) },
-                        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = AppAccentLight,
-                            selectedLabelColor = AppAccent,
-                        ),
                     )
                 }
             }
@@ -132,7 +141,7 @@ fun AddMuseumItemScreen(
                 label = { Text("标题") },
                 placeholder = { Text("给这件藏品起个名字") },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(AppRadius.md),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = AppAccent,
                     unfocusedBorderColor = AppBorderLight,
@@ -152,7 +161,7 @@ fun AddMuseumItemScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(120.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(AppRadius.md),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = AppAccent,
                     unfocusedBorderColor = AppBorderLight,
@@ -177,44 +186,43 @@ fun AddMuseumItemScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(180.dp)
-                        .clip(RoundedCornerShape(12.dp)),
+                        .clip(RoundedCornerShape(AppRadius.md)),
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(
+                    AppSecondaryButton(
+                        text = "更换图片",
                         onClick = {
                             pickImageLauncher.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                             )
                         },
                         modifier = Modifier.weight(1f),
-                    ) { Text("更换图片") }
-                    OutlinedButton(
+                    )
+                    AppSecondaryButton(
+                        text = "移除图片",
                         onClick = { viewModel.updateImage(null) },
                         modifier = Modifier.weight(1f),
-                    ) { Text("移除图片") }
+                    )
                 }
             } else {
-                OutlinedButton(
+                AppSecondaryButton(
+                    text = if (uiState.itemType == "photo") "添加照片" else "添加配图（选填）",
                     onClick = {
                         pickImageLauncher.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text(if (uiState.itemType == "photo") "添加照片" else "添加配图（选填）") }
+                )
             }
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            Button(
+            AppPrimaryButton(
+                text = "收藏",
                 onClick = { viewModel.createItem() },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = AppAccent),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Text("收藏", modifier = Modifier.padding(vertical = 8.dp))
-            }
+            )
         }
     }
 }

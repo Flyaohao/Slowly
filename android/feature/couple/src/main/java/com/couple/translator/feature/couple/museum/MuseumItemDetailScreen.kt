@@ -1,6 +1,7 @@
 package com.couple.translator.feature.couple.museum
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,19 +16,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,16 +31,18 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.couple.translator.core.network.toAbsoluteUrl
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.SkeletonDetailPage
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MuseumItemDetailScreen(
     itemId: Long,
@@ -68,41 +63,36 @@ fun MuseumItemDetailScreen(
         ErrorDialog(message = uiState.error, onDismiss = { viewModel.loadItem(itemId) })
     }
 
+    if (uiState.isLoading) {
+        SkeletonDetailPage()
+        return
+    }
+
+    val item = uiState.item ?: return
+
     Scaffold(
+        containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("藏品详情", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
-                    val item = uiState.item
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = "藏品详情",
+                trailing = {
                     if (item != null) {
                         IconButton(onClick = { viewModel.togglePin(itemId) }) {
                             Icon(
-                                Icons.Default.PushPin,
+                                Icons.Filled.PushPin,
                                 contentDescription = if (item.pinned) "取消置顶" else "置顶",
                                 tint = if (item.pinned) AppAccent else AppTextTertiary,
                             )
                         }
                         IconButton(onClick = { viewModel.deleteItem(itemId) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除", tint = AppErrorRed)
+                            Icon(Icons.Filled.Delete, contentDescription = "删除", tint = AppErrorRed)
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
-        if (uiState.isLoading) {
-            LoadingIndicator()
-            return@Scaffold
-        }
-
-        val item = uiState.item ?: return@Scaffold
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -140,12 +130,12 @@ fun MuseumItemDetailScreen(
 
             if (item.story != null) {
                 Spacer(modifier = Modifier.height(24.dp))
-                Card(
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = AppSurface),
+                    shape = RoundedCornerShape(AppRadius.md),
+                    contentPadding = PaddingValues(16.dp),
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column {
                         Text(
                             text = "故事",
                             style = MaterialTheme.typography.labelLarge,

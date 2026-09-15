@@ -1,8 +1,8 @@
 package com.couple.translator.feature.couple.wishlist
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,20 +16,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.outlined.CardGiftcard
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -37,18 +32,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.couple.translator.feature.couple.data.model.WishlistDto
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.SkeletonPlainListPage
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSuccessGreen
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextTertiary
+import com.couple.translator.feature.couple.data.model.WishlistDto
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WishlistScreen(
     onNavigateBack: () -> Unit,
@@ -61,17 +61,14 @@ fun WishlistScreen(
         ErrorDialog(message = uiState.error, onDismiss = { viewModel.clearError() })
     }
 
+    if (uiState.isLoading) {
+        SkeletonPlainListPage(cardRows = 4)
+        return
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("愿望清单", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
-            )
+            AppBackTopBar(onBack = onNavigateBack, title = "愿望清单")
         },
         floatingActionButton = {
             FloatingActionButton(
@@ -79,7 +76,7 @@ fun WishlistScreen(
                 containerColor = AppAccent,
                 shape = CircleShape,
             ) {
-                Icon(Icons.Default.Add, contentDescription = "许愿", tint = AppSurface)
+                Icon(Icons.Filled.Add, contentDescription = "许愿", tint = AppSurface)
             }
         },
     ) { padding ->
@@ -88,81 +85,63 @@ fun WishlistScreen(
             onRefresh = { viewModel.refresh() },
             modifier = Modifier.padding(padding),
         ) {
-        if (uiState.isLoading) {
-            LoadingIndicator()
-            return@PullToRefreshLayout
-        }
+            if (uiState.items.isEmpty()) {
+                AppEmptyState(
+                    icon = Icons.Outlined.CardGiftcard,
+                    title = "还没有愿望",
+                    subtitle = "许下你们想一起做的事",
+                    modifier = Modifier.padding(top = AppSpacing.section),
+                )
+                return@PullToRefreshLayout
+            }
 
-        if (uiState.items.isEmpty()) {
-            Column(
+            val pending = uiState.items.filter { it.status == "pending" }
+            val completed = uiState.items.filter { it.status == "completed" }
+
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(48.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                    .padding(horizontal = AppSpacing.screenH),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    text = "还没有愿望",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = AppTextTertiary,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "许下你们想一起做的事",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppTextTertiary,
-                )
+                if (pending.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "想做的事",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = AppAccent,
+                        )
+                    }
+                    items(pending) { item ->
+                        WishlistItemCard(
+                            item = item,
+                            onComplete = { viewModel.completeWishlist(item.id) },
+                            onDelete = { viewModel.deleteWishlist(item.id) },
+                        )
+                    }
+                }
+
+                if (completed.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "已完成",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = AppSuccessGreen,
+                        )
+                    }
+                    items(completed) { item ->
+                        WishlistItemCard(
+                            item = item,
+                            onComplete = {},
+                            onDelete = { viewModel.deleteWishlist(item.id) },
+                        )
+                    }
+                }
+
+                item { Spacer(modifier = Modifier.height(16.dp)) }
             }
-            return@PullToRefreshLayout
-        }
-
-        val pending = uiState.items.filter { it.status == "pending" }
-        val completed = uiState.items.filter { it.status == "completed" }
-
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (pending.isNotEmpty()) {
-                item {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "想做的事",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = AppAccent,
-                    )
-                }
-                items(pending) { item ->
-                    WishlistItemCard(
-                        item = item,
-                        onComplete = { viewModel.completeWishlist(item.id) },
-                        onDelete = { viewModel.deleteWishlist(item.id) },
-                    )
-                }
-            }
-
-            if (completed.isNotEmpty()) {
-                item {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "已完成",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = AppSuccessGreen,
-                    )
-                }
-                items(completed) { item ->
-                    WishlistItemCard(
-                        item = item,
-                        onComplete = {},
-                        onDelete = { viewModel.deleteWishlist(item.id) },
-                    )
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(16.dp)) }
-        }
         }
     }
 }
@@ -175,21 +154,15 @@ private fun WishlistItemCard(
 ) {
     val isCompleted = item.status == "completed"
 
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isCompleted) {
-                AppSurface.copy(alpha = 0.7f)
-            } else {
-                AppSurface
-            },
-        ),
+        containerColor = if (isCompleted) AppSurface.copy(alpha = 0.7f) else AppSurface,
+        borderColor = AppBorderLight,
+        shape = RoundedCornerShape(AppRadius.md),
+        contentPadding = PaddingValues(16.dp),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -218,14 +191,14 @@ private fun WishlistItemCard(
             if (!isCompleted) {
                 IconButton(onClick = onComplete) {
                     Icon(
-                        Icons.Default.Check,
+                        Icons.Filled.Check,
                         contentDescription = "标记完成",
                         tint = AppSuccessGreen,
                     )
                 }
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "删除", tint = AppErrorRed)
+                Icon(Icons.Filled.Delete, contentDescription = "删除", tint = AppErrorRed)
             }
         }
     }

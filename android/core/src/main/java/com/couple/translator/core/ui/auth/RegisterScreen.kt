@@ -27,11 +27,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.components.AppAccentButton
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.PrimaryButton
 import com.couple.translator.core.ui.components.TextInputField
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,7 +78,7 @@ fun RegisterScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = AppSpacing.screenH),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top,
         ) {
@@ -121,10 +122,10 @@ fun RegisterScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            PrimaryButton(
+            AppAccentButton(
                 text = "注册",
                 onClick = { viewModel.register() },
-                isLoading = uiState.isLoading,
+                enabled = !uiState.isLoading,
             )
 
             Spacer(modifier = Modifier.height(24.dp))

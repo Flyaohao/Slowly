@@ -1,5 +1,6 @@
 package com.couple.translator.feature.couple.dual
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -7,20 +8,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -28,11 +21,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.components.AppAccentButton
+import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.SkeletonBlock
+import com.couple.translator.core.ui.components.SkeletonPageHeader
+import com.couple.translator.core.ui.components.SkeletonTopBar
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSize
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextSecondary
 
@@ -56,29 +56,24 @@ fun SubmitRecordScreen(
         ErrorDialog(message = uiState.error, onDismiss = { viewModel.clearError() })
     }
 
+    if (uiState.isLoading) {
+        SubmitRecordSkeleton()
+        return
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("提交我的视角", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = "提交我的视角",
             )
         },
     ) { padding ->
-        if (uiState.isLoading) {
-            LoadingIndicator()
-            return@Scaffold
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(20.dp),
+                .padding(horizontal = AppSpacing.screenH, vertical = AppSpacing.screenH),
         ) {
             Text(
                 text = "写下你对这件事的感受和想法",
@@ -111,14 +106,35 @@ fun SubmitRecordScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Button(
+            AppAccentButton(
+                text = "提交",
                 onClick = { viewModel.submitRecord(eventId) },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = AppAccent),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Text("提交", modifier = Modifier.padding(vertical = 8.dp))
-            }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SubmitRecordSkeleton() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppBackground),
+    ) {
+        SkeletonTopBar()
+        Column(modifier = Modifier.padding(horizontal = AppSpacing.screenH)) {
+            Spacer(modifier = Modifier.height(AppSpacing.sm))
+            SkeletonPageHeader()
+            Spacer(modifier = Modifier.height(AppSpacing.section))
+            SkeletonBlock(
+                modifier = Modifier.fillMaxWidth().height(200.dp),
+                shape = RoundedCornerShape(AppRadius.md),
+            )
+            Spacer(modifier = Modifier.height(AppSpacing.block))
+            SkeletonBlock(
+                modifier = Modifier.fillMaxWidth().height(AppSize.button),
+                shape = RoundedCornerShape(AppRadius.pill),
+            )
         }
     }
 }

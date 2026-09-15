@@ -90,10 +90,13 @@ fun DiaryListScreen(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 if (uiState.isSelectionMode) {
-                    // 选择态顶栏：返回 + 计数 + 全选 + 删除，复用二级页顶栏的形状
+                    // 选择态顶栏：返回 + 计数 + 全选 + 删除，复用二级页顶栏的形状。
+                    // 本页是 tab 页、处在外壳 Scaffold 的内容区里，顶部 inset 已经由外壳让过位，
+                    // 所以这里要关掉顶栏自带的状态栏间距，否则会被垫高两次。
                     AppBackTopBar(
                         onBack = { viewModel.toggleSelectionMode() },
                         title = "已选择 ${uiState.selectedIds.size} 篇",
+                        applyStatusBarInset = false,
                         trailing = {
                             AppLinkText(label = "全选", onClick = { viewModel.selectAll() })
                             AppTopBarAction(

@@ -1,7 +1,5 @@
 package com.couple.translator.feature.single.diary
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,7 +12,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Favorite
@@ -32,8 +29,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,10 +46,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.PullToRefreshLayout
+import com.couple.translator.core.ui.components.SkeletonDetailPage
+import com.couple.translator.core.ui.components.pressFeedback
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
@@ -134,14 +132,10 @@ fun DiaryDetailScreen(
         Scaffold(
             containerColor = AppBackground,
             topBar = {
-                TopAppBar(
-                    title = { Text("日记详情") },
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
-                        }
-                    },
-                    actions = {
+                AppBackTopBar(
+                    onBack = onNavigateBack,
+                    title = "日记详情",
+                    trailing = {
                         if (diary != null) {
                             // TOC 按钮（仅当有标题时显示）
                             if (tocEntries.isNotEmpty()) {
@@ -169,12 +163,6 @@ fun DiaryDetailScreen(
                             }
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = AppBackground,
-                        titleContentColor = AppTextPrimary,
-                        navigationIconContentColor = AppTextPrimary,
-                        actionIconContentColor = AppTextPrimary,
-                    ),
                 )
             },
         ) { innerPadding ->
@@ -185,9 +173,7 @@ fun DiaryDetailScreen(
             ) {
                 when {
                     uiState.isLoading -> {
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            LoadingIndicator()
-                        }
+                        SkeletonDetailPage()
                     }
                     diary != null -> {
                         Column(
@@ -267,7 +253,7 @@ fun DiaryDetailScreen(
                         viewModel.deleteDiary()
                     }
                 ) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text("删除", color = AppErrorRed)
                 }
             },
             dismissButton = {
@@ -377,8 +363,8 @@ private fun TocEntryItem(
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier
+            .pressFeedback(onClick = onClick)
             .fillMaxWidth()
-            .padding(start = indent, top = 6.dp, bottom = 6.dp)
-            .clickable { onClick() },
+            .padding(start = indent, top = 6.dp, bottom = 6.dp),
     )
 }

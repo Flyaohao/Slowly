@@ -117,5 +117,7 @@ object QuestionnaireDto {
         @Json(name = "strengths") val strengths: String? = null,
         @Json(name = "growth_tips") val growthTips: List<String>? = null,
         @Json(name = "communication_guide") val communicationGuide: String? = null,
+        /** 置信度，0 表示后端未提供（旧记录或纯文本格式），此时不应展示。 */
+        @Json(name = "confidence") val confidence: Float = 0f,
     )
 }

@@ -1,7 +1,10 @@
 package com.couple.translator.feature.couple.ai
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,11 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -22,19 +24,25 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.couple.translator.core.ui.components.PrimaryButton
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppPrimaryButton
+import com.couple.translator.core.ui.components.AppSecondaryButton
 import com.couple.translator.core.ui.components.TextInputField
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextSecondary
 
@@ -50,13 +58,9 @@ fun ColdWarScreen(
     Scaffold(
         containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("冷战开解") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = "冷战开解",
             )
         },
     ) { padding ->
@@ -64,7 +68,7 @@ fun ColdWarScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = AppSpacing.screenH)
                 .verticalScroll(rememberScrollState()),
         ) {
             StepIndicator(currentStep = uiState.currentStep, steps = uiState.steps)
@@ -94,12 +98,12 @@ fun ColdWarScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = uiState.error,
-                    color = MaterialTheme.colorScheme.error,
+                    color = AppErrorRed,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(100.dp))
         }
     }
 }
@@ -118,21 +122,22 @@ private fun StepIndicator(currentStep: Int, steps: List<ColdWarStep>) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.weight(1f),
             ) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = when {
-                            isActive -> AppAccent
-                            isCompleted -> AppAccent.copy(alpha = 0.6f)
-                            else -> AppSurface
-                        },
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = if (isActive) 4.dp else 0.dp),
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(AppRadius.md))
+                        .background(
+                            when {
+                                isActive -> AppAccent
+                                isCompleted -> AppAccent.copy(alpha = 0.6f)
+                                else -> AppSurface
+                            }
+                        )
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                 ) {
                     Text(
                         text = "${index + 1}",
                         color = if (isActive || isCompleted) AppSurface else AppTextSecondary,
                         style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
@@ -152,12 +157,11 @@ private fun GoalStep(
     onInputChange: (String) -> Unit,
     onNext: () -> Unit,
 ) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = AppSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        contentPadding = PaddingValues(16.dp),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column {
             Text(
                 text = "你想结束冷战，真实目标是什么？",
                 style = MaterialTheme.typography.titleMedium,
@@ -177,7 +181,7 @@ private fun GoalStep(
                 singleLine = false,
             )
             Spacer(modifier = Modifier.height(16.dp))
-            PrimaryButton(text = "下一步", onClick = onNext, enabled = uiState.userInput.isNotBlank())
+            AppPrimaryButton(text = "下一步", onClick = onNext, enabled = uiState.userInput.isNotBlank())
         }
     }
 }
@@ -189,12 +193,11 @@ private fun FaceVsNeedStep(
     onNext: () -> Unit,
     onBack: () -> Unit,
 ) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = AppSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        contentPadding = PaddingValues(16.dp),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column {
             if (uiState.goalAnalysis.isNotBlank()) {
                 Text(text = uiState.goalAnalysis, style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(12.dp))
@@ -219,12 +222,18 @@ private fun FaceVsNeedStep(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Row {
-                androidx.compose.material3.OutlinedButton(
+                AppSecondaryButton(
+                    text = "上一步",
                     onClick = onBack,
                     modifier = Modifier.weight(1f),
-                ) { Text("上一步") }
+                )
                 Spacer(modifier = Modifier.width(12.dp))
-                PrimaryButton(text = "下一步", onClick = onNext, enabled = uiState.userInput.isNotBlank(), modifier = Modifier.weight(1f))
+                AppPrimaryButton(
+                    text = "下一步",
+                    onClick = onNext,
+                    enabled = uiState.userInput.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }
@@ -237,12 +246,11 @@ private fun ApproachStep(
     onNext: () -> Unit,
     onBack: () -> Unit,
 ) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = AppSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        contentPadding = PaddingValues(16.dp),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column {
             if (uiState.faceVsNeed.isNotBlank()) {
                 Text(text = uiState.faceVsNeed, style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(12.dp))
@@ -267,12 +275,18 @@ private fun ApproachStep(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Row {
-                androidx.compose.material3.OutlinedButton(
+                AppSecondaryButton(
+                    text = "上一步",
                     onClick = onBack,
                     modifier = Modifier.weight(1f),
-                ) { Text("上一步") }
+                )
                 Spacer(modifier = Modifier.width(12.dp))
-                PrimaryButton(text = "生成开场白", onClick = onNext, enabled = uiState.userInput.isNotBlank(), modifier = Modifier.weight(1f))
+                AppPrimaryButton(
+                    text = "生成开场白",
+                    onClick = onNext,
+                    enabled = uiState.userInput.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }
@@ -284,12 +298,11 @@ private fun OpeningLineStep(
     onNavigateToComposeLetter: (String) -> Unit,
     onBack: () -> Unit,
 ) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = AppSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        contentPadding = PaddingValues(16.dp),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column {
             if (uiState.approachReason.isNotBlank()) {
                 // 策略由模型给出（approach / give_space），此前该字段落库了却无处显示，
                 // 界面永远按硬编码分支走。这里把它显式呈现出来。
@@ -324,7 +337,7 @@ private fun OpeningLineStep(
                 Text(
                     text = "提醒避免",
                     style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.error,
+                    color = AppErrorRed,
                 )
                 uiState.avoidReminders.forEach { reminder ->
                     Text(
@@ -337,10 +350,11 @@ private fun OpeningLineStep(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            androidx.compose.material3.OutlinedButton(
+            AppSecondaryButton(
+                text = "返回上一步",
                 onClick = onBack,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("返回上一步") }
+            )
         }
     }
 }

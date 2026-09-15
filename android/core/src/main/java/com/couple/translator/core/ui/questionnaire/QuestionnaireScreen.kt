@@ -39,7 +39,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
@@ -81,14 +80,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.QuestionnaireDto
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppPrimaryButton
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.LoadingIndicator
-import com.couple.translator.core.ui.components.PrimaryButton
+import com.couple.translator.core.ui.components.SkeletonBlock
+import com.couple.translator.core.ui.components.SkeletonPageHeader
+import com.couple.translator.core.ui.components.pressFeedback
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppOnAccent
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
@@ -171,34 +175,29 @@ fun QuestionnaireScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    if (uiState.questions.isNotEmpty()) {
-                        Text(
-                            text = "${uiState.currentIndex + 1} / ${uiState.questions.size}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = if (uiState.questions.isNotEmpty()) "${uiState.currentIndex + 1} / ${uiState.questions.size}" else null,
+                trailing = {
                     IconButton(onClick = { showOverview = true }) {
                         Icon(Icons.Default.Menu, contentDescription = "题目总览")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AppBackground,
-                ),
             )
         },
     ) { padding ->
         if (uiState.isLoading) {
-            LoadingIndicator(modifier = Modifier.padding(padding))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(AppBackground)
+                    .padding(padding)
+                    .padding(horizontal = AppSpacing.screenH),
+            ) {
+                SkeletonPageHeader()
+                Spacer(modifier = Modifier.height(AppSpacing.section))
+                SkeletonBlock(modifier = Modifier.fillMaxWidth().height(200.dp))
+            }
             return@Scaffold
         }
 
@@ -355,12 +354,12 @@ fun QuestionnaireScreen(
                 }
 
                 if (uiState.isLastQuestion) {
-                    PrimaryButton(
-                        text = "提交问卷",
-                        onClick = { viewModel.onSubmit() },
-                        isLoading = uiState.isSubmitting,
-                        modifier = Modifier.width(160.dp),
-                    )
+                AppPrimaryButton(
+                    text = "提交问卷",
+                    onClick = { viewModel.onSubmit() },
+                    enabled = !uiState.isSubmitting,
+                    modifier = Modifier.width(160.dp),
+                )
                 } else {
                     TextButton(onClick = { viewModel.onNext() }) {
                         Text("下一题")
@@ -504,7 +503,7 @@ private fun QuestionOverviewSheet(
                         else -> Color.Transparent
                     }
                     val textColor = when {
-                        isCurrent -> Color.White
+                        isCurrent -> AppOnAccent
                         isAnswered -> AppAccent
                         else -> AppTextTertiary
                     }
@@ -516,11 +515,11 @@ private fun QuestionOverviewSheet(
 
                     Box(
                         modifier = Modifier
+                            .pressFeedback(onClick = { onSelect(index) })
                             .size(48.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .border(1.5.dp, borderColor, RoundedCornerShape(12.dp))
-                            .background(bgColor)
-                            .clickable { onSelect(index) },
+                            .background(bgColor),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (isAnswered && !isCurrent) {
@@ -596,6 +595,7 @@ private fun SingleChoiceContent(
             val isSelected = selectedOptionId == option.id
             Row(
                 modifier = Modifier
+                    .pressFeedback(onClick = { onSelect(option.id) })
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
                     .border(
@@ -604,7 +604,6 @@ private fun SingleChoiceContent(
                         shape = RoundedCornerShape(14.dp),
                     )
                     .background(if (isSelected) AppAccentLight else Color.Transparent)
-                    .clickable { onSelect(option.id) }
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -638,6 +637,7 @@ private fun MultiChoiceContent(
             val isSelected = selectedOptionIds.contains(option.id)
             Row(
                 modifier = Modifier
+                    .pressFeedback(onClick = { onToggle(option.id) })
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
                     .border(
@@ -646,7 +646,6 @@ private fun MultiChoiceContent(
                         shape = RoundedCornerShape(14.dp),
                     )
                     .background(if (isSelected) AppAccentLight else Color.Transparent)
-                    .clickable { onToggle(option.id) }
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -705,6 +704,7 @@ private fun LikertContent(
                 val isSelected = selectedValue == value
                 Box(
                     modifier = Modifier
+                        .pressFeedback(onClick = { onSelect(value) })
                         .size(48.dp)
                         .clip(CircleShape)
                         .border(
@@ -712,14 +712,13 @@ private fun LikertContent(
                             color = if (isSelected) AppAccent else AppBorderLight,
                             shape = CircleShape,
                         )
-                        .background(if (isSelected) AppAccent else Color.Transparent)
-                        .clickable { onSelect(value) },
+                        .background(if (isSelected) AppAccent else Color.Transparent),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = value.toString(),
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (isSelected) Color.White else AppTextPrimary,
+                        color = if (isSelected) AppOnAccent else AppTextPrimary,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                     )
                 }
@@ -803,7 +802,7 @@ private fun SortContent(
                     Text(
                         text = "${index + 1}",
                         style = MaterialTheme.typography.titleSmall,
-                        color = if (isFirst) Color.White else AppTextPrimary,
+                        color = if (isFirst) AppOnAccent else AppTextPrimary,
                         fontWeight = FontWeight.Bold,
                     )
                 }

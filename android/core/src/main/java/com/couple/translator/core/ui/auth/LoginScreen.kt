@@ -21,10 +21,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.components.AppAccentButton
+import com.couple.translator.core.ui.components.AppPageHeader
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.PrimaryButton
 import com.couple.translator.core.ui.components.TextInputField
-import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppTextSecondary
 
 @Composable
@@ -57,15 +58,11 @@ fun LoginScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = AppSpacing.screenH),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Text(
-                text = "登录",
-                style = MaterialTheme.typography.headlineLarge,
-                color = AppAccent,
-            )
+            AppPageHeader(title = "登录", horizontalPadding = 0.dp)
 
             Spacer(modifier = Modifier.height(32.dp))
 
@@ -100,10 +97,10 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            PrimaryButton(
+            AppAccentButton(
                 text = "登录",
                 onClick = { viewModel.login() },
-                isLoading = uiState.isLoading,
+                enabled = !uiState.isLoading,
             )
 
             Spacer(modifier = Modifier.height(16.dp))

@@ -110,7 +110,7 @@ class QuestionnaireResultViewModel @Inject constructor(
                             analysis = "",
                             profileType = submission.profileType ?: "",
                             profileLabel = profileTypeLabels[submission.profileType] ?: submission.profileType ?: "",
-                            confidence = 0f,
+                            confidence = submission.confidence,
                             dimensionScores = submission.dimensionScores ?: emptyMap(),
                             profileAnalysis = submission.profileAnalysis ?: "",
                             dimensionAnalyses = submission.dimensionAnalyses ?: emptyList(),

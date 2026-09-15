@@ -1,6 +1,7 @@
 package com.couple.translator.feature.couple.letter
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,103 +21,98 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.couple.translator.feature.couple.data.model.LetterDto
+import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.feature.couple.data.model.LetterDto
 
 @Composable
 fun LetterUnderstandingCard(
     understanding: LetterDto.LetterUnderstanding,
     onDismiss: () -> Unit,
 ) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = AppAccentLight),
+        containerColor = AppAccentLight,
+        contentPadding = PaddingValues(16.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            Text(
+                text = "AI 理解",
+                style = MaterialTheme.typography.titleSmall,
+                color = AppAccent,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Default.Close, contentDescription = "关闭")
+            }
+        }
+
+        if (understanding.emotion.isNotEmpty()) {
+            SectionItem(label = "对方情绪", value = understanding.emotion)
+        }
+
+        if (understanding.keyConcerns.isNotEmpty()) {
+            Text(
+                text = "关键关注点",
+                style = MaterialTheme.typography.labelMedium,
+                color = AppAccent,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            understanding.keyConcerns.forEach { concern ->
                 Text(
-                    text = "AI 理解",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = AppAccent,
-                    modifier = Modifier.weight(1f),
+                    text = "• $concern",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextSecondary,
                 )
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "关闭")
-                }
             }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
-            if (understanding.emotion.isNotEmpty()) {
-                SectionItem(label = "对方情绪", value = understanding.emotion)
-            }
+        if (understanding.expectedResponse.isNotEmpty()) {
+            SectionItem(label = "期待回应", value = understanding.expectedResponse)
+        }
 
-            if (understanding.keyConcerns.isNotEmpty()) {
+        if (understanding.misunderstandable.isNotEmpty()) {
+            Text(
+                text = "容易误解的句子",
+                style = MaterialTheme.typography.labelMedium,
+                color = AppAccent,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            understanding.misunderstandable.forEach { item ->
                 Text(
-                    text = "关键关注点",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = AppAccent,
+                    text = "\"${item.sentence}\"",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextSecondary,
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                understanding.keyConcerns.forEach { concern ->
-                    Text(
-                        text = "• $concern",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTextSecondary,
-                    )
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            if (understanding.expectedResponse.isNotEmpty()) {
-                SectionItem(label = "期待回应", value = understanding.expectedResponse)
-            }
-
-            if (understanding.misunderstandable.isNotEmpty()) {
                 Text(
-                    text = "容易误解的句子",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = AppAccent,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                understanding.misunderstandable.forEach { item ->
-                    Text(
-                        text = "\"${item.sentence}\"",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTextSecondary,
-                    )
-                    Text(
-                        text = "→ ${item.note}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppAccent,
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            if (understanding.replySuggestions.isNotEmpty()) {
-                Text(
-                    text = "回信建议",
-                    style = MaterialTheme.typography.labelMedium,
+                    text = "→ ${item.note}",
+                    style = MaterialTheme.typography.bodySmall,
                     color = AppAccent,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                understanding.replySuggestions.forEach { suggestion ->
-                    Text(
-                        text = "• $suggestion",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTextSecondary,
-                    )
-                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        if (understanding.replySuggestions.isNotEmpty()) {
+            Text(
+                text = "回信建议",
+                style = MaterialTheme.typography.labelMedium,
+                color = AppAccent,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            understanding.replySuggestions.forEach { suggestion ->
+                Text(
+                    text = "• $suggestion",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextSecondary,
+                )
             }
         }
     }

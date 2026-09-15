@@ -1,5 +1,6 @@
 package com.couple.translator.core.ui.profile
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,7 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.DropdownMenuItem
@@ -30,8 +30,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,14 +45,17 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.couple.translator.core.network.toAbsoluteUrl
+import com.couple.translator.core.ui.components.AppAccentButton
+import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.LoadingIndicator
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.components.PrimaryButton
+import com.couple.translator.core.ui.components.SkeletonBlock
+import com.couple.translator.core.ui.components.SkeletonPageHeader
 import com.couple.translator.core.ui.components.TextInputField
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 
@@ -88,19 +89,14 @@ fun ProfileScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("个人资料") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = "个人资料",
+                trailing = {
                     IconButton(onClick = { viewModel.toggleEditing() }) {
                         Icon(Icons.Default.Edit, contentDescription = "编辑")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -111,12 +107,25 @@ fun ProfileScreen(
             modifier = Modifier.padding(padding),
         ) {
         if (uiState.isLoading) {
-            LoadingIndicator()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(AppBackground)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = AppSpacing.screenH),
+            ) {
+                SkeletonPageHeader()
+                Spacer(modifier = Modifier.height(AppSpacing.section))
+                repeat(4) {
+                    SkeletonBlock(modifier = Modifier.fillMaxWidth().height(56.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
         } else {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp)
+                    .padding(horizontal = AppSpacing.screenH)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -168,10 +177,10 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(32.dp))
 
                 if (uiState.isEditing) {
-                    PrimaryButton(
+                    AppAccentButton(
                         text = "保存",
                         onClick = { viewModel.save() },
-                        isLoading = uiState.isLoading,
+                        enabled = !uiState.isLoading,
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                 }

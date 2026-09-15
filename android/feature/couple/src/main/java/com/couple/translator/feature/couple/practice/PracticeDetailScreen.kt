@@ -1,5 +1,6 @@
 package com.couple.translator.feature.couple.practice
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,21 +10,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -32,12 +26,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.components.AppAccentButton
+import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.SkeletonBlock
+import com.couple.translator.core.ui.components.SkeletonPageHeader
+import com.couple.translator.core.ui.components.SkeletonTopBar
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSize
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextSecondary
 
@@ -74,24 +75,19 @@ fun PracticeDetailScreen(
         ErrorDialog(message = uiState.error, onDismiss = { viewModel.clearError() })
     }
 
+    if (uiState.isLoading && uiState.record == null) {
+        PracticeDetailSkeleton()
+        return
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(uiState.record?.practiceTitle ?: "练习", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = uiState.record?.practiceTitle ?: "练习",
             )
         },
     ) { padding ->
-        if (uiState.isLoading && uiState.record == null) {
-            LoadingIndicator()
-            return@Scaffold
-        }
-
         val record = uiState.record ?: return@Scaffold
         val steps = practiceSteps[record.practiceType] ?: listOf("写下你的想法")
         val currentStep = uiState.currentStep.coerceAtMost(steps.lastIndex)
@@ -100,7 +96,7 @@ fun PracticeDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(20.dp),
+                .padding(horizontal = AppSpacing.screenH, vertical = AppSpacing.screenH),
         ) {
             LinearProgressIndicator(
                 progress = { (currentStep + 1).toFloat() / steps.size },
@@ -155,24 +151,41 @@ fun PracticeDetailScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             if (currentStep < steps.lastIndex) {
-                Button(
+                AppAccentButton(
+                    text = "下一步",
                     onClick = { viewModel.nextStep() },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = AppAccent),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text("下一步", modifier = Modifier.padding(vertical = 8.dp))
-                }
+                )
             } else {
-                Button(
+                AppAccentButton(
+                    text = "提交练习",
                     onClick = { viewModel.submitPractice(recordId) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = AppAccent),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text("提交练习", modifier = Modifier.padding(vertical = 8.dp))
-                }
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun PracticeDetailSkeleton() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppBackground),
+    ) {
+        SkeletonTopBar()
+        Column(modifier = Modifier.padding(horizontal = AppSpacing.screenH)) {
+            Spacer(modifier = Modifier.height(AppSpacing.sm))
+            SkeletonPageHeader(showSubtitle = false)
+            Spacer(modifier = Modifier.height(AppSpacing.section))
+            SkeletonBlock(
+                modifier = Modifier.fillMaxWidth().height(180.dp),
+                shape = RoundedCornerShape(AppRadius.md),
+            )
+            Spacer(modifier = Modifier.height(AppSpacing.block))
+            SkeletonBlock(
+                modifier = Modifier.fillMaxWidth().height(AppSize.button),
+                shape = RoundedCornerShape(AppRadius.pill),
+            )
         }
     }
 }

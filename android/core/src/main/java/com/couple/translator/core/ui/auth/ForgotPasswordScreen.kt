@@ -29,11 +29,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.components.AppAccentButton
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.PrimaryButton
 import com.couple.translator.core.ui.components.TextInputField
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppTextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,7 +80,7 @@ fun ForgotPasswordScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = AppSpacing.screenH),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top,
         ) {
@@ -106,10 +107,10 @@ fun ForgotPasswordScreen(
 
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    PrimaryButton(
+                    AppAccentButton(
                         text = "发送验证码",
                         onClick = { viewModel.sendCode() },
-                        isLoading = uiState.isLoading,
+                        enabled = !uiState.isLoading,
                     )
                 }
 
@@ -153,10 +154,10 @@ fun ForgotPasswordScreen(
 
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    PrimaryButton(
+                    AppAccentButton(
                         text = "重置密码",
                         onClick = { viewModel.resetPassword() },
-                        isLoading = uiState.isLoading,
+                        enabled = !uiState.isLoading,
                     )
                 }
 
@@ -179,7 +180,7 @@ fun ForgotPasswordScreen(
 
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    PrimaryButton(
+                    AppAccentButton(
                         text = "返回",
                         onClick = onNavigateBack,
                     )

@@ -1,12 +1,12 @@
 package com.couple.translator.feature.single.practice
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,11 +19,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.SelfImprovement
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,8 +30,6 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -43,15 +38,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.couple.translator.feature.single.data.model.SelfPracticeDto
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppPrimaryButton
+import com.couple.translator.core.ui.components.SkeletonPlainListPage
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
-import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
+import com.couple.translator.feature.single.data.model.SelfPracticeDto
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,25 +89,14 @@ private fun PracticeListScreen(
     Scaffold(
         containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("自我练习") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AppBackground,
-                    titleContentColor = AppTextPrimary,
-                    navigationIconContentColor = AppTextPrimary,
-                ),
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = "自我练习",
             )
         },
     ) { innerPadding ->
         if (uiState.isLoading) {
-            Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-                LoadingIndicator()
-            }
+            SkeletonPlainListPage(modifier = Modifier.padding(innerPadding))
         } else {
             Column(
                 modifier = Modifier
@@ -142,12 +129,10 @@ private fun PracticeCard(
     practice: SelfPracticeDto.SelfPracticeResponse,
     onClick: () -> Unit,
 ) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+    AppCard(
+        onClick = onClick,
         shape = RoundedCornerShape(16.dp),
-        color = AppSurface,
+        contentPadding = PaddingValues(0.dp),
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -199,18 +184,9 @@ private fun PracticeDetailScreen(
     Scaffold(
         containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text(practice.title) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AppBackground,
-                    titleContentColor = AppTextPrimary,
-                    navigationIconContentColor = AppTextPrimary,
-                ),
+            AppBackTopBar(
+                onBack = onBack,
+                title = practice.title,
             )
         },
     ) { innerPadding ->
@@ -290,26 +266,17 @@ private fun PracticeDetailScreen(
                 Text(
                     text = uiState.error!!,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
+                    color = AppErrorRed,
                 )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Button(
+            AppPrimaryButton(
+                text = if (uiState.isSubmitting) "提交中..." else "完成练习",
                 onClick = onSubmit,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.buttonColors(containerColor = AppTextPrimary, contentColor = AppSurface),
                 enabled = !uiState.isSubmitting,
-            ) {
-                Text(
-                    text = if (uiState.isSubmitting) "提交中..." else "完成练习",
-                    style = MaterialTheme.typography.titleSmall,
-                )
-            }
+            )
 
             Spacer(modifier = Modifier.height(40.dp))
         }
@@ -345,12 +312,9 @@ private fun PracticeCompletedScreen(onFinish: () -> Unit) {
             color = AppTextSecondary,
         )
         Spacer(modifier = Modifier.height(32.dp))
-        Button(
+        AppPrimaryButton(
+            text = "返回练习列表",
             onClick = onFinish,
-            shape = RoundedCornerShape(50),
-            colors = ButtonDefaults.buttonColors(containerColor = AppTextPrimary, contentColor = AppSurface),
-        ) {
-            Text("返回练习列表")
-        }
+        )
     }
 }

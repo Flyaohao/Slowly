@@ -50,6 +50,8 @@ def _build_submission_response(s) -> dict:
         "strengths": analysis.get("strengths", ""),
         "growth_tips": analysis.get("growth_tips", []),
         "communication_guide": analysis.get("communication_guide", ""),
+        # 置信度存在分析 JSON 里，历史记录页需要它；旧格式（纯文本）没有该字段，返回 0 表示"未知"
+        "confidence": analysis.get("confidence", 0.0),
     }
 
 router = APIRouter(prefix="/questionnaires", tags=["问卷"])

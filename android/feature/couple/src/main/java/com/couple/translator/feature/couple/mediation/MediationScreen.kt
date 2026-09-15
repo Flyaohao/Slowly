@@ -2,26 +2,19 @@ package com.couple.translator.feature.couple.mediation
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -32,13 +25,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.couple.translator.core.ui.components.PrimaryButton
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppPrimaryButton
+import com.couple.translator.core.ui.components.AppSecondaryButton
+import com.couple.translator.core.ui.components.TextInputField
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextSecondary
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MediationExplanationScreen(
     onStartMediation: () -> Unit,
@@ -47,31 +47,24 @@ fun MediationExplanationScreen(
     Scaffold(
         containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("双人调解室") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-            )
+            AppBackTopBar(onBack = onNavigateBack, title = "双人调解室")
         },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = AppSpacing.screenH)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.Center,
         ) {
-            Card(
+            AppCard(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = AppSurface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                shape = RoundedCornerShape(AppRadius.md),
+                contentPadding = PaddingValues(24.dp),
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Text(
@@ -113,21 +106,15 @@ fun MediationExplanationScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            PrimaryButton(text = "开始调解", onClick = onStartMediation)
+            AppPrimaryButton(text = "开始调解", onClick = onStartMediation)
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            OutlinedButton(
-                onClick = onNavigateBack,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("暂不开始")
-            }
+            AppSecondaryButton(text = "暂不开始", onClick = onNavigateBack)
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MediationInviteScreen(
     sessionId: Long,
@@ -155,21 +142,14 @@ fun MediationInviteScreen(
     Scaffold(
         containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("调解邀请") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-            )
+            AppBackTopBar(onBack = onNavigateBack, title = "调解邀请")
         },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp),
+                .padding(horizontal = AppSpacing.screenH),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
@@ -178,15 +158,13 @@ fun MediationInviteScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            Card(
+            AppCard(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = AppSurface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                shape = RoundedCornerShape(AppRadius.md),
+                contentPadding = PaddingValues(24.dp),
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
@@ -217,19 +195,17 @@ fun MediationInviteScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        PrimaryButton(
+                        AppPrimaryButton(
                             text = "接受邀请",
                             onClick = { viewModel.acceptInvite() },
                             enabled = !uiState.isLoading,
                         )
 
-                        OutlinedButton(
+                        AppSecondaryButton(
+                            text = "暂不接受",
                             onClick = { viewModel.rejectInvite() },
-                            modifier = Modifier.fillMaxWidth(),
                             enabled = !uiState.isLoading,
-                        ) {
-                            Text("暂不接受")
-                        }
+                        )
                     }
                 }
             }
@@ -238,7 +214,7 @@ fun MediationInviteScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = uiState.error,
-                    color = MaterialTheme.colorScheme.error,
+                    color = AppErrorRed,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -246,7 +222,6 @@ fun MediationInviteScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MediationInputScreen(
     sessionId: Long,
@@ -272,21 +247,14 @@ fun MediationInputScreen(
     Scaffold(
         containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("表达你的感受") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-            )
+            AppBackTopBar(onBack = onNavigateBack, title = "表达你的感受")
         },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = AppSpacing.screenH)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -326,17 +294,16 @@ fun MediationInputScreen(
                 placeholder = "比如：下次我们可以先冷静一下再聊...",
             )
 
-            PrimaryButton(
+            AppPrimaryButton(
                 text = "提交",
                 onClick = viewModel::submitInput,
                 enabled = uiState.feeling.isNotBlank() && uiState.trigger.isNotBlank() && !uiState.isLoading,
-                isLoading = uiState.isLoading,
             )
 
             if (uiState.error.isNotEmpty()) {
                 Text(
                     text = uiState.error,
-                    color = MaterialTheme.colorScheme.error,
+                    color = AppErrorRed,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -346,7 +313,6 @@ fun MediationInputScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MediationConfirmScreen(
     sessionId: Long,
@@ -373,21 +339,14 @@ fun MediationConfirmScreen(
     Scaffold(
         containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("确认改写") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-            )
+            AppBackTopBar(onBack = onNavigateBack, title = "确认改写")
         },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = AppSpacing.screenH)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -407,12 +366,12 @@ fun MediationConfirmScreen(
             }
 
             uiState.myRewrite?.let { rewrite ->
-                Card(
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = AppSurface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    shape = RoundedCornerShape(AppRadius.md),
+                    contentPadding = PaddingValues(16.dp),
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
                             text = "你的原话",
                             style = MaterialTheme.typography.labelMedium,
@@ -439,7 +398,7 @@ fun MediationConfirmScreen(
                 }
             }
 
-            com.couple.translator.core.ui.components.TextInputField(
+            TextInputField(
                 value = uiState.supplement,
                 onValueChange = viewModel::onSupplementChange,
                 label = "补充说明（可选）",
@@ -447,24 +406,22 @@ fun MediationConfirmScreen(
                 singleLine = false,
             )
 
-            PrimaryButton(
+            AppPrimaryButton(
                 text = "确认准确",
                 onClick = { viewModel.confirm(true) },
                 enabled = !uiState.isLoading,
             )
 
-            OutlinedButton(
+            AppSecondaryButton(
+                text = "需要修改",
                 onClick = { viewModel.confirm(false) },
-                modifier = Modifier.fillMaxWidth(),
                 enabled = !uiState.isLoading,
-            ) {
-                Text("需要修改")
-            }
+            )
 
             if (uiState.error.isNotEmpty()) {
                 Text(
                     text = uiState.error,
-                    color = MaterialTheme.colorScheme.error,
+                    color = AppErrorRed,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -474,7 +431,6 @@ fun MediationConfirmScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MediationResultScreen(
     sessionId: Long,
@@ -491,21 +447,14 @@ fun MediationResultScreen(
     Scaffold(
         containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("调解结果") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-            )
+            AppBackTopBar(onBack = onNavigateBack, title = "调解结果")
         },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = AppSpacing.screenH)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -550,32 +499,28 @@ fun MediationResultScreen(
                 fontWeight = FontWeight.Bold,
             )
 
-            PrimaryButton(
+            AppPrimaryButton(
                 text = "继续沟通",
                 onClick = { viewModel.chooseNextAction("continue") },
                 enabled = !uiState.isLoading,
             )
 
-            OutlinedButton(
+            AppSecondaryButton(
+                text = "暂停一下",
                 onClick = { viewModel.chooseNextAction("pause") },
-                modifier = Modifier.fillMaxWidth(),
                 enabled = !uiState.isLoading,
-            ) {
-                Text("暂停一下")
-            }
+            )
 
-            OutlinedButton(
+            AppSecondaryButton(
+                text = "结束调解",
                 onClick = { viewModel.chooseNextAction("end") },
-                modifier = Modifier.fillMaxWidth(),
                 enabled = !uiState.isLoading,
-            ) {
-                Text("结束调解")
-            }
+            )
 
             if (uiState.error.isNotEmpty()) {
                 Text(
                     text = uiState.error,
-                    color = MaterialTheme.colorScheme.error,
+                    color = AppErrorRed,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -591,12 +536,12 @@ private fun ResultSection(
     items: List<String>,
     accentColor: androidx.compose.ui.graphics.Color,
 ) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = AppSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(AppRadius.md),
+        contentPadding = PaddingValues(16.dp),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
@@ -629,7 +574,7 @@ private fun InputField(
             fontWeight = FontWeight.Medium,
         )
         Spacer(modifier = Modifier.height(4.dp))
-        com.couple.translator.core.ui.components.TextInputField(
+        TextInputField(
             value = value,
             onValueChange = onValueChange,
             label = label,

@@ -1,5 +1,6 @@
 package com.couple.translator.feature.couple.dual
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -7,20 +8,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -28,11 +21,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.components.AppAccentButton
+import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.SkeletonBlock
+import com.couple.translator.core.ui.components.SkeletonPageHeader
+import com.couple.translator.core.ui.components.SkeletonTopBar
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSize
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -54,29 +54,24 @@ fun CreateDualEventScreen(
         ErrorDialog(message = uiState.error, onDismiss = { viewModel.clearError() })
     }
 
+    if (uiState.isLoading) {
+        CreateDualEventSkeleton()
+        return
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("创建事件", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = "创建事件",
             )
         },
     ) { padding ->
-        if (uiState.isLoading) {
-            LoadingIndicator()
-            return@Scaffold
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(20.dp),
+                .padding(horizontal = AppSpacing.screenH, vertical = AppSpacing.screenH),
         ) {
             Text(
                 text = "记录一次事件，双方分别写下自己的视角",
@@ -120,14 +115,40 @@ fun CreateDualEventScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            Button(
+            AppAccentButton(
+                text = "创建并记录我的视角",
                 onClick = { viewModel.createEvent() },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = AppAccent),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Text("创建并记录我的视角", modifier = Modifier.padding(vertical = 8.dp))
-            }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CreateDualEventSkeleton() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppBackground),
+    ) {
+        SkeletonTopBar()
+        Column(modifier = Modifier.padding(horizontal = AppSpacing.screenH)) {
+            Spacer(modifier = Modifier.height(AppSpacing.sm))
+            SkeletonPageHeader()
+            Spacer(modifier = Modifier.height(AppSpacing.section))
+            SkeletonBlock(
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(AppRadius.md),
+            )
+            Spacer(modifier = Modifier.height(AppSpacing.lg))
+            SkeletonBlock(
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(AppRadius.md),
+            )
+            Spacer(modifier = Modifier.height(AppSpacing.block))
+            SkeletonBlock(
+                modifier = Modifier.fillMaxWidth().height(AppSize.button),
+                shape = RoundedCornerShape(AppRadius.pill),
+            )
         }
     }
 }

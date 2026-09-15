@@ -7,11 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -19,8 +14,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -28,15 +21,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppPrimaryButton
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.SkeletonBlock
+import com.couple.translator.core.ui.components.SkeletonPageHeader
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSize
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextSecondary
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddAnniversaryScreen(
     onNavigateBack: () -> Unit,
@@ -54,20 +52,32 @@ fun AddAnniversaryScreen(
     }
 
     Scaffold(
+        containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("新增纪念日", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
-            )
+            AppBackTopBar(onBack = onNavigateBack, title = "新增纪念日")
         },
     ) { padding ->
         if (uiState.isLoading) {
-            LoadingIndicator()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = AppSpacing.screenH),
+            ) {
+                SkeletonPageHeader()
+                Spacer(modifier = Modifier.height(AppSpacing.section))
+                SkeletonBlock(modifier = Modifier.fillMaxWidth().height(56.dp))
+                Spacer(modifier = Modifier.height(AppSpacing.md))
+                SkeletonBlock(modifier = Modifier.fillMaxWidth().height(56.dp))
+                Spacer(modifier = Modifier.height(AppSpacing.md))
+                SkeletonBlock(modifier = Modifier.fillMaxWidth().height(120.dp))
+                Spacer(modifier = Modifier.height(AppSpacing.section))
+                SkeletonBlock(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(AppSize.button),
+                )
+            }
             return@Scaffold
         }
 
@@ -75,7 +85,7 @@ fun AddAnniversaryScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(20.dp),
+                .padding(horizontal = AppSpacing.screenH),
         ) {
             Text(
                 text = "记录对你们有意义的日子",
@@ -90,7 +100,7 @@ fun AddAnniversaryScreen(
                 label = { Text("标题") },
                 placeholder = { Text("例如：在一起纪念日") },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(AppRadius.md),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = AppAccent,
                     unfocusedBorderColor = AppBorderLight,
@@ -108,7 +118,7 @@ fun AddAnniversaryScreen(
                 label = { Text("日期") },
                 placeholder = { Text("YYYY-MM-DD") },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(AppRadius.md),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = AppAccent,
                     unfocusedBorderColor = AppBorderLight,
@@ -128,7 +138,7 @@ fun AddAnniversaryScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(120.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(AppRadius.md),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = AppAccent,
                     unfocusedBorderColor = AppBorderLight,
@@ -139,14 +149,10 @@ fun AddAnniversaryScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            Button(
+            AppPrimaryButton(
+                text = "保存",
                 onClick = { viewModel.createAnniversary() },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = AppAccent),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Text("保存", modifier = Modifier.padding(vertical = 8.dp))
-            }
+            )
         }
     }
 }

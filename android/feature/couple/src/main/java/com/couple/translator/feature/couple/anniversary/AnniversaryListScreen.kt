@@ -1,8 +1,8 @@
 package com.couple.translator.feature.couple.anniversary
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,19 +16,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -36,17 +31,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.couple.translator.feature.couple.data.model.AnniversaryDto
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PullToRefreshLayout
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.SkeletonPlainListPage
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextTertiary
+import com.couple.translator.feature.couple.data.model.AnniversaryDto
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnniversaryListScreen(
     onNavigateBack: () -> Unit,
@@ -59,17 +59,14 @@ fun AnniversaryListScreen(
         ErrorDialog(message = uiState.error, onDismiss = { viewModel.clearError() })
     }
 
+    if (uiState.isLoading) {
+        SkeletonPlainListPage(cardRows = 4)
+        return
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("纪念日", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
-            )
+            AppBackTopBar(onBack = onNavigateBack, title = "纪念日")
         },
         floatingActionButton = {
             FloatingActionButton(
@@ -77,7 +74,7 @@ fun AnniversaryListScreen(
                 containerColor = AppAccent,
                 shape = CircleShape,
             ) {
-                Icon(Icons.Default.Add, contentDescription = "新增纪念日", tint = AppSurface)
+                Icon(Icons.Filled.Add, contentDescription = "新增纪念日", tint = AppSurface)
             }
         },
     ) { padding ->
@@ -86,49 +83,31 @@ fun AnniversaryListScreen(
             onRefresh = { viewModel.refresh() },
             modifier = Modifier.padding(padding),
         ) {
-        if (uiState.isLoading) {
-            LoadingIndicator()
-            return@PullToRefreshLayout
-        }
+            if (uiState.anniversaries.isEmpty()) {
+                AppEmptyState(
+                    icon = Icons.Outlined.Event,
+                    title = "还没有纪念日",
+                    subtitle = "记录你们重要的日子",
+                    modifier = Modifier.padding(top = AppSpacing.section),
+                )
+                return@PullToRefreshLayout
+            }
 
-        if (uiState.anniversaries.isEmpty()) {
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(48.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                    .padding(horizontal = AppSpacing.screenH),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    text = "还没有纪念日",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = AppTextTertiary,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "记录你们重要的日子",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppTextTertiary,
-                )
+                item { Spacer(modifier = Modifier.height(8.dp)) }
+                items(uiState.anniversaries) { anniversary ->
+                    AnniversaryListItem(
+                        anniversary = anniversary,
+                        onDelete = { viewModel.deleteAnniversary(anniversary.id) },
+                    )
+                }
+                item { Spacer(modifier = Modifier.height(16.dp)) }
             }
-            return@PullToRefreshLayout
-        }
-
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item { Spacer(modifier = Modifier.height(8.dp)) }
-            items(uiState.anniversaries) { anniversary ->
-                AnniversaryListItem(
-                    anniversary = anniversary,
-                    onDelete = { viewModel.deleteAnniversary(anniversary.id) },
-                )
-            }
-            item { Spacer(modifier = Modifier.height(16.dp)) }
-        }
         }
     }
 }
@@ -138,15 +117,13 @@ private fun AnniversaryListItem(
     anniversary: AnniversaryDto.AnniversaryResponse,
     onDelete: () -> Unit,
 ) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = AppSurface),
+        shape = RoundedCornerShape(AppRadius.md),
+        contentPadding = PaddingValues(16.dp),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -171,7 +148,7 @@ private fun AnniversaryListItem(
                 }
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "删除", tint = AppErrorRed)
+                Icon(Icons.Filled.Delete, contentDescription = "删除", tint = AppErrorRed)
             }
         }
     }

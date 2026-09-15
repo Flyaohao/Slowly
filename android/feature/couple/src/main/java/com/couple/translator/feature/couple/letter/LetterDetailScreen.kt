@@ -24,8 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -36,10 +34,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppTopBarAction
 import com.couple.translator.core.ui.components.ErrorDialog
-import com.couple.translator.core.ui.components.LoadingIndicator
+import com.couple.translator.core.ui.components.SkeletonDetailPage
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSpacing
+import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
 
@@ -96,45 +98,45 @@ fun LetterDetailScreen(
         )
     }
 
+    if (uiState.isLoading) {
+        SkeletonDetailPage()
+        return
+    }
+
     Scaffold(
+        containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("信件详情") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = "信件详情",
+                trailing = {
                     val letter = uiState.letter
                     if (letter != null) {
                         // 草稿信件显示编辑按钮
                         if (letter.status == "draft") {
-                            IconButton(onClick = { onNavigateToEdit(letter.id) }) {
-                                Icon(Icons.Default.Edit, contentDescription = "编辑", tint = AppAccent)
-                            }
-                        }
-                        IconButton(onClick = { viewModel.toggleFavorite() }) {
-                            Icon(
-                                if (letter.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                contentDescription = "收藏",
-                                tint = if (letter.isFavorite) AppAccent else AppTextSecondary,
+                            AppTopBarAction(
+                                icon = Icons.Default.Edit,
+                                contentDescription = "编辑",
+                                tint = AppAccent,
+                                onClick = { onNavigateToEdit(letter.id) },
                             )
                         }
-                        IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除")
-                        }
+                        AppTopBarAction(
+                            icon = if (letter.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "收藏",
+                            tint = if (letter.isFavorite) AppAccent else AppTextSecondary,
+                            onClick = { viewModel.toggleFavorite() },
+                        )
+                        AppTopBarAction(
+                            icon = Icons.Default.Delete,
+                            contentDescription = "删除",
+                            onClick = { showDeleteDialog = true },
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
     ) { padding ->
-        if (uiState.isLoading) {
-            LoadingIndicator(modifier = Modifier.padding(padding))
-            return@Scaffold
-        }
-
         val letter = uiState.letter
         if (letter == null) {
             Text(
@@ -149,7 +151,7 @@ fun LetterDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = AppSpacing.screenH)
                 .verticalScroll(rememberScrollState()),
         ) {
             Spacer(modifier = Modifier.height(16.dp))
@@ -157,6 +159,7 @@ fun LetterDetailScreen(
             Text(
                 text = letter.title ?: "无标题",
                 style = MaterialTheme.typography.headlineSmall,
+                color = AppTextPrimary,
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -181,6 +184,7 @@ fun LetterDetailScreen(
                 text = letter.content ?: "",
                 style = MaterialTheme.typography.bodyLarge,
                 lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
+                color = AppTextPrimary,
             )
 
             Spacer(modifier = Modifier.height(32.dp))

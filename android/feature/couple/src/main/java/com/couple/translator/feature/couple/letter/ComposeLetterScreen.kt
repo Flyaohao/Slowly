@@ -15,15 +15,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -32,8 +29,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -43,12 +38,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppFilterChip
+import com.couple.translator.core.ui.components.AppLinkText
+import com.couple.translator.core.ui.components.AppTopBarAction
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
 
@@ -188,66 +187,49 @@ fun ComposeLetterScreen(
     }
 
     Scaffold(
+        containerColor = AppBackground,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = when {
-                                uiState.isSending -> "发送中..."
-                                uiState.isSaving -> "保存中..."
-                                isCoupleMode -> "写信"
-                                else -> "写日记"
-                            },
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        if (uiState.letterId != null && !uiState.isSaving && !uiState.isSending) {
-                            Text(
-                                text = "草稿已自动保存",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = AppTextTertiary,
-                            )
-                        }
-                    }
+            AppBackTopBar(
+                onBack = {
+                    viewModel.saveDraft()
+                    onNavigateBack()
                 },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        viewModel.saveDraft()
-                        onNavigateBack()
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
+                title = when {
+                    uiState.isSending -> "发送中..."
+                    uiState.isSaving -> "保存中..."
+                    isCoupleMode -> "写信"
+                    else -> "写日记"
                 },
-                actions = {
+                subtitle = if (uiState.letterId != null && !uiState.isSaving && !uiState.isSending) {
+                    "草稿已自动保存"
+                } else {
+                    null
+                },
+                trailing = {
                     if (isCoupleMode) {
-                        // Couple mode: send button
-                        IconButton(
-                            onClick = { showSendConfirm = true },
-                            enabled = !uiState.isSending && !uiState.isSaving && uiState.content.isNotBlank(),
-                        ) {
-                            Icon(
-                                Icons.Default.Send,
-                                contentDescription = "发送",
-                                tint = if (uiState.content.isNotBlank() && !uiState.isSending) AppAccent else AppTextSecondary,
-                            )
-                        }
-                    } else {
-                        // Single mode: save button
-                        TextButton(
+                        AppTopBarAction(
+                            icon = Icons.Filled.Send,
+                            contentDescription = "发送",
+                            tint = if (uiState.content.isNotBlank() && !uiState.isSending) AppAccent else AppTextSecondary,
                             onClick = {
-                                viewModel.saveDraft()
-                                onNavigateBack()
+                                if (!uiState.isSending && !uiState.isSaving && uiState.content.isNotBlank()) {
+                                    showSendConfirm = true
+                                }
                             },
-                            enabled = !uiState.isSaving && uiState.content.isNotBlank(),
-                        ) {
-                            Text(
-                                text = if (uiState.isSaving) "保存中..." else "保存",
-                                color = if (uiState.content.isNotBlank()) AppAccent else AppTextSecondary,
-                            )
-                        }
+                        )
+                    } else {
+                        AppLinkText(
+                            label = if (uiState.isSaving) "保存中..." else "保存",
+                            color = if (uiState.isSaving) AppTextSecondary else AppAccent,
+                            onClick = {
+                                if (!uiState.isSaving && uiState.content.isNotBlank()) {
+                                    viewModel.saveDraft()
+                                    onNavigateBack()
+                                }
+                            },
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground),
             )
         },
         bottomBar = {
@@ -265,22 +247,18 @@ fun ComposeLetterScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = AppSpacing.screenH)
                 .verticalScroll(rememberScrollState()),
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
             // Letter type badge
             AnimatedVisibility(visible = uiState.letterType != "normal", enter = fadeIn(), exit = fadeOut()) {
-                FilterChip(
+                AppFilterChip(
+                    text = letterTypeName(uiState.letterType),
                     selected = true,
                     onClick = { viewModel.onLetterTypeChange("normal") },
-                    label = { Text(letterTypeName(uiState.letterType)) },
                     modifier = Modifier.padding(bottom = 8.dp),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = AppAccentLight,
-                        selectedLabelColor = AppAccent,
-                    ),
                 )
             }
 
@@ -290,10 +268,10 @@ fun ComposeLetterScreen(
                 placeholder = { Text("标题（可选）", color = AppTextSecondary) },
                 modifier = Modifier.fillMaxWidth(),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedContainerColor = AppBackground,
+                    unfocusedContainerColor = AppBackground,
+                    focusedIndicatorColor = AppBackground,
+                    unfocusedIndicatorColor = AppBackground,
                 ),
                 textStyle = MaterialTheme.typography.titleLarge,
                 singleLine = true,
@@ -315,10 +293,10 @@ fun ComposeLetterScreen(
                     .fillMaxWidth()
                     .weight(1f),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedContainerColor = AppBackground,
+                    unfocusedContainerColor = AppBackground,
+                    focusedIndicatorColor = AppBackground,
+                    unfocusedIndicatorColor = AppBackground,
                 ),
                 textStyle = MaterialTheme.typography.bodyLarge,
             )
