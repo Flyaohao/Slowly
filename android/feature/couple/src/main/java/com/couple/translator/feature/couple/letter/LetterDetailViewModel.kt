@@ -197,6 +197,11 @@ class LetterDetailViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(isStreaming = false, isThinking = false, isStructuring = false)
                         }
+                        // 连接断了不等于结果没了：这一轮生成在服务端多半已经落库
+                        // （跑完存 done、被掐断存 interrupted），而且它是在流式开始
+                        // 时就建好记录、逐段更新的。回读一次把内容捞回来，免得界面
+                        // 只剩一句报错——用户干等了二十秒，不该什么都看不到。
+                        _uiState.value.letter?.let { loadSavedUnderstanding(it.id) }
                         _event.emit(LetterDetailUiEvent.ShowError(ev.message))
                     }
                 }

@@ -193,6 +193,9 @@ class LetterRepository @Inject constructor(
         }
 
         if (!response.isSuccessful) {
+            // errorBody 同样是「已打开的响应体」，不关就会漏一个连接：
+            // OkHttp 会在之后的某次 GC 上打印 "A connection ... was leaked"。
+            response.errorBody()?.close()
             emit(LetterDto.LetterStreamEvent.Failure(response.code(), httpHint(response.code())))
             return@flow
         }
@@ -208,7 +211,7 @@ class LetterRepository @Inject constructor(
         }
     }.catch { e ->
         // 连接中断也要收敛成终态事件，否则 UI 会永远停在「生成中」
-        emit(LetterDto.LetterStreamEvent.Failure(50000, "流式连接中断：${e.message ?: "未知错误"}"))
+        emit(LetterDto.LetterStreamEvent.Failure(50000, netHint(e)))
     }.flowOn(Dispatchers.IO)
 
     /**
@@ -297,6 +300,21 @@ class LetterRepository @Inject constructor(
         404 -> "信件不存在或接口未上线"
         422 -> "请求参数不合法"
         else -> "服务异常（HTTP $code）"
+    }
+
+    /**
+     * 把网络层异常翻译成人能看懂的一句话。
+     *
+     * 真机上最常见的是 `SocketException: Software caused connection abort`——
+     * 实测它与其它 App 同时报错、且紧跟着系统日志里的 `teardown wifi`，
+     * 也就是手机切换了 Wi-Fi/移动数据，不是本应用的问题。这种异常类名
+     * 直接甩给用户毫无意义，说清楚「网络断了、内容已保留」才有用。
+     */
+    private fun netHint(e: Throwable): String = when (e) {
+        is java.net.SocketTimeoutException -> "等待响应超时，请重试"
+        is java.net.SocketException -> "网络连接被中断（可能是切换了 Wi-Fi 或移动数据）"
+        is java.io.IOException -> "网络读写失败，请检查网络后重试"
+        else -> e.message ?: "连接已断开"
     }
 
     suspend fun rewriteLetter(letterId: Long, style: String, content: String): Result<LetterDto.RewriteLetterResponse?> {

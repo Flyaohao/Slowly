@@ -86,6 +86,8 @@ class AiRepository @Inject constructor(
         }
 
         if (!response.isSuccessful) {
+            // 与 LetterRepository 同理：errorBody 不关会漏连接
+            response.errorBody()?.close()
             emit(AiDto.ChatStreamEvent.Failure(response.code(), httpHint(response.code())))
             return@flow
         }
@@ -102,7 +104,7 @@ class AiRepository @Inject constructor(
         }
     }.catch { e ->
         // 连接中断也要收敛成终态事件，否则 UI 的 isStreaming 永远为 true
-        emit(AiDto.ChatStreamEvent.Failure(50000, "流式连接中断：${e.message ?: "未知错误"}"))
+        emit(AiDto.ChatStreamEvent.Failure(50000, netHint(e)))
     }.flowOn(Dispatchers.IO)
 
     suspend fun getSessions(): Result<List<AiDto.SessionResponse>> {
@@ -255,5 +257,13 @@ class AiRepository @Inject constructor(
         404 -> "接口不存在，服务端版本可能偏低"
         422 -> "请求参数不合法"
         else -> "服务异常（HTTP $code）"
+    }
+
+    /** 网络层异常的口语化解释，理由见 LetterRepository.netHint 的注释。 */
+    private fun netHint(e: Throwable): String = when (e) {
+        is java.net.SocketTimeoutException -> "等待响应超时，请重试"
+        is java.net.SocketException -> "网络连接被中断（可能是切换了 Wi-Fi 或移动数据）"
+        is java.io.IOException -> "网络读写失败，请检查网络后重试"
+        else -> e.message ?: "连接已断开"
     }
 }
