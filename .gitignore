@@ -366,9 +366,13 @@ spec/
 
 # Deploy script & artifacts
 deploy_update.py
+deploy_*.py
+deploy_*.sh
 deploy_*.zip
 deploy_*.tar.gz
 backend_upload.zip
+# 一次性部署验证脚本（含服务器巡检/流式探测，不进仓库）
+verify_stream.py
 
 # Workflow & process docs (not source code)
 WORKFLOW_CONFIG.md

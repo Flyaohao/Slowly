@@ -22,8 +22,11 @@ if [ "${SEED_ON_START:-0}" = "1" ]; then
     done
 fi
 
-if [ ! -d "$CHROMA_DIR" ]; then
-    echo "[entrypoint] 向量库不存在（$CHROMA_DIR），开始构建"
+# 注意：不能只看目录是否存在——Docker 挂载空卷时会自动创建空目录，
+# 导致「空向量库」被误判为「已构建」而跳过（首次部署就踩过）。
+# 改为判断目录是否为空：空目录/不存在 → 构建；有数据 → 跳过。
+if [ -z "$(ls -A "$CHROMA_DIR" 2>/dev/null)" ]; then
+    echo "[entrypoint] 向量库为空（$CHROMA_DIR），开始构建"
     # 构建失败只降级不阻断：rag_service 检测不到向量库会自动退回关键词检索
     python scripts/build_vectorstore.py \
         || echo "[entrypoint] 向量库构建失败，RAG 将降级为关键词检索"
