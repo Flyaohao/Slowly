@@ -117,4 +117,27 @@ class CoupleInfoViewModel @Inject constructor(
             )
         }
     }
+
+    /**
+     * 对方在冷静期满后确认解绑。
+     * 注意：冷静期（72 小时）未满时后端会返回 code=30004「冷静期未满，无法确认解绑」。
+     */
+    fun confirmUnbind() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = "") }
+            coupleRepository.confirmUnbind().fold(
+                onSuccess = {
+                    _uiState.update {
+                        it.copy(isLoading = false, unbindMessage = "解绑完成")
+                    }
+                    coupleStateManager.refresh()
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isLoading = false, error = error.message ?: "确认解绑失败")
+                    }
+                },
+            )
+        }
+    }
 }

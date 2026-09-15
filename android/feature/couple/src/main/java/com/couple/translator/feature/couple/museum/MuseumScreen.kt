@@ -124,13 +124,14 @@ fun MuseumScreen(
                 }
             }
 
-            if (uiState.isLoading) {
-                LoadingIndicator()
-                return@Column
-            }
+            // 注意：此处不能写 return@Column —— Column 是 inline composable，
+            // qualified return 会触发 Compose 编译器 group 错位 bug（compose-jb#2230，
+            // 症状为进入页面即 ArrayIndexOutOfBoundsException: index=-5 闪退），
+            // 必须用 when 分支结构代替提前返回。
+            when {
+                uiState.isLoading -> LoadingIndicator()
 
-            if (uiState.items.isEmpty()) {
-                Column(
+                uiState.items.isEmpty() -> Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(48.dp),
@@ -149,10 +150,8 @@ fun MuseumScreen(
                         color = TextTertiary,
                     )
                 }
-                return@Column
-            }
 
-            LazyColumn(
+                else -> LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 20.dp),
@@ -174,6 +173,7 @@ fun MuseumScreen(
                     }
 
                 item { Spacer(modifier = Modifier.height(16.dp)) }
+            }
             }
         }
         }

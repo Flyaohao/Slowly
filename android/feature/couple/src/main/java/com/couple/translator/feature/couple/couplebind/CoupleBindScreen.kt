@@ -91,7 +91,7 @@ fun CoupleBindScreen(
         AlertDialog(
             onDismissRequest = { viewModel.dismissUnbindDialog() },
             title = { Text("确认解绑") },
-            text = { Text("解绑后将失去情侣空间的所有数据，确定要解绑吗？") },
+            text = { Text("解绑设有 72 小时冷静期：申请后由对方在冷静期满后确认才生效，期间任意一方可取消。解绑后将失去情侣空间的所有数据，确定要申请吗？") },
             confirmButton = {
                 TextButton(onClick = { viewModel.requestUnbind() }) {
                     Text("确认解绑", color = MaterialTheme.colorScheme.error)

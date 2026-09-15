@@ -89,7 +89,7 @@ fun CoupleInfoScreen(
         AlertDialog(
             onDismissRequest = { viewModel.dismissUnbindDialog() },
             title = { Text("确认解绑") },
-            text = { Text("解绑后将失去情侣空间的所有数据，确定要解绑吗？") },
+            text = { Text("解绑设有 72 小时冷静期：申请后由对方在冷静期满后确认才生效，期间任意一方可取消。解绑后将失去情侣空间的所有数据，确定要申请吗？") },
             confirmButton = {
                 TextButton(onClick = { viewModel.requestUnbind() }) {
                     Text("确认解绑", color = MaterialTheme.colorScheme.error)
@@ -234,6 +234,12 @@ fun CoupleInfoScreen(
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.error,
                                 )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "申请发起 72 小时后，由对方确认解绑；期间任意一方可取消。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary,
+                                )
                             }
                         }
                     }
@@ -253,11 +259,22 @@ fun CoupleInfoScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     if (isUnbinding) {
-                        PrimaryButton(
-                            text = "取消解绑",
+                        TextButton(
                             onClick = { viewModel.cancelUnbind() },
-                            isLoading = uiState.isLoading,
-                        )
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("取消解绑")
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(
+                            onClick = { viewModel.confirmUnbind() },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = "确认解绑（冷静期满后可用）",
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     } else {
                         TextButton(
                             onClick = { viewModel.showUnbindDialog() },
