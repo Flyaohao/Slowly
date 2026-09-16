@@ -229,7 +229,9 @@ def analyze_questionnaire_stream(
         )
 
     return StreamingResponse(
-        _stream_and_save_analysis(prepared, current_user.id, questionnaire_id),
+        # 包装生成器吐出来的是**事件字典**，必须过 sse_encode 变成 SSE 报文；
+        # 少这一层，Starlette 会把 dict 当字符串去 encode，第一个 chunk 就 500。
+        sse_encode(_stream_and_save_analysis(prepared, current_user.id, questionnaire_id)),
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
