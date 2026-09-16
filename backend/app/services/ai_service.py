@@ -16,6 +16,7 @@ from app.services.prompt_builder import (
     build_stream_prompt,
     build_structured_stream_prompt,
     build_profile_report_prompt,
+    build_dual_summary_prompt,
 )
 from app.services.scene_router import get_scene_config
 # 循环导入注意：ai_generation_service 也会 import 本模块的辅助函数，
@@ -984,6 +985,63 @@ def prepare_profile_report(db: Session, user_id: int) -> dict:
         "output_model": None,
         "temperature": 0.6,
         "max_tokens": 2500,
+    }
+
+
+def prepare_dual_summary(db: Session, user_id: int, event_id: int) -> dict:
+    """流式版「双视角 AI 总结」的前处理。
+
+    纯 Markdown 长文，无结构化字段（output_model=None）。
+    只有双方都已提交记录后才允许总结——单方视角做不出「对照」。
+    """
+    from app.services import ai_generation_service  # 局部导入，避免模块加载环
+    from app.services import dual_perspective_service
+
+    # get_event_detail 内部已校验关系归属，错误码（70001/70002）原样透传
+    event = dual_perspective_service.get_event_detail(db, user_id, event_id)
+
+    records = list(getattr(event, "records", None) or [])
+    if len(records) < 2:
+        raise ValueError("70003")
+
+    self_text = ""
+    partner_text = ""
+    for r in records:
+        text = (r.content or "").strip()
+        if r.user_id == user_id:
+            self_text = text
+        else:
+            partner_text = text
+
+    prompt = build_dual_summary_prompt(
+        event_title=event.title,
+        side_self=self_text,
+        side_partner=partner_text,
+    )
+
+    generation_id, cancel_event = ai_generation_service.begin(
+        db,
+        user_id=user_id,
+        relation_id=event.relation_id,
+        generation_kind="dual_summary",
+        scene_key="dual_summary",
+        target_type="dual_event",
+        target_id=event_id,
+    )
+
+    return {
+        "generation_id": generation_id,
+        "cancel_event": cancel_event,
+        "generation_kind": "dual_summary",
+        "scene_key": "dual_summary",
+        "target_type": "dual_event",
+        "target_id": event_id,
+        "user_id": user_id,
+        "relation_id": event.relation_id,
+        "prompt": prompt,
+        "output_model": None,
+        "temperature": 0.6,
+        "max_tokens": 2000,
     }
 
 

@@ -36,6 +36,12 @@ object AiDto {
         @Json(name = "context") val context: String? = null,
     )
 
+    /** 双视角对照总结请求：要总结的事件 id（双方都已提交才可用）。 */
+    @JsonClass(generateAdapter = true)
+    data class DualSummaryRequest(
+        @Json(name = "event_id") val eventId: Long,
+    )
+
     /**
      * 关系复盘的结构化结果。
      *

@@ -85,6 +85,10 @@ class ReviewRequest(BaseModel):
     context: Optional[str] = Field(None, max_length=500, description="补充背景")
 
 
+class DualSummaryRequest(BaseModel):
+    event_id: int = Field(..., description="双视角事件 id")
+
+
 class LetterAnalysisOut(BaseModel):
     summary: Optional[str] = None
     key_concerns: Optional[List[str]] = None

@@ -71,6 +71,30 @@ class AiRepository @Inject constructor(
         }
 
     /**
+     * 流式「双视角对照总结」（纯 Markdown 长文，无结构化字段）。
+     *
+     * 按事件回读：同一个事件只保留最新一份总结，换事件互不覆盖。
+     */
+    fun dualSummaryStream(eventId: Long): Flow<GenerationStreamEvent> =
+        generationStreamFlow(generationDecoder) {
+            apiService.dualSummaryStream(AiDto.DualSummaryRequest(eventId))
+        }
+
+    /** 回读某个事件上次的双视角总结；`null` 表示还没生成过。 */
+    suspend fun getSavedDualSummary(eventId: Long): Result<AiDto.GenerationPayload?> {
+        return try {
+            val response = apiService.getGeneration(DUAL_SUMMARY_KIND, "dual_event", eventId)
+            if (response.isSuccess) {
+                Result.success(response.data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * 回读上次的关系复盘（ai_generation 覆盖式只留最新一条）。
      * 返回 `null` 表示还没复盘过——这是正常情况，不是错误。
      */
@@ -105,6 +129,7 @@ class AiRepository @Inject constructor(
     companion object {
         /** 与后端 `ai_generation.generation_kind` 一致，改这里必须同步后端 */
         const val REVIEW_KIND = "relationship_review"
+        const val DUAL_SUMMARY_KIND = "dual_summary"
     }
 
     /**

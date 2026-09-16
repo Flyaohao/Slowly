@@ -232,6 +232,29 @@ SYSTEM_PROMPTS = {
 ## 维度详情
 {dimensions_data}
 """,
+
+    "dual_summary": """你是一位中立的伴侣沟通咨询师。同一件事，双方各写下了自己的版本。请对照两份描述做一次不偏袒的总结。
+
+## 要求
+1. **直接输出总结内容**，不要任何寒暄语（如"好的，我来看看"、"以下是总结"等）
+2. 使用 Markdown 格式，总字数控制在 400-700 字
+3. 必须包含四部分：
+   - **共识**：双方描述中一致的部分（事实或感受都算）
+   - **分歧**：双方描述明显不同或相互错过的部分，逐条指出
+   - **各自真正在意的事**：从各自用词里推断其背后的需求，不要评判谁对谁错
+   - **下次可以怎么说**：给两条具体可照着说的表达，各一句话即可
+4. 语气中立温和，不使用"你错了""对方认为你"这类指責式表述
+5. 不要复述原文，只做提炼；不要编造双方都没提到的信息
+
+## 事件
+{event_title}
+
+## 你的视角
+{side_self}
+
+## TA 的视角
+{side_partner}
+""",
 }
 
 
@@ -404,4 +427,18 @@ def build_profile_report_prompt(
     return template.format(
         user_profile=user_profile,
         dimensions_data=dimensions_data,
+    )
+
+
+def build_dual_summary_prompt(
+    event_title: str,
+    side_self: str,
+    side_partner: str,
+) -> str:
+    """构建双视角对照总结的 prompt"""
+    template = SYSTEM_PROMPTS["dual_summary"]
+    return template.format(
+        event_title=event_title,
+        side_self=side_self or "（未填写）",
+        side_partner=side_partner or "（未填写）",
     )

@@ -18,6 +18,7 @@ from app.schemas.ai_schema import (
     LetterReplyRequest,
     RewriteRequest,
     ReviewRequest,
+    DualSummaryRequest,
 )
 from app.services import ai_generation_service, ai_service, letter_ai_service
 from app.services.sse import sse_encode, SSE_HEADERS as _SSE_HEADERS
@@ -642,6 +643,37 @@ def relationship_review_stream(
         media_type="text/event-stream",
         headers=_SSE_HEADERS,
     )
+
+@router.post("/dual-summary/stream")
+@ai_limit()
+def dual_summary_stream(
+    request: Request,
+    req: DualSummaryRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """双视角对照总结流式接口（SSE），纯 Markdown 长文。
+
+    事件双方都已提交后才有意义：输出共识、分歧、各自真正在意的事、下次可以怎么说。
+    """
+    try:
+        prepared = ai_service.prepare_dual_summary(db, current_user.id, req.event_id)
+    except ValueError as e:
+        _raise_prepared_error(
+            e,
+            {
+                "70001": (404, "事件不存在"),
+                "70002": (403, "无权查看该事件"),
+                "70003": (400, "双方都写下视角后才能生成总结"),
+            },
+        )
+
+    return StreamingResponse(
+        sse_encode(ai_generation_service.stream_generation_events(prepared)),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
+
 
 @router.post("/profile-report/stream")
 @ai_limit()

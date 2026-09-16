@@ -140,6 +140,14 @@ interface CoupleApiService {
     suspend fun reviewStream(@Body body: AiDto.ReviewRequest): Response<ResponseBody>
 
     /**
+     * 双视角对照总结流式版（SSE）。纯 Markdown 长文，无结构化字段。
+     * 事件双方都已提交后才有意义：共识 / 分歧 / 各自在意的事 / 下次可以怎么说。
+     */
+    @Streaming
+    @POST("api/v1/couple/ai/dual-summary/stream")
+    suspend fun dualSummaryStream(@Body body: AiDto.DualSummaryRequest): Response<ResponseBody>
+
+    /**
      * 回读上次的关系复盘结果（[kind] = `relationship_review`）。
      * `data` 为 null 表示还没复盘过。
      */

@@ -15,25 +15,36 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.couple.data.model.DualPerspectiveDto
+import com.couple.translator.core.ui.components.AiStreamingText
+import com.couple.translator.core.ui.components.AiThinkingPanel
+import com.couple.translator.core.ui.components.AiWaitingBubble
 import com.couple.translator.core.ui.components.AppAccentButton
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppMarkdownText
 import com.couple.translator.core.ui.components.AppPageHeader
+import com.couple.translator.core.ui.components.AppPrimaryButton
 import com.couple.translator.core.ui.components.AppSecondaryButton
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.SkeletonDetailPage
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppSpacing
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -128,7 +139,95 @@ fun DualPerspectiveDetailScreen(
                     onClick = { viewModel.revealRecords(eventId) },
                 )
             }
+
+            // === AI 双视角对照总结：只在同一事件的双方视角都可见后才有意义 ===
+            if (uiState.revealed && uiState.canSummarize) {
+                Spacer(modifier = Modifier.height(24.dp))
+                AiSummarySection(viewModel = viewModel)
+            }
         }
+    }
+}
+
+@Composable
+private fun AiSummarySection(viewModel: DualPerspectiveDetailViewModel) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    Text(
+        text = "AI 对照总结",
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+        color = AppTextPrimary,
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+
+    when {
+        uiState.isSummaryGenerating -> {
+            AiThinkingPanel(
+                thinking = uiState.summaryThinkingText,
+                isLive = uiState.isSummaryThinking,
+                seconds = uiState.summaryThinkingSeconds,
+            )
+            AppCard(
+                modifier = Modifier.fillMaxWidth(),
+                containerColor = AppSurface,
+                contentPadding = PaddingValues(16.dp),
+            ) {
+                if (uiState.summaryStreamText.isBlank()) {
+                    AiWaitingBubble()
+                } else {
+                    AiStreamingText(content = uiState.summaryStreamText, isStreaming = true)
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(
+                onClick = { viewModel.stopSummary() },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("停止生成", color = AppTextSecondary)
+            }
+        }
+
+        uiState.summaryText.isNotBlank() -> {
+            AppCard(
+                modifier = Modifier.fillMaxWidth(),
+                containerColor = AppSurface,
+                contentPadding = PaddingValues(16.dp),
+            ) {
+                AppMarkdownText(markdown = uiState.summaryText)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(
+                onClick = { viewModel.startSummary() },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("重新生成总结", color = AppTextSecondary)
+            }
+        }
+
+        uiState.summaryLoaded -> {
+            AppCard(
+                modifier = Modifier.fillMaxWidth(),
+                containerColor = AppSurface,
+                contentPadding = PaddingValues(20.dp),
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "把两份视角放在一起看看：哪些是共识、哪些错过了彼此、各自真正在意什么",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTextSecondary,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    AppPrimaryButton(
+                        text = "生成 AI 对照总结",
+                        onClick = { viewModel.startSummary() },
+                    )
+                }
+            }
+        }
+
+        else -> Unit
     }
 }
 
