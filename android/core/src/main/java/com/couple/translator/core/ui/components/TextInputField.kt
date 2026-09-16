@@ -34,6 +34,8 @@ fun TextInputField(
     imeAction: ImeAction = ImeAction.Next,
     onImeAction: () -> Unit = {},
     singleLine: Boolean = true,
+    /** 最小可见行数。长文本输入（信件正文、复盘经过）用它撑开初始高度 */
+    minLines: Int = 1,
     enabled: Boolean = true,
 ) {
     OutlinedTextField(
@@ -45,6 +47,7 @@ fun TextInputField(
         },
         modifier = modifier.fillMaxWidth(),
         singleLine = singleLine,
+        minLines = minLines,
         isError = isError,
         enabled = enabled,
         supportingText = if (isError && errorMessage.isNotEmpty()) {

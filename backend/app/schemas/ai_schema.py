@@ -80,6 +80,11 @@ class RewriteRequest(BaseModel):
     context: Optional[str] = Field(None, max_length=500, description="补充背景信息")
 
 
+class ReviewRequest(BaseModel):
+    description: str = Field(..., min_length=1, max_length=4000, description="这次争吵/冷战/和好的经过")
+    context: Optional[str] = Field(None, max_length=500, description="补充背景")
+
+
 class LetterAnalysisOut(BaseModel):
     summary: Optional[str] = None
     key_concerns: Optional[List[str]] = None

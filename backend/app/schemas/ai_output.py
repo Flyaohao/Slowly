@@ -250,6 +250,49 @@ class QuestionnaireAnalysisOutput(BaseModel):
         return flatten_text(value)
 
 
+class ReviewOutput(BaseModel):
+    """关系复盘：针对一次争吵、和好或重要事件做结构化回顾。
+
+    字段对应关系（功能设计 六.9 的六项输出）：
+      触发点              → trigger
+      双方真实需求        → own_need / partner_need（拆成两条，比合成一段更好渲染）
+      误解发生处          → misunderstanding
+      升级冲突的话语      → escalation_phrases
+      降低冲突的有效表达  → deescalation_phrases
+      下次可提前使用的表达 → next_time_scripts
+    """
+
+    summary: str = Field("", description="一句话复盘结论，不超过 40 字")
+    trigger: str = Field(
+        "", description="这次冲突真正的触发点（不是表面的那件事，而是它被点着的原因）"
+    )
+    own_need: str = Field("", description="你在这件事里真正想要的是什么")
+    partner_need: str = Field("", description="对方在这件事里真正想要的是什么")
+    misunderstanding: str = Field("", description="误解是从哪一句话、哪一个动作开始发生的")
+    escalation_phrases: List[str] = Field(
+        default_factory=list, description="把冲突推高的话或做法，通常 2-3 条"
+    )
+    deescalation_phrases: List[str] = Field(
+        default_factory=list, description="当时如果能这样说，冲突会降温的话术，通常 2-3 条"
+    )
+    next_time_scripts: List[str] = Field(
+        default_factory=list, description="下次遇到同类苗头时可以提前说的话，通常 2-3 条"
+    )
+    risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
+
+    @field_validator(
+        "summary",
+        "trigger",
+        "own_need",
+        "partner_need",
+        "misunderstanding",
+        mode="before",
+    )
+    @classmethod
+    def _flatten_text_fields(cls, value: Any) -> Any:
+        return flatten_text(value)
+
+
 class MemoryDistillOutput(BaseModel):
     """对话记忆沉淀：从一轮对话里抽取值得长期记住的信息。
 
@@ -290,6 +333,7 @@ SCENE_OUTPUT_MODELS: Dict[str, Any] = {
     "letter_reply": LetterReplyOutput,
     "mediation_rewrite": MediationRewriteOutput,
     "mediation_summary": MediationSummaryOutput,
+    "relationship_review": ReviewOutput,
     # 内部辅助场景：不属于用户可选场景，由对话链路后台调用
     "memory_distill": MemoryDistillOutput,
 }

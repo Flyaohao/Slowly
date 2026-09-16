@@ -10,7 +10,7 @@ from app.repositories import (
     couple_repo,
     safety_repo,
 )
-from app.schemas.ai_output import RewriteOutput
+from app.schemas.ai_output import RewriteOutput, ReviewOutput
 from app.services.prompt_builder import (
     build_prompt,
     build_stream_prompt,
@@ -984,4 +984,106 @@ def prepare_profile_report(db: Session, user_id: int) -> dict:
         "output_model": None,
         "temperature": 0.6,
         "max_tokens": 2500,
+    }
+
+
+def prepare_relationship_review(
+    db: Session,
+    user_id: int,
+    relation_id: int,
+    description: str,
+    context: Optional[str] = None,
+) -> dict:
+    """流式版「关系复盘」的前处理。
+
+    对应功能设计 六.9 的六项输出：触发点 / 双方真实需求 / 误解发生处 /
+    升级冲突的话语 / 降低冲突的有效表达 / 下次可提前使用的表达方式。
+
+    与其它 prepare_* 一样只返回纯数据：请求级 db 会在 StreamingResponse
+    开始消费前就被销毁，不能把 ORM 实例带进生成器。
+    """
+    from app.services import ai_generation_service  # 局部导入，避免模块加载环
+
+    scene = ai_repo.get_scene_by_key(db, "relationship_review")
+    if not scene:
+        raise ValueError("50001")
+
+    # 输入安全过滤：与其它 AI 入口同一套护栏，命中即不调模型
+    input_risk, input_hits = check_input_safety_detail(description)
+    if input_risk != "normal":
+        safety_repo.log_event(user_id, "relationship_review", "input", input_risk, input_hits)
+        raise ValueError("20001")
+
+    user_profile = profile_repo.get_latest_profile(db, user_id)
+    partner_id = _get_partner_id(db, relation_id, user_id)
+    partner_profile = profile_repo.get_latest_profile(db, partner_id) if partner_id else None
+
+    user_scores: Dict[str, float] = {}
+    partner_scores: Dict[str, float] = {}
+    conflict_pattern = None
+
+    if user_profile:
+        dims = profile_repo.get_dimension_scores(db, user_profile.id)
+        user_scores = {d.dimension_key: d.score for d in dims}
+
+    if partner_profile:
+        dims = profile_repo.get_dimension_scores(db, partner_profile.id)
+        partner_scores = {d.dimension_key: d.score for d in dims}
+
+    couple_prof = profile_repo.get_latest_couple_profile(db, relation_id)
+    if couple_prof:
+        conflict_pattern = couple_prof.conflict_pattern
+
+    user_profile_text = _format_profile(user_profile, user_scores)
+    partner_profile_text = _format_profile(partner_profile, partner_scores)
+
+    rag_chunks = retrieve_chunks(db, description)
+    rag_context = build_rag_context(rag_chunks)
+    memory_context = get_memory_context(db, user_id, relation_id)
+
+    user_input = description if not context else f"{description}\n\n## 补充背景\n{context}"
+
+    base_prompt = build_prompt(
+        scene_key="relationship_review",
+        user_profile=user_profile_text,
+        partner_profile=partner_profile_text,
+        conflict_pattern=conflict_pattern or "未确定",
+        user_input=user_input,
+        history="",
+        rag_context=rag_context,
+        memory_context=memory_context,
+    )
+    prompt = build_structured_stream_prompt(
+        base_prompt,
+        ReviewOutput,
+        content_instruction=(
+            "先共情，再按「触发点 / 你真正想要的 / TA 真正想要的 / 误解从哪开始 / "
+            "下次可以怎么说」的自然顺序讲清楚，不要罗列字段名"
+        ),
+        max_content_chars=900,
+    )
+
+    generation_id, cancel_event = ai_generation_service.begin(
+        db,
+        user_id=user_id,
+        relation_id=relation_id,
+        generation_kind="relationship_review",
+        scene_key="relationship_review",
+        target_type="none",
+        target_id=None,
+    )
+
+    return {
+        "generation_id": generation_id,
+        "cancel_event": cancel_event,
+        "generation_kind": "relationship_review",
+        "scene_key": "relationship_review",
+        "target_type": "none",
+        "target_id": None,
+        "user_id": user_id,
+        "relation_id": relation_id,
+        "prompt": prompt,
+        "output_model": ReviewOutput,
+        "temperature": 0.7,
+        "max_tokens": 4000,
     }

@@ -28,6 +28,7 @@ enum class Screen(val route: String) {
     LetterDetail("letter_detail"),
     ComposeLetter("compose_letter"),
     ColdWar("cold_war"),
+    RelationshipReview("relationship_review"),
     MediationInvite("mediation_invite"),
     MediationInput("mediation_input"),
     MediationConfirm("mediation_confirm"),

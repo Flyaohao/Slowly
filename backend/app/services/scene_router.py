@@ -37,6 +37,11 @@ SCENE_CONFIGS = {
         "privacy_level": "private",
         "description": "根据风格要求改写信件",
     },
+    "relationship_review": {
+        "name": "关系复盘",
+        "privacy_level": "private",
+        "description": "复盘一次争吵、冷战或和好，找出循环并给出下次可用的表达",
+    },
 }
 
 

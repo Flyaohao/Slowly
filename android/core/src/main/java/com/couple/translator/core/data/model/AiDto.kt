@@ -29,6 +29,50 @@ object AiDto {
         @Json(name = "context") val context: String? = null,
     )
 
+    /** 关系复盘请求：一次争吵/冷战/和好的经过 + 可选背景。 */
+    @JsonClass(generateAdapter = true)
+    data class ReviewRequest(
+        @Json(name = "description") val description: String,
+        @Json(name = "context") val context: String? = null,
+    )
+
+    /**
+     * 关系复盘的结构化结果。
+     *
+     * 字段名与后端 `schemas/ai_output.ReviewOutput` 逐字一致，改名会同时打断
+     * 落库回读与卡片渲染两侧（见过太多「接口 200、字段全空」就是这么来的）。
+     */
+    @JsonClass(generateAdapter = true)
+    data class ReviewResult(
+        @Json(name = "summary") val summary: String = "",
+        @Json(name = "trigger") val trigger: String = "",
+        @Json(name = "own_need") val ownNeed: String = "",
+        @Json(name = "partner_need") val partnerNeed: String = "",
+        @Json(name = "misunderstanding") val misunderstanding: String = "",
+        @Json(name = "escalation_phrases") val escalationPhrases: List<String> = emptyList(),
+        @Json(name = "deescalation_phrases") val deescalationPhrases: List<String> = emptyList(),
+        @Json(name = "next_time_scripts") val nextTimeScripts: List<String> = emptyList(),
+        @Json(name = "risk_level") val riskLevel: String = "normal",
+    )
+
+    /**
+     * 通用的「单次触发生成物」回读载荷。
+     *
+     * 刻意用 `Map` 承载 structured_output：不同 generation_kind 的结构化字段
+     * 形状各不相同（信件解读 / 表达改写 / 关系复盘 …），用具体 data class 会
+     * 在字段不匹配时把值静默解析成空对象。由各 ViewModel 自行按 key 取用。
+     */
+    @JsonClass(generateAdapter = true)
+    data class GenerationPayload(
+        @Json(name = "generation_id") val generationId: Long = 0,
+        @Json(name = "status") val status: String = "",
+        @Json(name = "content") val content: String = "",
+        @Json(name = "thinking") val thinking: String = "",
+        @Json(name = "structured_output") val structuredOutput: Map<String, Any?>? = null,
+        @Json(name = "risk_level") val riskLevel: String = "normal",
+        @Json(name = "updated_at") val updatedAt: String? = null,
+    )
+
     @JsonClass(generateAdapter = true)
     data class FeedbackRequest(
         @Json(name = "rating") val rating: Int,

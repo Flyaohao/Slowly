@@ -38,6 +38,8 @@ class AiRepository @Inject constructor(
 
     /** 表达改写 / 画像报告等新流式端点共用的通用解码器（ai_generation 协议） */
     private val generationDecoder = GenerationStreamDecoder(moshi)
+    private val reviewAdapter by lazy { moshi.adapter(AiDto.ReviewResult::class.java) }
+    private val mapAdapter by lazy { moshi.adapter(Map::class.java) }
 
     /**
      * 流式「帮我表达」（表达改写）。
@@ -55,6 +57,55 @@ class AiRepository @Inject constructor(
         generationStreamFlow(generationDecoder) {
             apiService.profileReportStream()
         }
+
+    /**
+     * 流式「关系复盘」。
+     *
+     * 与画像报告的区别：`Finished.structured` 里有 8 个结构化字段
+     * （触发点 / 双方需求 / 误解处 / 升级话术 / 降温话术 / 下次可用表达），
+     * 由 `ReviewViewModel.parseReview()` 收口成 DTO。
+     */
+    fun reviewStream(description: String, context: String? = null): Flow<GenerationStreamEvent> =
+        generationStreamFlow(generationDecoder) {
+            apiService.reviewStream(AiDto.ReviewRequest(description, context))
+        }
+
+    /**
+     * 回读上次的关系复盘（ai_generation 覆盖式只留最新一条）。
+     * 返回 `null` 表示还没复盘过——这是正常情况，不是错误。
+     */
+    suspend fun getSavedReview(): Result<AiDto.GenerationPayload?> {
+        return try {
+            val response = apiService.getGeneration(REVIEW_KIND, "none", null)
+            if (response.isSuccess) {
+                Result.success(response.data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 把 `Finished.structured` 的通用 Map 收口成 [AiDto.ReviewResult]。
+     *
+     * 走 Moshi 而不是手写取字段：手写容易漏掉「模型把数组写成字符串」这类
+     * 变形，而且字段增删时要改两处。
+     */
+    fun parseReview(structured: Map<String, Any?>?): AiDto.ReviewResult? {
+        if (structured.isNullOrEmpty()) return null
+        return try {
+            reviewAdapter.fromJson(mapAdapter.toJson(structured))
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    companion object {
+        /** 与后端 `ai_generation.generation_kind` 一致，改这里必须同步后端 */
+        const val REVIEW_KIND = "relationship_review"
+    }
 
     /**
      * 拉取后端场景清单。

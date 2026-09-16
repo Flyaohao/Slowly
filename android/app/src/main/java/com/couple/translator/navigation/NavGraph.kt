@@ -28,6 +28,7 @@ import com.couple.translator.feature.couple.data.repository.CoupleStateManager
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
 import com.couple.translator.feature.couple.ai.AiSessionListScreen
 import com.couple.translator.feature.couple.ai.ColdWarScreen
+import com.couple.translator.feature.couple.ai.ReviewScreen
 import com.couple.translator.feature.couple.anniversary.AddAnniversaryScreen
 import com.couple.translator.feature.couple.anniversary.AnniversaryListScreen
 import com.couple.translator.core.ui.auth.ForgotPasswordScreen
@@ -379,6 +380,10 @@ fun NavGraph(
                 onStartMediation = { navController.navigate(Screen.MediationInvite.route) },
                 onNavigateBack = { navController.popBackStack() },
             )
+        }
+
+        composable(Screen.RelationshipReview.route) {
+            ReviewScreen(onBack = { navController.popBackStack() })
         }
 
         composable(

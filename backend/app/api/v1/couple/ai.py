@@ -17,6 +17,7 @@ from app.schemas.ai_schema import (
     LetterRewriteRequest,
     LetterReplyRequest,
     RewriteRequest,
+    ReviewRequest,
 )
 from app.services import ai_generation_service, ai_service, letter_ai_service
 from app.services.sse import sse_encode, SSE_HEADERS as _SSE_HEADERS
@@ -603,6 +604,44 @@ def rewrite_expression_stream(
         headers=_SSE_HEADERS,
     )
 
+
+@router.post("/review/stream")
+@ai_limit()
+def relationship_review_stream(
+    request: Request,
+    req: ReviewRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """关系复盘流式接口（SSE）。事件序列与 /rewrite/stream 一致。
+
+    对应功能设计 六.9：输入一次争吵/冷战/和好的经过，输出触发点、双方真实需求、
+    误解发生处、升级冲突的话语、降温话术、下次可提前使用的表达。
+    """
+    relation = couple_repo.get_active_relation_by_user(db, current_user.id)
+    if not relation:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 30005, "message": "请先绑定情侣关系", "data": None},
+        )
+    try:
+        prepared = ai_service.prepare_relationship_review(
+            db=db,
+            user_id=current_user.id,
+            relation_id=relation.id,
+            description=req.description,
+            context=req.context,
+        )
+    except ValueError as e:
+        _raise_prepared_error(
+            e, {"50001": (404, "场景不存在"), "20001": (400, "内容不适合分析，请换个说法")}
+        )
+
+    return StreamingResponse(
+        sse_encode(ai_generation_service.stream_generation_events(prepared)),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
 
 @router.post("/profile-report/stream")
 @ai_limit()

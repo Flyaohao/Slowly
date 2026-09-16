@@ -270,6 +270,9 @@ fun CoupleShell(
                         onNavigateToMediation = {
                             onNavigateToRoute("mediation_explanation")
                         },
+                        onNavigateToReview = {
+                            onNavigateToRoute("relationship_review")
+                        },
                         identity = topBarIdentity,
                     )
                 }

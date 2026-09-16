@@ -25,7 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * `cold_war` 反过来是合法的聊天场景（`ColdWarOutput` 已登记，`AiMessageCard`
  * 也渲染了它的专属字段），所以保持 `CHAT`，不跳转。
  */
-enum class AiSceneTarget { CHAT, MEDIATION }
+enum class AiSceneTarget { CHAT, MEDIATION, REVIEW }
 
 /**
  * 一个 AI 场景在 UI 里的完整描述。
@@ -115,6 +115,14 @@ object AiSceneCatalog {
             showInDrawer = false,
             selectableAsChatScene = false,
         ),
+        // 关系复盘有自己的流式端点 `/ai/review/stream` 和独立输入页：它需要用户
+        // 先写一段"发生了什么"，聊天框那条链路没有这个输入形态。
+        "relationship_review" to Presentation(
+            "关系复盘", "关系复盘", Icons.Outlined.AutoAwesome,
+            showInQuickChips = true,
+            selectableAsChatScene = false,
+            target = AiSceneTarget.REVIEW,
+        ),
     )
 
     /** 后端 `ai_scene` 种子里的 7 个场景。仅在 [refresh] 成功前作为占位，避免首屏空白 */
@@ -126,6 +134,11 @@ object AiSceneCatalog {
         AiDto.SceneResponse("mediation", "矛盾调解", "中立的矛盾调解和沟通建议。"),
         AiDto.SceneResponse("letter_understand", "信件解读", "深入理解一段文字的含义，逐句分析。"),
         AiDto.SceneResponse("letter_rewrite", "信件改写", "根据风格要求改写信件，保留核心诉求。"),
+        AiDto.SceneResponse(
+            "relationship_review",
+            "关系复盘",
+            "复盘一次争吵、冷战或和好：找出触发点、双方真实需求、误解发生处，给出下次可用的表达。",
+        ),
     )
 
     private val _scenes = MutableStateFlow(seed.map(::toScene))

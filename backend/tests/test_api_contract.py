@@ -104,6 +104,12 @@ def main():
         candidates = [norm]
         if not norm.startswith("api/"):
             candidates.append("api/" + norm)
+        # 客户端把路径参数**写死成实参**也是合法调用（如 generations/letter_analysis
+        # 对应后端的 generations/{kind}）。归一化只统一 `{}` 的形状，认不出这种，
+        # 于是把末尾若干段逐个换成 `{}` 再试一次。
+        segs = norm.split("/")
+        for i in range(len(segs) - 1, 0, -1):
+            candidates.append("/".join(segs[:i] + ["{}"] + segs[i + 1:]))
         hit = next((c for c in candidates if c in backend_paths), None)
         if hit:
             matched.setdefault(hit, []).append((rel, method, raw))

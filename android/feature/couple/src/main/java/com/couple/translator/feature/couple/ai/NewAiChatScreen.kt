@@ -85,6 +85,7 @@ fun NewAiChatScreen(
     onOpenDrawer: () -> Unit,
     onNavigateToSessionList: () -> Unit,
     onNavigateToMediation: () -> Unit,
+    onNavigateToReview: () -> Unit,
     identity: TopBarIdentity = TopBarIdentity(),
     viewModel: AiChatViewModel = hiltViewModel(),
 ) {
@@ -217,6 +218,7 @@ fun NewAiChatScreen(
                 // 有专属页面的场景跳转过去，其余作为聊天场景切换
                 when (scene.target) {
                     AiSceneTarget.MEDIATION -> onNavigateToMediation()
+                    AiSceneTarget.REVIEW -> onNavigateToReview()
                     AiSceneTarget.CHAT -> viewModel.selectScene(scene)
                 }
             },

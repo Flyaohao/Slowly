@@ -132,6 +132,25 @@ interface CoupleApiService {
     suspend fun profileReportStream(): Response<ResponseBody>
 
     /**
+     * 关系复盘流式版（SSE）。输入一次争吵/冷战/和好的经过，
+     * 输出触发点、双方真实需求、误解发生处、升级与降温话术、下次可用的表达。
+     */
+    @Streaming
+    @POST("api/v1/couple/ai/review/stream")
+    suspend fun reviewStream(@Body body: AiDto.ReviewRequest): Response<ResponseBody>
+
+    /**
+     * 回读上次的关系复盘结果（[kind] = `relationship_review`）。
+     * `data` 为 null 表示还没复盘过。
+     */
+    @GET("api/v1/couple/ai/generations/{kind}")
+    suspend fun getGeneration(
+        @Path("kind") kind: String,
+        @Query("target_type") targetType: String = "none",
+        @Query("target_id") targetId: Long? = null,
+    ): ApiResponse<AiDto.GenerationPayload>
+
+    /**
      * 回读已保存的 AI 理解。
      *
      * 这是「退出再进来还能看到上次解读」的关键：进详情页先读，拿到就不再调模型。
