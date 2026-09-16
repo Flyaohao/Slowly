@@ -56,6 +56,14 @@ interface SharedApiService {
     @POST("api/v1/users/me/private-verify")
     suspend fun verifyPrivatePassword(@Body body: UserDto.PrivatePasswordRequest): ApiResponse<UserDto.PrivateTokenResponse>
 
+    @GET("api/v1/users/me/notification-pref")
+    suspend fun getNotificationPref(): ApiResponse<UserDto.NotificationPrefResponse>
+
+    @PUT("api/v1/users/me/notification-pref")
+    suspend fun updateNotificationPref(
+        @Body body: UserDto.NotificationPrefUpdateRequest,
+    ): ApiResponse<UserDto.NotificationPrefResponse>
+
     // Questionnaire
     @GET("api/v1/questionnaires/active")
     suspend fun getActiveQuestionnaire(): ApiResponse<QuestionnaireDto.QuestionnaireResponse>

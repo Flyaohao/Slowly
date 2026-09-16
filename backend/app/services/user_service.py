@@ -25,6 +25,7 @@ def get_profile(db: Session, user_id: int) -> dict:
         "city": profile.city,
         "signature": profile.signature,
         "love_anniversary": str(profile.love_anniversary) if profile.love_anniversary else None,
+        "email_notify_enabled": bool(profile.email_notify_enabled),
     }
 
 
@@ -56,6 +57,30 @@ def upload_avatar(db: Session, user_id: int, file_content: bytes, filename: str)
 def set_private_password(db: Session, user_id: int, password: str) -> None:
     password_hash = hash_password(password)
     user_repo.update_private_password(db, user_id, password_hash)
+
+
+def get_notification_pref(db: Session, user_id: int) -> dict:
+    """读通知偏好。顺带返回邮箱地址与「能不能发」，
+    让设置页能直接说明发到哪个邮箱、以及 SMTP 未配置时置灰开关。"""
+    from app.services import email_service
+
+    user = user_repo.get_user_by_id(db, user_id)
+    profile = user_repo.get_profile_by_user_id(db, user_id)
+    if not user or not profile:
+        raise ValueError("10002")
+
+    return {
+        "email_notify_enabled": bool(profile.email_notify_enabled),
+        "email": user.email,
+        "email_ready": email_service.smtp_configured(),
+    }
+
+
+def set_notification_pref(db: Session, user_id: int, enabled: bool) -> dict:
+    profile = user_repo.update_email_notify(db, user_id, enabled)
+    if not profile:
+        raise ValueError("10002")
+    return get_notification_pref(db, user_id)
 
 
 def verify_private_password(db: Session, user_id: int, password: str) -> str:

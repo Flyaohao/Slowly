@@ -13,6 +13,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -20,9 +22,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.couple.translator.core.data.repository.GuideStore
+import com.couple.translator.core.data.repository.NotificationPermissionStore
 import com.couple.translator.core.data.repository.ThemeStore
 import com.couple.translator.core.data.repository.TokenStore
 import com.couple.translator.core.navigation.Screen
+import com.couple.translator.core.ui.settings.SettingsViewModel
 import com.couple.translator.core.ui.theme.ThemeMode
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
@@ -82,6 +86,9 @@ fun NavGraph(
     realtimeSocketManager: RealtimeSocketManager? = null,
     guideStore: GuideStore? = null,
     themeStore: ThemeStore? = null,
+    notificationPermissionStore: NotificationPermissionStore? = null,
+    deepLinkRoute: String? = null,
+    onDeepLinkConsumed: () -> Unit = {},
 ) {
     var startDest by remember { mutableStateOf<String?>(null) }
     val coupleState = coupleStateManager?.state?.collectAsState()?.value
@@ -174,6 +181,7 @@ fun NavGraph(
                     tokenStore = tokenStore,
                     coupleStateManager = coupleStateManager,
                     realtimeSocketManager = realtimeSocketManager,
+                    notificationPermissionStore = notificationPermissionStore,
                 )
             } else {
                 SingleShell(
@@ -695,6 +703,9 @@ fun NavGraph(
             // 读当前外观偏好；写入后 MainActivity 那层的 Flow 会立刻收到并整体换肤
             val themeMode by (themeStore?.themeMode ?: flowOf(ThemeMode.DEFAULT))
                 .collectAsState(initial = ThemeMode.DEFAULT)
+            // 通知偏好来自后端（用户级设置，换设备也要跟着走），所以走 ViewModel 而不是本地存储
+            val settingsViewModel: SettingsViewModel = hiltViewModel()
+            val notificationPref by settingsViewModel.state.collectAsState()
             com.couple.translator.core.ui.settings.SettingsScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToProfile = {
@@ -710,6 +721,11 @@ fun NavGraph(
                 onThemeModeChange = { mode ->
                     scope.launch { themeStore?.setThemeMode(mode) }
                 },
+                notificationPref = notificationPref,
+                onEmailNotifyChange = { enabled ->
+                    settingsViewModel.setEmailNotify(enabled)
+                },
+                onNotificationPrefErrorShown = { settingsViewModel.clearError() },
             )
         }
     }
@@ -718,9 +734,24 @@ fun NavGraph(
     // 之后再从左上角菜单随时打开（GuideStore 记标记，不会重复打扰）。
     LaunchedEffect(startDest) {
         if (startDest != Screen.Main.route) return@LaunchedEffect
+        // 这次冷启动是用户点通知进来的：直奔目标页面，别再拿使用指南挡一层
+        if (deepLinkRoute != null) return@LaunchedEffect
         val store = guideStore ?: return@LaunchedEffect
         if (store.isGuideSeen()) return@LaunchedEffect
         store.markGuideSeen()
         navController.navigate(Screen.Guide.route)
+    }
+
+    // 通知栏点击带来的深链。
+    // 放在 NavHost 之后：NavHost 得先完成组合，路由才注册得上，
+    // 否则 navigate 到一个"还不存在"的目的地会被静默丢弃。
+    // 未登录时直接丢弃——用户会落在登录页，登录完自己走过去，
+    // 比跳到一个需要鉴权的页面然后报 401 体面得多。
+    LaunchedEffect(deepLinkRoute) {
+        val target = deepLinkRoute ?: return@LaunchedEffect
+        if (startDest == Screen.Main.route) {
+            navController.navigate(target) { launchSingleTop = true }
+        }
+        onDeepLinkConsumed()
     }
 }

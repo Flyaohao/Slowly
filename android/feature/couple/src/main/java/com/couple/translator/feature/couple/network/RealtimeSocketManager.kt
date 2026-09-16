@@ -25,10 +25,16 @@ import javax.inject.Singleton
  * notification_type 对应后端 NotificationType 的取值：
  * unbind_requested / unbind_confirmed / letter_received / mediation_invite /
  * partner_moment / companion_request / system_notice ...
+ *
+ * 除事件类型本身外，只额外保留两个**跳转必需**的标识（信件 id、调解会话 id）：
+ * 系统通知的点击跳转要用到它们，而 data 里的其余字段（发送者昵称、信件标题等）
+ * 是纯展示内容，不该进通知（隐私），所以不往这里搬。
  */
 data class RealtimeEvent(
     val notificationType: String,
     val content: String?,
+    val letterId: Long? = null,
+    val sessionId: Long? = null,
 )
 
 /**
@@ -135,8 +141,15 @@ class RealtimeSocketManager @Inject constructor(
             "notification" -> {
                 val nt = obj.optString("notification_type")
                 if (nt.isNotBlank()) {
-                    val content = obj.optJSONObject("data")?.optString("content")
-                    _events.tryEmit(RealtimeEvent(notificationType = nt, content = content))
+                    val data = obj.optJSONObject("data")
+                    _events.tryEmit(
+                        RealtimeEvent(
+                            notificationType = nt,
+                            content = data?.optString("content"),
+                            letterId = data?.optLong("letter_id")?.takeIf { it > 0L },
+                            sessionId = data?.optLong("session_id")?.takeIf { it > 0L },
+                        )
+                    )
                 }
             }
         }

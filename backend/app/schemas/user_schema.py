@@ -13,6 +13,7 @@ class UserProfileResponse(BaseModel):
     city: Optional[str] = None
     signature: Optional[str] = None
     love_anniversary: Optional[date] = None
+    email_notify_enabled: bool = False
 
 
 class UserProfileUpdateRequest(BaseModel):
@@ -22,6 +23,22 @@ class UserProfileUpdateRequest(BaseModel):
     city: Optional[str] = Field(None, max_length=50)
     signature: Optional[str] = Field(None, max_length=200)
     love_anniversary: Optional[date] = None
+
+
+class NotificationPrefResponse(BaseModel):
+    """通知偏好。
+
+    email 与 email_ready 一起给前端，是为了让设置页能如实说明
+    「发到哪个邮箱」以及「现在能不能发」——开关置灰而不是让用户白开一次。
+    """
+
+    email_notify_enabled: bool
+    email: str
+    email_ready: bool
+
+
+class NotificationPrefUpdateRequest(BaseModel):
+    email_notify_enabled: bool
 
 
 class PrivatePasswordRequest(BaseModel):

@@ -1,5 +1,6 @@
 package com.couple.translator
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -8,8 +9,10 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.couple.translator.core.data.repository.GuideStore
+import com.couple.translator.core.data.repository.NotificationPermissionStore
 import com.couple.translator.core.data.repository.ThemeStore
 import com.couple.translator.core.data.repository.TokenStore
+import com.couple.translator.core.notification.AppNotifications
 import com.couple.translator.core.ui.theme.CoupleTranslatorTheme
 import com.couple.translator.core.ui.theme.ThemeMode
 import com.couple.translator.core.ui.theme.resolveDarkTheme
@@ -17,6 +20,7 @@ import com.couple.translator.feature.couple.data.repository.CoupleStateManager
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
 import com.couple.translator.navigation.NavGraph
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.MutableStateFlow
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -37,14 +41,26 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var themeStore: ThemeStore
 
+    @Inject
+    lateinit var notificationPermissionStore: NotificationPermissionStore
+
+    /**
+     * 点击通知栏带来的目标路由。Activity 只有这一个，通知点开时走 onNewIntent
+     * （Intent 里带了 SINGLE_TOP），所以用 StateFlow 承接而不是只在 onCreate 读一次。
+     */
+    private val deepLinkRoute = MutableStateFlow<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        deepLinkRoute.value = intent?.getStringExtra(AppNotifications.EXTRA_ROUTE)
+
         setContent {
             // 外观模式由本地偏好驱动：改完设置页立刻换肤，无需重启。
             // SYSTEM 时才去问系统；LIGHT / DARK 直接覆盖系统设置。
             val themeMode by themeStore.themeMode.collectAsState(initial = ThemeMode.DEFAULT)
             val systemInDarkTheme = isSystemInDarkTheme()
+            val pendingRoute by deepLinkRoute.collectAsState()
             CoupleTranslatorTheme(darkTheme = themeMode.resolveDarkTheme(systemInDarkTheme)) {
                 NavGraph(
                     tokenStore = tokenStore,
@@ -52,8 +68,21 @@ class MainActivity : ComponentActivity() {
                     realtimeSocketManager = realtimeSocketManager,
                     guideStore = guideStore,
                     themeStore = themeStore,
+                    notificationPermissionStore = notificationPermissionStore,
+                    deepLinkRoute = pendingRoute,
+                    onDeepLinkConsumed = { deepLinkRoute.value = null },
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // 必须 setIntent：否则后续 getIntent() 拿到的还是旧的启动 Intent
+        setIntent(intent)
+        val route = intent.getStringExtra(AppNotifications.EXTRA_ROUTE)
+        if (route != null) {
+            deepLinkRoute.value = route
         }
     }
 }

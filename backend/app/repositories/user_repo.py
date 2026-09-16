@@ -60,6 +60,18 @@ def update_private_password(db: Session, user_id: int, password_hash: str) -> Op
     return profile
 
 
+def update_email_notify(db: Session, user_id: int, enabled: bool) -> Optional[UserProfile]:
+    """单独一个写口：update_profile 的 `if value is not None` 语义对布尔值不友好
+    （False 会被当成"没传"），开关必须能明确写回关闭态。"""
+    profile = get_profile_by_user_id(db, user_id)
+    if profile is None:
+        return None
+    profile.email_notify_enabled = enabled
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+
 def update_has_couple(db: Session, user_id: int, value: bool) -> None:
     user = get_user_by_id(db, user_id)
     if user:

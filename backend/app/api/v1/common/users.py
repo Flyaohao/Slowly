@@ -8,6 +8,7 @@ from app.schemas.user_schema import (
     UserProfileUpdateRequest,
     PrivatePasswordRequest,
     PrivateVerifyRequest,
+    NotificationPrefUpdateRequest,
 )
 from app.services import user_service
 
@@ -57,6 +58,35 @@ async def upload_avatar(
             detail={"code": 10003, "message": "不支持的文件类型", "data": None},
         )
     return ApiResponse(data={"avatar_url": avatar_url})
+
+
+@router.get("/me/notification-pref", response_model=ApiResponse)
+def get_notification_pref(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """读邮件通知开关。默认关闭——新用户没有任何额外通知。"""
+    try:
+        data = user_service.get_notification_pref(db, current_user.id)
+    except ValueError:
+        return ApiResponse(code=10002, message="用户信息不存在", data=None)
+    return ApiResponse(data=data)
+
+
+@router.put("/me/notification-pref", response_model=ApiResponse)
+def update_notification_pref(
+    req: NotificationPrefUpdateRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """开关邮件通知。只影响「是否发提醒邮件」，不影响 App 内的 WS 实时通知。"""
+    try:
+        data = user_service.set_notification_pref(
+            db, current_user.id, req.email_notify_enabled
+        )
+    except ValueError:
+        return ApiResponse(code=10002, message="更新失败", data=None)
+    return ApiResponse(data=data)
 
 
 @router.post("/me/private-password", response_model=ApiResponse)

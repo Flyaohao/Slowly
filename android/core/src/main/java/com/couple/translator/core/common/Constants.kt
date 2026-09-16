@@ -11,5 +11,7 @@ object Constants {
     const val GUIDE_SEEN_KEY = "guide_seen"
     /** 外观主题模式：system / light / dark（存 ThemeMode.name） */
     const val THEME_MODE_KEY = "theme_mode"
+    /** 系统通知权限是否已询问过（问过一次就不再纠缠，拒绝也不影响主流程） */
+    const val NOTIFICATION_ASKED_KEY = "notification_permission_asked"
     const val PASSWORD_MIN_LENGTH = 8
 }

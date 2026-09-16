@@ -1,5 +1,9 @@
 package com.couple.translator.feature.couple
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -25,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -34,13 +39,16 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.couple.translator.feature.couple.data.repository.CoupleState
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
+import com.couple.translator.core.data.repository.NotificationPermissionStore
 import com.couple.translator.core.data.repository.TokenStore
 import com.couple.translator.core.navigation.Screen
+import com.couple.translator.core.notification.AppNotifications
 import com.couple.translator.feature.couple.ai.NewAiChatScreen
 import com.couple.translator.feature.couple.home.NewHomeScreen
 import com.couple.translator.feature.couple.letter.NewMailboxScreen
 import com.couple.translator.feature.couple.navigation.DrawerContent
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
+import com.couple.translator.feature.couple.network.toNotice
 import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.ui.components.BottomTabBar
 import com.couple.translator.core.ui.components.TopBarIdentity
@@ -58,6 +66,7 @@ fun CoupleShell(
     tokenStore: TokenStore? = null,
     coupleStateManager: CoupleStateManager? = null,
     realtimeSocketManager: RealtimeSocketManager? = null,
+    notificationPermissionStore: NotificationPermissionStore? = null,
 ) {
     val tabNavController = rememberNavController()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -74,8 +83,30 @@ fun CoupleShell(
         partnerNickname = coupleState.partnerNickname,
     )
 
-    // 实时通道：进入情侣模式建立 WS 连接，退出时断开；事件转 Snackbar 提示
+    // 实时通道：进入情侣模式建立 WS 连接，退出时断开；事件转 Snackbar + 系统通知栏
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val appContext = remember(context) { context.applicationContext }
+
+    // 通知权限：只在首次进入情侣空间时问一次。用户拒绝也不影响任何主流程，
+    // 只是收不到通知栏提醒（邮件通道不受影响）。
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* 同意与拒绝的处理完全一致：什么都不做 */ }
+
+    LaunchedEffect(Unit) {
+        AppNotifications.ensureChannel(appContext)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val store = notificationPermissionStore
+            if (store != null && !store.hasAsked()) {
+                // 先落标记再申请：申请回调可能在进程重建后才回来，
+                // 若等回调再写标记，冷启动 + 被杀会重复弹窗。
+                store.markAsked()
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         realtimeSocketManager?.start()
     }
@@ -84,18 +115,19 @@ fun CoupleShell(
     }
     LaunchedEffect(realtimeSocketManager) {
         realtimeSocketManager?.events?.collect { event ->
-            val text = when (event.notificationType) {
-                "companion_request" -> "对方发来了陪伴请求" + (event.content?.let { "：$it" } ?: "")
-                "partner_moment" -> "对方分享了此刻状态" + (event.content?.let { "：$it" } ?: "")
-                "unbind_requested" -> "对方发起了关系解绑请求"
-                "unbind_confirmed" -> "关系解绑已完成"
-                "unbind_cancelled" -> "对方取消了解绑申请"
-                "letter_received" -> "收到一封新信件"
-                "mediation_invite" -> "对方邀请你进行冷静沟通"
-                else -> null
-            }
-            if (text != null) {
-                snackbarHostState.showSnackbar(text, duration = SnackbarDuration.Short)
+            val notice = event.toNotice()
+            if (notice != null) {
+                val notificationId = notice.notificationId
+                if (notificationId != null) {
+                    AppNotifications.notify(
+                        context = appContext,
+                        notificationId = notificationId,
+                        title = notice.notificationTitle ?: notice.snackbarText,
+                        text = notice.notificationText ?: notice.snackbarText,
+                        route = notice.route,
+                    )
+                }
+                snackbarHostState.showSnackbar(notice.snackbarText, duration = SnackbarDuration.Short)
                 coupleStateManager?.refresh()
             }
         }

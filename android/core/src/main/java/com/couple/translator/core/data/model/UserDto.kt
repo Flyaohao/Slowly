@@ -16,6 +16,25 @@ object UserDto {
         @Json(name = "city") val city: String? = null,
         @Json(name = "signature") val signature: String? = null,
         @Json(name = "love_anniversary") val loveAnniversary: String? = null,
+        @Json(name = "email_notify_enabled") val emailNotifyEnabled: Boolean = false,
+    )
+
+    /**
+     * 通知偏好。
+     *
+     * emailReady = 服务端 SMTP 是否配置好。没配好时开关应置灰而不是让用户白开一次
+     * —— 开了也发不出去，那是最伤信任的一种"假功能"。
+     */
+    @JsonClass(generateAdapter = true)
+    data class NotificationPrefResponse(
+        @Json(name = "email_notify_enabled") val emailNotifyEnabled: Boolean = false,
+        @Json(name = "email") val email: String = "",
+        @Json(name = "email_ready") val emailReady: Boolean = false,
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class NotificationPrefUpdateRequest(
+        @Json(name = "email_notify_enabled") val emailNotifyEnabled: Boolean,
     )
 
     @JsonClass(generateAdapter = true)

@@ -40,6 +40,7 @@ from app.models.self_practice import SelfPractice, SelfPracticeRecord
 from app.models.email_verification import EmailVerificationCode
 from app.models.presence import PresenceMoment
 from app.models.safety_event import SafetyEvent
+from app.models.notification_email_log import NotificationEmailLog
 
 __all__ = [
     "User",
@@ -83,4 +84,5 @@ __all__ = [
     "EmailVerificationCode",
     "PresenceMoment",
     "SafetyEvent",
+    "NotificationEmailLog",
 ]
