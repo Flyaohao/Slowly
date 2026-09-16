@@ -2,6 +2,9 @@ package com.couple.translator.core.network
 
 import android.content.Context
 import com.couple.translator.core.data.repository.TokenStore
+import com.squareup.moshi.JsonAdapter
+import com.squareup.moshi.JsonReader
+import com.squareup.moshi.JsonWriter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import dagger.Module
@@ -29,6 +32,11 @@ object NetworkModule {
     @Singleton
     fun provideMoshi(): Moshi {
         return Moshi.Builder()
+            // 必须注册：Retrofit 的 ServiceMethod 是懒加载的，
+            // ApiResponse<Unit> 端点（解绑/删除/置顶等）首次调用时
+            // Moshi 找不到 kotlin.Unit 的适配器，
+            // 直接抛 "Unable to create converter for ApiResponse<kotlin.Unit>"。
+            .add(Unit::class.java, UnitJsonAdapter)
             .addLast(KotlinJsonAdapterFactory())
             .build()
     }
@@ -89,6 +97,25 @@ object NetworkModule {
     @Singleton
     fun provideSharedApiService(retrofit: Retrofit): SharedApiService {
         return retrofit.create(SharedApiService::class.java)
+    }
+}
+
+/**
+ * kotlin.Unit 的 Moshi 适配器。
+ *
+ * 后端业务响应统一是 `{code,message,data}`，无返回数据的端点在客户端声明为
+ * `ApiResponse<Unit>`，data 通常为 null。Moshi 内建不支持 kotlin.Unit，
+ * 必须显式注册：反序列化时跳过任意值（读到 null 时 Moshi 不会进到这里），
+ * 序列化时输出 null。
+ */
+private object UnitJsonAdapter : JsonAdapter<Unit>() {
+    override fun fromJson(reader: JsonReader): Unit {
+        reader.skipValue()
+        return Unit
+    }
+
+    override fun toJson(writer: JsonWriter, value: Unit?) {
+        writer.nullValue()
     }
 }
 
