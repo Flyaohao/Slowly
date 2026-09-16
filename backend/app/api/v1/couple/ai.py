@@ -5,10 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.core import config
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-from app.core.limiter import limiter, get_request_key
+from app.core.limiter import ai_limit
 from app.schemas.common import ApiResponse
 from app.schemas.ai_schema import (
     AgentRequest,
@@ -20,32 +19,12 @@ from app.schemas.ai_schema import (
     RewriteRequest,
 )
 from app.services import ai_generation_service, ai_service, letter_ai_service
-from app.services.sse import sse_encode
+from app.services.sse import sse_encode, SSE_HEADERS as _SSE_HEADERS
 from app.repositories import ai_generation_repo, couple_repo, ai_repo
 
 logger = logging.getLogger("couple.ai")
 
 router = APIRouter(prefix="/ai", tags=["AI 翻译官"])
-
-#: SSE 响应的公共响应头。
-#:
-#: `X-Accel-Buffering: no` 不是可选项：线上前面挂着 Nginx，默认会把响应攒满
-#: 缓冲区才下发，流式效果会整个消失（表现为「等了 20 秒，然后整段蹦出来」）。
-_SSE_HEADERS = {
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-    "X-Accel-Buffering": "no",
-}
-
-
-def _ai_limit():
-    """AI 端点限流装饰器。`AI_RATE_LIMIT` 为空或 0 时完全关闭（identity 装饰器）。
-
-    不能直接把 "0/hour" 交给 slowapi——那意味着「每小时 0 次」= 全部拒绝。
-    """
-    if config.AI_RATE_LIMIT and config.AI_RATE_LIMIT not in ("0", "0/hour"):
-        return limiter.limit(config.AI_RATE_LIMIT, key_func=get_request_key)
-    return lambda f: f
 
 
 @router.get("/scenes", response_model=ApiResponse)
@@ -58,7 +37,7 @@ def get_scenes(db: Session = Depends(get_db)):
 
 
 @router.post("/chat", response_model=ApiResponse)
-@_ai_limit()
+@ai_limit()
 def chat(
     request: Request,
     req: ChatRequest,
@@ -102,7 +81,7 @@ def chat(
 
 
 @router.post("/chat/stream")
-@_ai_limit()
+@ai_limit()
 def chat_stream(
     request: Request,
     req: ChatRequest,
@@ -236,7 +215,7 @@ def delete_session(
 
 
 @router.post("/rewrite", response_model=ApiResponse)
-@_ai_limit()
+@ai_limit()
 def rewrite_expression(
     request: Request,
     req: RewriteRequest,
@@ -274,7 +253,7 @@ def rewrite_expression(
 
 
 @router.post("/understand-letter", response_model=ApiResponse)
-@_ai_limit()
+@ai_limit()
 def understand_letter(
     request: Request,
     req: LetterUnderstandRequest,
@@ -299,7 +278,7 @@ def understand_letter(
 
 
 @router.post("/understand-letter/stream")
-@_ai_limit()
+@ai_limit()
 def understand_letter_stream(
     request: Request,
     req: LetterUnderstandRequest,
@@ -401,7 +380,7 @@ def cancel_generation(
 
 
 @router.post("/rewrite-letter", response_model=ApiResponse)
-@_ai_limit()
+@ai_limit()
 def rewrite_letter(
     request: Request,
     req: LetterRewriteRequest,
@@ -428,7 +407,7 @@ def rewrite_letter(
 
 
 @router.post("/generate-reply", response_model=ApiResponse)
-@_ai_limit()
+@ai_limit()
 def generate_reply(
     request: Request,
     req: LetterReplyRequest,
@@ -453,7 +432,7 @@ def generate_reply(
 
 
 @router.post("/agent", response_model=ApiResponse)
-@_ai_limit()
+@ai_limit()
 def agent_chat(
     request: Request,
     req: AgentRequest,
@@ -535,7 +514,7 @@ def _raise_prepared_error(exc: ValueError, error_map: dict) -> None:
 
 
 @router.post("/rewrite-letter/stream")
-@_ai_limit()
+@ai_limit()
 def rewrite_letter_stream(
     request: Request,
     req: LetterRewriteRequest,
@@ -564,7 +543,7 @@ def rewrite_letter_stream(
 
 
 @router.post("/generate-reply/stream")
-@_ai_limit()
+@ai_limit()
 def generate_reply_stream(
     request: Request,
     req: LetterReplyRequest,
@@ -593,7 +572,7 @@ def generate_reply_stream(
 
 
 @router.post("/rewrite/stream")
-@_ai_limit()
+@ai_limit()
 def rewrite_expression_stream(
     request: Request,
     req: RewriteRequest,
@@ -626,7 +605,7 @@ def rewrite_expression_stream(
 
 
 @router.post("/profile-report/stream")
-@_ai_limit()
+@ai_limit()
 def profile_report_stream(
     request: Request,
     current_user=Depends(get_current_user),

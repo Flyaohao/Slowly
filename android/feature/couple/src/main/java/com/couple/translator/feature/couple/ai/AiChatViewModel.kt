@@ -6,7 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.couple.translator.core.data.model.AiDto
 import com.couple.translator.core.service.AiStreamKeepAlive
 import com.couple.translator.feature.couple.data.repository.AiRepository
-import com.couple.translator.feature.couple.data.repository.GenerationStreamEvent
+import com.couple.translator.core.network.GenerationStreamEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job

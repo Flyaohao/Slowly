@@ -32,6 +32,16 @@ logger = logging.getLogger("couple.sse")
 #: 注释帧（`": keep-alive"`，14 字节），代价可以忽略，换来断连后最多 2 秒止血。
 HEARTBEAT_INTERVAL = 2.0
 
+#: 所有 SSE 端点共用的响应头。
+#:
+#: `X-Accel-Buffering: no` 不是可选项：线上前面挂着 Nginx，默认会把响应攒满
+#: 缓冲区才下发，流式效果会整个消失（表现为「等了 20 秒，然后整段蹦出来」）。
+SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
 
 def sse_encode(events: Iterator[Dict[str, Any]]) -> Iterator[str]:
     """把事件字典序列化成 SSE 报文。

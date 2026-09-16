@@ -30,6 +30,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -46,6 +47,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.QuestionnaireDto
+import com.couple.translator.core.ui.components.AiStreamingText
+import com.couple.translator.core.ui.components.AiStructuringHint
+import com.couple.translator.core.ui.components.AiThinkingPanel
+import com.couple.translator.core.ui.components.AiWaitingBubble
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
@@ -200,8 +205,42 @@ fun ProfileResultScreen(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // profile_analysis
-                if (uiState.profileAnalysis.isNotBlank()) {
+                // 流式生成中：思考面板 + 正文打字机。
+                // done 帧到达后 isGenerating 归位，下面那套结构化卡片自动接手渲染。
+                if (uiState.isGenerating) {
+                    AiThinkingPanel(
+                        thinking = uiState.thinkingText,
+                        isLive = uiState.isThinking,
+                        seconds = uiState.thinkingSeconds,
+                    )
+                    AppCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = AppSurface,
+                        shape = RoundedCornerShape(AppRadius.xl),
+                        contentPadding = PaddingValues(16.dp),
+                    ) {
+                        if (uiState.streamText.isBlank()) {
+                            AiWaitingBubble()
+                        } else {
+                            AiStreamingText(content = uiState.streamText, isStreaming = true)
+                        }
+                        if (uiState.isStructuring) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            AiStructuringHint()
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { viewModel.stopAnalysis() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("停止生成", color = AppTextSecondary)
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // profile_analysis（生成中留空，免得与上面的打字机内容重复一遍）
+                if (!uiState.isGenerating && uiState.profileAnalysis.isNotBlank()) {
                     MarkdownCard(uiState.profileAnalysis)
                     Spacer(modifier = Modifier.height(16.dp))
                 }

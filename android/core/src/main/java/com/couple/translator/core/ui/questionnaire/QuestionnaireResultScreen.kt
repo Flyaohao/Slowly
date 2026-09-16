@@ -46,6 +46,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.QuestionnaireDto
+import com.couple.translator.core.ui.components.AiStreamingText
+import com.couple.translator.core.ui.components.AiStructuringHint
+import com.couple.translator.core.ui.components.AiThinkingPanel
+import com.couple.translator.core.ui.components.AiWaitingBubble
 import com.couple.translator.core.ui.components.AppAccentButton
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
@@ -117,8 +121,20 @@ fun QuestionnaireResultScreen(
             onRefresh = { viewModel.refresh() },
             modifier = Modifier.padding(padding),
         ) {
-            // 这里保留转圈而不是骨架屏：AI 分析要跑 10-30 秒，
-            // 骨架屏会让人以为"内容马上就来"，转圈 + 时长提示才是诚实的反馈。
+            // 流式生成期间直接展示过程本身：思考面板 + 正文打字机，
+            // 比转圈诚实得多——用户能看见「它在想什么、已经写到哪了」。
+            if (uiState.isStreaming) {
+                AnalysisStreamingView(
+                    thinkingText = uiState.thinkingText,
+                    isThinking = uiState.isThinking,
+                    thinkingSeconds = uiState.thinkingSeconds,
+                    streamText = uiState.streamText,
+                    isStructuring = uiState.isStructuring,
+                    onStop = { viewModel.stopAnalysis() },
+                )
+                return@PullToRefreshLayout
+            }
+
             if (uiState.isLoading || uiState.isAnalyzing) {
                 Column(
                     modifier = Modifier.fillMaxSize(),
@@ -321,6 +337,74 @@ fun QuestionnaireResultScreen(
 }
 
 // ==================== 局部组件 ====================
+
+/**
+ * 量表分析的流式过程视图。
+ *
+ * 三块内容按出现顺序排列：思考面板（可折叠）→ 正文打字机 → 「正在整理要点」。
+ * 停止按钮常驻：一次分析要跑十几秒，用户随时有权叫停；停下后已收到的半截
+ * 正文仍然留在屏幕上可读，不会被清空。
+ */
+@Composable
+private fun AnalysisStreamingView(
+    thinkingText: String,
+    isThinking: Boolean,
+    thinkingSeconds: Int,
+    streamText: String,
+    isStructuring: Boolean,
+    onStop: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = AppSpacing.screenH),
+    ) {
+        Spacer(modifier = Modifier.height(AppSpacing.lg))
+
+        Text(
+            text = "AI 正在解读你的测评结果",
+            style = MaterialTheme.typography.titleMedium,
+            color = AppTextPrimary,
+            fontWeight = FontWeight.SemiBold,
+        )
+
+        Spacer(modifier = Modifier.height(AppSpacing.md))
+
+        AiThinkingPanel(
+            thinking = thinkingText,
+            isLive = isThinking,
+            seconds = thinkingSeconds,
+        )
+
+        AppCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(AppSpacing.lg)) {
+                if (streamText.isBlank()) {
+                    AiWaitingBubble()
+                } else {
+                    AiStreamingText(content = streamText, isStreaming = true)
+                }
+                if (isStructuring) {
+                    Spacer(modifier = Modifier.height(AppSpacing.md))
+                    AiStructuringHint()
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(AppSpacing.section))
+
+        TextButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                "停止分析",
+                color = AppTextSecondary,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(AppSpacing.block))
+    }
+}
+
 
 /** Markdown 正文卡（正文由 Markwon 渲染，保留原有的富文本能力）。 */
 @Composable

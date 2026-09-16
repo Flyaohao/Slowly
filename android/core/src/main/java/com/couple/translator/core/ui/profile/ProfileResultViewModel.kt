@@ -1,12 +1,17 @@
 package com.couple.translator.core.ui.profile
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.couple.translator.core.data.model.ProfileDto
 import com.couple.translator.core.data.model.QuestionnaireDto
 import com.couple.translator.core.data.repository.ProfileRepository
 import com.couple.translator.core.data.repository.QuestionnaireRepository
+import com.couple.translator.core.network.GenerationStreamEvent
+import com.couple.translator.core.service.AiStreamKeepAlive
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,7 +34,17 @@ data class ProfileResultUiState(
     val strengths: String = "",
     val growthTips: List<String> = emptyList(),
     val communicationGuide: String = "",
+    // ---- 流式生成中的中间态 ----
+    /** 已发起分析生成（从发起到收尾都为 true，用它决定报告区块的渲染方式） */
+    val isGenerating: Boolean = false,
+    /** 正文逐字追加；done 帧到达后清空，改由 profileAnalysis 等结构化字段渲染 */
+    val streamText: String = "",
+    val isThinking: Boolean = false,
+    val thinkingText: String = "",
+    val thinkingSeconds: Int = 0,
+    val isStructuring: Boolean = false,
 ) {
+
     val profileTypeName: String
         get() = when (profile?.profileType) {
             "secure" -> "安全型依恋"
@@ -49,17 +64,22 @@ data class ProfileResultUiState(
         }
 
     val hasAnalysis: Boolean
-        get() = profileAnalysis.isNotBlank() || communicationGuide.isNotBlank()
+        get() = profileAnalysis.isNotBlank() || communicationGuide.isNotBlank() || isGenerating
 }
 
 @HiltViewModel
 class ProfileResultViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val questionnaireRepository: QuestionnaireRepository,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileResultUiState())
     val uiState: StateFlow<ProfileResultUiState> = _uiState.asStateFlow()
+
+    private var streamJob: Job? = null
+    private var stopRequested = false
+    private var streamStartedAt = 0L
 
     init {
         loadSubmissions()
@@ -196,7 +216,7 @@ class ProfileResultViewModel @Inject constructor(
                 )
             }
         } else if (hasLegacy) {
-            // 有旧格式分析文本，触发 AI 分析以获取结构化数据
+            // 有旧格式分析文本，先展示它，同时补一份结构化分析
             _uiState.update {
                 it.copy(
                     profile = profile,
@@ -222,33 +242,135 @@ class ProfileResultViewModel @Inject constructor(
         }
     }
 
+    /** 用户点「停止生成」：收敛本地状态，服务端靠连接断开自己止血。 */
+    fun stopAnalysis() {
+        if (!_uiState.value.isGenerating) return
+        stopRequested = true
+        streamJob?.cancel()
+        streamJob = null
+        AiStreamKeepAlive.stop(appContext)
+        _uiState.update { it.copy(isGenerating = false, isThinking = false, isStructuring = false) }
+    }
+
     /**
-     * 触发 AI 分析生成，完成后更新 UI
+     * 触发 AI 分析生成（流式）。
+     *
+     * 为什么画像页也流式：这份报告是用户平时回来翻阅的长文，等 20 秒一次性
+     * 蹦出来和边想边出，感受差得远；而且思考面板能让「它到底在干嘛」可见。
      */
     private fun triggerAnalysis(
         questionnaireId: Long,
         profile: ProfileDto.RelationshipProfileResponse,
         dimensions: List<ProfileDto.DimensionScoreResponse>,
     ) {
-        viewModelScope.launch {
-            questionnaireRepository.analyzeQuestionnaire(questionnaireId).fold(
-                onSuccess = { analysis ->
-                    _uiState.update {
-                        it.copy(
-                            profile = profile,
-                            dimensions = dimensions,
-                            profileAnalysis = analysis.profileAnalysis,
-                            dimensionAnalyses = analysis.dimensionAnalyses,
-                            strengths = analysis.strengths,
-                            growthTips = analysis.growthTips,
-                            communicationGuide = analysis.communicationGuide,
-                        )
-                    }
-                },
-                onFailure = {
-                    // 分析失败，保留已有的基础数据
-                },
+        if (questionnaireId <= 0) return
+        streamJob?.cancel()
+        stopRequested = false
+        streamStartedAt = System.currentTimeMillis()
+
+        _uiState.update {
+            it.copy(
+                profile = profile,
+                dimensions = dimensions,
+                isGenerating = true,
+                isThinking = true,
+                isStructuring = false,
+                streamText = "",
+                thinkingText = "",
+                thinkingSeconds = 0,
             )
         }
+
+        // 生成期间挂前台服务保活：退后台进程不被冻结、网络不受限
+        AiStreamKeepAlive.start(appContext)
+
+        streamJob = viewModelScope.launch {
+            questionnaireRepository.analyzeQuestionnaireStream(questionnaireId).collect { ev ->
+                when (ev) {
+                    is GenerationStreamEvent.Started -> Unit
+
+                    is GenerationStreamEvent.Thinking -> _uiState.update {
+                        it.copy(thinkingText = it.thinkingText + ev.content)
+                    }
+
+                    is GenerationStreamEvent.Delta -> _uiState.update {
+                        it.copy(
+                            streamText = it.streamText + ev.content,
+                            isThinking = false,
+                            isStructuring = false,
+                            thinkingSeconds = it.thinkingSeconds
+                                .takeIf { s -> s > 0 } ?: elapsedSeconds(),
+                        )
+                    }
+
+                    is GenerationStreamEvent.Structuring -> _uiState.update {
+                        it.copy(isStructuring = true, isThinking = false)
+                    }
+
+                    is GenerationStreamEvent.Finished -> finishStream(ev)
+
+                    is GenerationStreamEvent.Failure -> if (!stopRequested) {
+                        // 生成失败不清空已有内容：基础画像与旧文本还在页面上，
+                        // 用户至少能看到测评维度，而不是一片空白。
+                        _uiState.update {
+                            it.copy(
+                                isGenerating = false,
+                                isThinking = false,
+                                isStructuring = false,
+                                streamText = "",
+                                isRefreshing = false,
+                            )
+                        }
+                        AiStreamKeepAlive.stop(appContext)
+                    }
+                }
+            }
+
+            // 兜底：服务端没发 done 就断开时状态必须收敛
+            if (!stopRequested && _uiState.value.isGenerating) {
+                _uiState.update {
+                    it.copy(
+                        isGenerating = false,
+                        isThinking = false,
+                        isStructuring = false,
+                        isRefreshing = false,
+                    )
+                }
+                AiStreamKeepAlive.stop(appContext)
+            }
+        }
+    }
+
+    /** done 帧收尾：结构化字段齐全就填卡片，转不出来则退回纯正文。 */
+    private fun finishStream(ev: GenerationStreamEvent.Finished) {
+        val parsed = questionnaireRepository.parseAnalysis(ev.structured)
+        _uiState.update { state ->
+            state.copy(
+                isGenerating = false,
+                isThinking = false,
+                isStructuring = false,
+                isRefreshing = false,
+                streamText = "",
+                profileAnalysis = parsed?.profileAnalysis ?: ev.content.ifBlank { state.profileAnalysis },
+                dimensionAnalyses = parsed?.dimensionAnalyses ?: state.dimensionAnalyses,
+                strengths = parsed?.strengths ?: state.strengths,
+                growthTips = parsed?.growthTips ?: state.growthTips,
+                communicationGuide = parsed?.communicationGuide ?: state.communicationGuide,
+            )
+        }
+        AiStreamKeepAlive.stop(appContext)
+    }
+
+    /** 从发问算起的等待秒数，至少 1 秒（避免显示「已深度思考 0 秒」）。 */
+    private fun elapsedSeconds(): Int {
+        if (streamStartedAt == 0L) return 0
+        val seconds = ((System.currentTimeMillis() - streamStartedAt) / 1000).toInt()
+        return seconds.coerceAtLeast(1)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        streamJob?.cancel()
+        AiStreamKeepAlive.stop(appContext)
     }
 }

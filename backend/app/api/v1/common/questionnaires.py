@@ -1,9 +1,12 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.limiter import ai_limit
 from app.schemas.common import ApiResponse
 from app.schemas.questionnaire_schema import (
     QuestionnaireOut,
@@ -11,7 +14,12 @@ from app.schemas.questionnaire_schema import (
     SaveProgressIndexRequest,
     AnalysisResponse,
 )
-from app.services import questionnaire_service, questionnaire_analysis_service
+from app.services import (
+    ai_generation_service,
+    questionnaire_service,
+    questionnaire_analysis_service,
+)
+from app.services.sse import sse_encode, SSE_HEADERS
 from app.repositories import questionnaire_repo
 
 
@@ -184,6 +192,69 @@ def analyze_questionnaire(
     db.commit()
 
     return ApiResponse(data=result)
+
+
+@router.post("/{questionnaire_id}/analyze/stream")
+@ai_limit()
+def analyze_questionnaire_stream(
+    questionnaire_id: int,
+    request: Request,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """量表分析流式接口（SSE）。
+
+    事件序列与 `/ai/understand-letter/stream` 完全一致：
+    `meta → thinking → delta → (notice) → result → done`。
+
+    为什么这里比别的流式端点多包一层生成器：量表分析的结果除了落
+    `ai_generation`，还要回写 `questionnaire_submission`——结果页与画像页读的
+    都是 submission。回写只能发生在流结束之后，那时请求级 db 已销毁，
+    所以由 `questionnaire_analysis_service.save_analysis_to_submission` 自开会话。
+    """
+    try:
+        prepared = questionnaire_analysis_service.prepare_analysis(
+            db, current_user.id, questionnaire_id
+        )
+    except ValueError as e:
+        code = str(e)
+        if code == "40004":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40004, "message": "请先完成问卷", "data": None},
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": 50003, "message": "分析生成失败，请稍后重试", "data": None},
+        )
+
+    return StreamingResponse(
+        _stream_and_save_analysis(prepared, current_user.id, questionnaire_id),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
+    )
+
+
+def _stream_and_save_analysis(prepared: dict, user_id: int, questionnaire_id: int):
+    """透传 SSE 事件，并在生成正常收尾后把结果写回 submission。
+
+    只有拿到结构化结果才写：被中断时（用户点停止、断网、退到后台被杀）
+    JSON 多半还没吐完，写一份半成品上去反而会覆盖掉上一次的完整分析。
+    """
+    result: dict = {}
+    try:
+        for event in ai_generation_service.stream_generation_events(prepared):
+            if event.get("event") == "done":
+                data = event.get("data") or {}
+                result = data.get("structured_output") or {}
+            yield event
+    finally:
+        # 客户端在 done 帧之后断开时，生成器会在 yield 处收到 GeneratorExit，
+        # finally 仍然会执行——这正是我们要的：结果已经拿到就一定要落库。
+        if result:
+            questionnaire_analysis_service.save_analysis_to_submission(
+                user_id, questionnaire_id, result
+            )
 
 
 @router.get("/history", response_model=ApiResponse)

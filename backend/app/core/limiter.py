@@ -2,9 +2,23 @@ from fastapi import Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from app.core import config
 from app.security.jwt import decode_token
 
 limiter = Limiter(key_func=get_remote_address)
+
+
+def ai_limit():
+    """AI 端点限流装饰器。`AI_RATE_LIMIT` 为空或 0 时完全关闭（identity 装饰器）。
+
+    不能直接把 "0/hour" 交给 slowapi——那意味着「每小时 0 次」= 全部拒绝。
+
+    放在这里而不是各 AI 路由模块内部：情侣侧与个人侧的 AI 端点（量表分析在
+    `common/questionnaires.py`）都要用，各抄一份迟早会漂移。
+    """
+    if config.AI_RATE_LIMIT and config.AI_RATE_LIMIT not in ("0", "0/hour"):
+        return limiter.limit(config.AI_RATE_LIMIT, key_func=get_request_key)
+    return lambda f: f
 
 
 def get_request_key(request: Request) -> str:

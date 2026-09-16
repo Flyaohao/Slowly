@@ -1,6 +1,9 @@
 package com.couple.translator.feature.couple.data.repository
 
+import com.couple.translator.core.network.GenerationStreamDecoder
+import com.couple.translator.core.network.GenerationStreamEvent
 import com.couple.translator.core.network.SseFrame
+import com.couple.translator.core.network.generationStreamFlow
 import com.couple.translator.core.network.sseFrames
 import com.couple.translator.feature.couple.data.model.LetterDto
 import com.couple.translator.feature.couple.network.CoupleApiService

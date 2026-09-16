@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.couple.translator.core.service.AiStreamKeepAlive
 import com.couple.translator.feature.couple.data.model.LetterDto
-import com.couple.translator.feature.couple.data.repository.GenerationStreamEvent
+import com.couple.translator.core.network.GenerationStreamEvent
 import com.couple.translator.feature.couple.data.repository.LetterRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext

@@ -188,6 +188,31 @@ def _validate_structured(
         return None
 
 
+def _apply_finalizer(
+    prepared: Dict[str, Any], structured: Optional[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """让调用方在结构化结果落库/下发之前做一次归一化。
+
+    量表分析用它把「模型可能随口编的维度分数」覆盖回系统算出的分数，
+    并把模型漏掉的维度补齐。没有这个钩子，那类修正只能写进 Prompt 里
+    求模型照办——而模型是会改数字的。
+
+    归一化本身失败不当失败处理：正文已经推给用户了，顶多少一层修正。
+    """
+    if not structured:
+        return structured
+    finalizer = prepared.get("finalize_structured")
+    if not callable(finalizer):
+        return structured
+    try:
+        return finalizer(structured) or structured
+    except Exception:
+        logger.exception(
+            "[AI] 结构化结果归一化失败 kind=%s", prepared.get("generation_kind")
+        )
+        return structured
+
+
 def _resolve_risk(content: str, structured: Optional[Dict[str, Any]]) -> str:
     """风险等级取「模型自评」与「词库检测」中的较高者。
 
@@ -288,6 +313,7 @@ def stream_generation_events(prepared: Dict[str, Any]) -> Iterator[Dict[str, Any
         # 但正文与分隔符之间的那段空行不该带进数据库和卡片。
         content = content.strip()
         structured = _validate_structured(structured_raw, output_model, generation_kind)
+        structured = _apply_finalizer(prepared, structured)
         if structured_raw and structured is None:
             # 分隔符之后有内容却解析不出来，多半是被 max_tokens 截断在 JSON 中间。
             # 正文仍然可用，所以不当失败处理，只留痕方便定位。

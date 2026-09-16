@@ -182,6 +182,42 @@ class LetterReplyOutput(BaseModel):
     risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
 
 
+class QuestionnaireDimensionAnalysis(BaseModel):
+    """量表分析里单个维度的解读。
+
+    字段名与客户端 `QuestionnaireDto.DimensionAnalysis` 逐字一致，
+    改名会同时打断后端落库与客户端渲染两侧。
+    """
+
+    key: str = Field(..., description="维度英文 key，如 attachment_anxiety")
+    label: str = Field("", description="维度中文名，如「依恋焦虑」")
+    score: float = Field(0.0, description="该维度得分 0-100，由系统给定，照抄不要改")
+    level: str = Field("", description="高/中/低，由系统按分数给定")
+    analysis: str = Field("", description="1-2 句通俗解读，像朋友聊天，有画面感")
+
+
+class QuestionnaireAnalysisOutput(BaseModel):
+    """量表分析报告（刚交完问卷时的逐维度解读）。
+
+    与 `ProfileReportOutput` 的分工，二者不要合并：
+    - 本模型服务的是一次**测评结果的解读**，逐维度给短评，用户看完就走；
+    - `ProfileReportOutput` 服务的是**个人画像长文**，用户平时回来翻阅。
+    """
+
+    profile_analysis: str = Field(
+        "", description="2-3 段整体解读：依恋类型的核心特点、在关系中的典型表现、可能的成因"
+    )
+    dimension_analyses: List[QuestionnaireDimensionAnalysis] = Field(
+        default_factory=list, description="每个维度一条，按得分从高到低排序"
+    )
+    strengths: str = Field("", description="2-3 句，用户在关系中的优势与积极特质")
+    growth_tips: List[str] = Field(
+        default_factory=list, description="3 条具体可执行的成长建议"
+    )
+    communication_guide: str = Field("", description="2-3 条与伴侣沟通的实用建议")
+    risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
+
+
 class MemoryDistillOutput(BaseModel):
     """对话记忆沉淀：从一轮对话里抽取值得长期记住的信息。
 

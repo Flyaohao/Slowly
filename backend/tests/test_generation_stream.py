@@ -1,20 +1,22 @@
 """单次触发型 AI 生成全面流式化验证（v2.2）
 
-v2.2 把信件改写 / AI 回信 / 表达改写 / 画像报告全部切到与「信件解读」
-同一套 ai_generation + SSE 基建。本脚本验证：
+v2.2 把信件改写 / AI 回信 / 表达改写 / 画像报告 / 量表分析全部切到与
+「信件解读」同一套 ai_generation + SSE 基建。本脚本验证：
 
-    A. Prompt 层（纯逻辑）：三个结构化场景的流式变体含双出口协议，
+    A. Prompt 层（纯逻辑）：结构化场景的流式变体含双出口协议，
        字段契约与 Pydantic 模型一致
+    A2. 归一化层（纯逻辑）：量表分析的分数一律以系统算出的为准
     B. 协议层：/rewrite-letter/stream 真实 TCP 拿到完整事件序列
     C. 协议层：/rewrite/stream（表达改写）真实 TCP
     D. 持久化与回读：结果落 ai_generation，GET /generations/{kind} 取回
     E. 画像报告：无问卷时返回 400/40001（不真调模型）
+    F. 量表分析：/questionnaires/{id}/analyze/stream，无画像时 400/40004
 
 运行：
     cd backend
     python tests/test_generation_stream.py
 
-注意：B/C 会真调大模型（每个约 1~2 分钟），并临时创建一封测试信件，结束时清理。
+注意：B/C/E/F 会真调大模型（每个约 1~2 分钟），并临时创建一封测试信件，结束时清理。
 """
 
 import json
@@ -35,6 +37,7 @@ from app.schemas.ai_output import (  # noqa: E402
     LetterAnalysisOutput,
     LetterReplyOutput,
     LetterRewriteOutput,
+    QuestionnaireAnalysisOutput,
     RewriteOutput,
 )
 from app.security.jwt import create_access_token  # noqa: E402
@@ -48,6 +51,10 @@ from app.services.prompt_builder import (  # noqa: E402
     STRUCTURED_MARKER,
     build_structured_stream_prompt,
 )
+from app.services.questionnaire_analysis_service import (  # noqa: E402
+    ANALYSIS_PROMPT,
+    _normalize_analysis,
+)
 from app.services.structured_stream import parse_structured_payload  # noqa: E402
 
 LOCAL_PORT = 18082
@@ -56,6 +63,7 @@ BASE = "http://127.0.0.1:%d" % LOCAL_PORT
 STREAM_REWRITE_LETTER = "/api/v1/couple/ai/rewrite-letter/stream"
 STREAM_REWRITE = "/api/v1/couple/ai/rewrite/stream"
 STREAM_PROFILE = "/api/v1/couple/ai/profile-report/stream"
+STREAM_ANALYSIS = "/api/v1/questionnaires/%s/analyze/stream"
 READ_PATH = "/api/v1/couple/ai/generations/%s"
 
 TEST_LETTER_TITLE = "[自动测试] 流式改写用信件"
@@ -79,6 +87,7 @@ PROMPT_CASES = [
         ),
         LetterRewriteOutput,
         ["rewritten_title", "rewritten_content", "changes"],
+        TEST_LETTER_CONTENT,
     ),
     (
         "AI 回信",
@@ -89,6 +98,7 @@ PROMPT_CASES = [
         ),
         LetterReplyOutput,
         ["replies", "do_not_say"],
+        TEST_LETTER_CONTENT,
     ),
     (
         "表达改写",
@@ -99,22 +109,84 @@ PROMPT_CASES = [
         ),
         RewriteOutput,
         ["rewrites", "risk_level"],
+        "原始表达",
+    ),
+    (
+        "量表分析",
+        ANALYSIS_PROMPT.format(
+            profile_label="焦虑依恋型",
+            confidence=0.82,
+            summary="渴望亲密又怕被冷落",
+            dimension_text="- 依恋焦虑（attachment_anxiety）: 82分, 高\n- 独处冷静需求（personal_space_need）: 31分, 低",
+        ),
+        QuestionnaireAnalysisOutput,
+        ["profile_analysis", "dimension_analyses", "strengths", "growth_tips", "communication_guide"],
+        "## 测评结果",
     ),
 ]
 
 
+def check_normalize() -> bool:
+    """A2. 归一化层：模型编的分数必须被系统分数覆盖，维度必须齐全。
+
+    这是量表分析最容易出错的地方——模型偶尔会自作主张改分数，于是同一个页面
+    上的雷达图（读系统分数）和文字（读模型分数）就打架。归一化是唯一的防线。
+    """
+    print("\n" + "=" * 72)
+    print("A2. 归一化层：分数以系统为准")
+    print("=" * 72)
+
+    dimension_scores = {"attachment_anxiety": 82.0, "personal_space_need": 31.0}
+    model_output = {
+        "profile_analysis": "你很在意关系里的确定感。",
+        # 模型编了个不存在的维度，还给已有维度报了假分数
+        "dimension_analyses": [
+            {"key": "attachment_anxiety", "label": "依恋焦虑", "score": 999, "level": "极高",
+             "analysis": "你会反复确认对方还在不在意你。"},
+            {"key": "made_up_dimension", "label": "编的维度", "score": 88, "level": "高",
+             "analysis": "不该出现在结果里。"},
+        ],
+        "strengths": "你很善于觉察自己的情绪。",
+        "growth_tips": ["试着直接说出需求"],
+        "communication_guide": "先说感受，再说诉求。",
+    }
+
+    result = _normalize_analysis(
+        model_output,
+        profile_type="anxious",
+        profile_label="焦虑依恋型",
+        confidence=0.82,
+        dimension_scores=dimension_scores,
+    )
+    dims = result["dimension_analyses"]
+    by_key = {d["key"]: d for d in dims}
+
+    checks = [
+        ("分数用系统值而非模型值", by_key["attachment_anxiety"]["score"] == 82.0),
+        ("等级按分数重算", by_key["attachment_anxiety"]["level"] == "高"),
+        ("模型多编的维度被丢弃", "made_up_dimension" not in by_key),
+        ("模型漏掉的维度被补齐", "personal_space_need" in by_key),
+        ("补齐的维度带兜底解读", bool(by_key["personal_space_need"]["analysis"])),
+        ("按分数降序排列", [d["key"] for d in dims] == ["attachment_anxiety", "personal_space_need"]),
+        ("正文与结构化字段都保留", bool(result["profile_analysis"] and result["growth_tips"])),
+    ]
+    for label, passed in checks:
+        print("  %s %s" % ("✅" if passed else "❌", label))
+    return all(p for _, p in checks)
+
+
 def check_prompts() -> bool:
     print("\n" + "=" * 72)
-    print("A. Prompt 层：新场景的流式变体")
+    print("A. Prompt 层：各场景的流式变体")
     print("=" * 72)
 
     all_ok = True
-    for name, base, model, fields in PROMPT_CASES:
+    for name, base, model, fields, keep_marker in PROMPT_CASES:
         streamed = build_structured_stream_prompt(
             base, model, content_instruction="测试正文指令"
         )
         checks = [
-            ("保留原文要素", "原始表达" in streamed or TEST_LETTER_CONTENT in streamed),
+            ("保留原文要素", keep_marker in streamed),
             ("含分隔符", STRUCTURED_MARKER in streamed),
             ("含 Pydantic 字段名", all(f in streamed for f in fields)),
             ("不再要求「请以 JSON 格式回复」", "请以 JSON 格式回复" not in streamed),
@@ -185,7 +257,9 @@ def cleanup(letter_id: int) -> None:
             AiGeneration.target_type == "letter", AiGeneration.target_id == letter_id
         ).delete(synchronize_session=False)
         db.query(AiGeneration).filter(
-            AiGeneration.generation_kind.in_(["expression_rewrite", "profile_report"])
+            AiGeneration.generation_kind.in_(
+                ["expression_rewrite", "profile_report", "questionnaire_analysis"]
+            )
         ).delete(synchronize_session=False)
         db.query(Letter).filter(Letter.id == letter_id, Letter.title == TEST_LETTER_TITLE).delete(
             synchronize_session=False
@@ -194,6 +268,29 @@ def cleanup(letter_id: int) -> None:
     except Exception as exc:  # noqa: BLE001
         db.rollback()
         print("  ⚠️ 清理失败：%s" % exc)
+    finally:
+        db.close()
+
+
+def active_questionnaire_id():
+    from app.repositories import questionnaire_repo
+    db = SessionLocal_()
+    try:
+        q = questionnaire_repo.get_active_questionnaire(db)
+        return q.id if q else None
+    finally:
+        db.close()
+
+
+def load_dimension_scores(user_id: int) -> dict:
+    """取库里这个人最新的维度分数，用于核对归一化是否真的生效。"""
+    from app.repositories import profile_repo
+    db = SessionLocal_()
+    try:
+        profile = profile_repo.get_latest_profile(db, user_id)
+        if not profile:
+            return {}
+        return {s.dimension_key: s.score for s in profile_repo.get_dimension_scores(db, profile.id)}
     finally:
         db.close()
 
@@ -274,6 +371,7 @@ def main() -> int:
 
     results = []
     results.append(("A. Prompt 层", check_prompts()))
+    results.append(("A2. 归一化层", check_normalize()))
 
     relation_id, user_id = pick_active_relation()
     letter_id = ensure_test_letter(relation_id, user_id)
@@ -329,6 +427,38 @@ def main() -> int:
             ok_e = r["status"] == 400
             print("  无问卷，预期拒绝：HTTP %s %s" % (r["status"], "✅" if ok_e else "❌"))
         results.append(("E. 画像报告", ok_e))
+
+        # F. 量表分析流式（有画像则真跑，无画像应 400/40004）
+        print("\n" + "=" * 72)
+        print("F. /questionnaires/{id}/analyze/stream")
+        print("=" * 72)
+        qid = active_questionnaire_id()
+        if qid is None:
+            print("  ⚠️ 库里没有启用的问卷，跳过")
+            results.append(("F. 量表分析流式", True))
+        else:
+            r = stream_once(STREAM_ANALYSIS % qid, None, headers)
+            if r["ok"]:
+                structured = (r["done"] or {}).get("structured_output") or {}
+                dims = structured.get("dimension_analyses") or []
+                ok_f = r["names"][-1:] == ["done"] and r["delta_chars"] > 100 and bool(dims)
+                print("  有画像，真实生成：delta %d 字，维度 %d 条" % (r["delta_chars"], len(dims)))
+
+                # 归一化生效的硬证据：结果里的分数必须等于库里的维度分
+                db_scores = load_dimension_scores(user_id)
+                if db_scores and dims:
+                    same = all(
+                        abs(float(d.get("score", -1)) - float(db_scores[d["key"]])) < 0.01
+                        for d in dims
+                        if d.get("key") in db_scores
+                    )
+                    ok_f = ok_f and same
+                    print("  %s 分数与库内一致（归一化生效）" % ("✅" if same else "❌"))
+                print("  %s 整体" % ("✅" if ok_f else "❌"))
+            else:
+                ok_f = r["status"] == 400
+                print("  无画像，预期拒绝：HTTP %s %s" % (r["status"], "✅" if ok_f else "❌"))
+            results.append(("F. 量表分析流式", ok_f))
     finally:
         cleanup(letter_id)
 

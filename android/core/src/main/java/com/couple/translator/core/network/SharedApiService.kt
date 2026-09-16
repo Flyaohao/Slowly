@@ -5,6 +5,8 @@ import com.couple.translator.core.data.model.AuthDto
 import com.couple.translator.core.data.model.ProfileDto
 import com.couple.translator.core.data.model.QuestionnaireDto
 import com.couple.translator.core.data.model.UserDto
+import okhttp3.ResponseBody
+import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -12,6 +14,7 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 
 /**
  * 共享 API 服务
@@ -85,6 +88,19 @@ interface SharedApiService {
     suspend fun analyzeQuestionnaire(
         @Path("id") questionnaireId: Long,
     ): ApiResponse<QuestionnaireDto.AnalysisResponse>
+
+    /**
+     * 量表分析流式接口（SSE，与情侣侧 AI 各流式端点同一套 ai_generation 协议）。
+     *
+     * 返回裸响应体：SSE 不是 JSON，不能过 `ApiResponse<T>` 转换器；
+     * `@Streaming` 也不能省——否则 okhttp 会把整个响应缓冲完再交给上层，
+     * 打字机效果就没有了。
+     */
+    @Streaming
+    @POST("api/v1/questionnaires/{id}/analyze/stream")
+    suspend fun analyzeQuestionnaireStream(
+        @Path("id") questionnaireId: Long,
+    ): Response<ResponseBody>
 
     @GET("api/v1/questionnaires/history")
     suspend fun getSubmissionHistory(): ApiResponse<List<QuestionnaireDto.SubmissionResponse>>

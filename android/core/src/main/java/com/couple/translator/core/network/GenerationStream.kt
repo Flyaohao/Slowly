@@ -1,7 +1,5 @@
-package com.couple.translator.feature.couple.data.repository
+package com.couple.translator.core.network
 
-import com.couple.translator.core.network.SseFrame
-import com.couple.translator.core.network.sseFrames
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
@@ -20,14 +18,16 @@ import javax.inject.Singleton
 /**
  * 单次触发型 AI 生成的**通用**流式事件与解码基建。
  *
- * 信件解读是第一个流式化的能力，它的解码器当时私有在 [LetterRepository] 里；
- * v2.2 起信件改写 / AI 回信 / 表达改写 / 画像报告全部切到同一套
- * `ai_generation` SSE 协议，解码逻辑不该再抄 N 份，于是抽到这里。
+ * 信件解读是第一个流式化的能力，它的解码器当时私有在 `LetterRepository` 里；
+ * v2.2 起信件改写 / AI 回信 / 表达改写 / 画像报告 / 量表分析全部切到同一套
+ * `ai_generation` SSE 协议，解码逻辑不该再抄 N 份，于是抽到 core——
+ * 情侣侧（feature:couple）与个人侧（core 的问卷结果页）都要用，
+ * 放在任一 feature 模块里另一侧就够不着了。
  *
  * 与 `LetterDto.LetterStreamEvent` 的差别只有一处：`Finished.structured`
  * 是通用 `Map` 而非信件专属的 `LetterUnderstanding`——不同生成类型
- * （letter_rewrite / letter_reply / expression_rewrite / profile_report）
- * 的结构化字段形状各不相同，由各 ViewModel 自行取用。
+ * （letter_rewrite / letter_reply / expression_rewrite / profile_report /
+ * questionnaire_analysis）的结构化字段形状各不相同，由各 ViewModel 自行取用。
  *
  * 事件序列与信件解读完全一致：
  * `meta` → `thinking`* / `delta`* → `notice` → `done`（失败给 `error`）。
