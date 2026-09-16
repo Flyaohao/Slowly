@@ -84,6 +84,29 @@ fun PracticeListScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
+            // 做过的练习：结果页里才有 AI 整理，没有这个入口等于做完就找不回来
+            if (uiState.records.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "我的练习记录",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                items(uiState.records.take(5)) { record ->
+                    PracticeRecordItem(
+                        title = uiState.practices
+                            .firstOrNull { it.id == record.practiceId }
+                            ?.title ?: "关系练习",
+                        status = record.status,
+                        date = record.createdAt?.take(10),
+                        onClick = { onNavigateToResult(record.id) },
+                    )
+                }
+                item { Spacer(modifier = Modifier.height(12.dp)) }
+            }
+
             items(uiState.practices) { practice ->
                 PracticeListItem(
                     practice = practice,
@@ -142,6 +165,53 @@ private fun PracticeListItem(
             )
         }
     }
+}
+
+@Composable
+private fun PracticeRecordItem(
+    title: String,
+    status: String,
+    date: String?,
+    onClick: () -> Unit,
+) {
+    AppCard(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(14.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = listOfNotNull(
+                        practiceStatusText(status),
+                        date,
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextTertiary,
+                )
+            }
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = AppTextTertiary,
+            )
+        }
+    }
+}
+
+private fun practiceStatusText(status: String): String = when (status) {
+    "initiated" -> "等待对方完成"
+    "both_completed" -> "双方已完成"
+    "summarized" -> "AI 已整理"
+    else -> "进行中"
 }
 
 private fun practiceTypeEmoji(type: String): String = when (type) {

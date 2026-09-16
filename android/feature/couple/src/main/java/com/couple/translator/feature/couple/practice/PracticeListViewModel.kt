@@ -14,6 +14,8 @@ import javax.inject.Inject
 
 data class PracticeListUiState(
     val practices: List<PracticeDto.PracticeResponse> = emptyList(),
+    /** 我做过的练习记录（后端按时间倒序，这里只取最近几条展示） */
+    val records: List<PracticeDto.PracticeRecordResponse> = emptyList(),
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val error: String = "",
@@ -48,6 +50,7 @@ class PracticeListViewModel @Inject constructor(
                     }
                 },
             )
+            loadRecordsInternal()
         }
     }
 
@@ -72,7 +75,24 @@ class PracticeListViewModel @Inject constructor(
                     }
                 },
             )
+            loadRecordsInternal()
         }
+    }
+
+    /**
+     * 拉取我做过的练习记录。
+     *
+     * 之前这个页面只有「发起新练习」一条路，做完的记录再也进不去——
+     * 练习结果页（含 AI 整理）等于死链。这里补上回看入口。
+     */
+    private suspend fun loadRecordsInternal() {
+        repository.getRecords().fold(
+            onSuccess = { response ->
+                val items = response?.items ?: emptyList()
+                _uiState.update { it.copy(records = items) }
+            },
+            onFailure = { /* 记录拉不到不影响发起新练习，静默 */ },
+        )
     }
 
     fun startPractice(practiceId: Long, onSuccess: (Long) -> Unit) {
