@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Book
@@ -121,7 +122,10 @@ fun SingleShell(
             NavHost(
                 navController = tabNavController,
                 startDestination = BottomTab.SingleHome.route,
-                modifier = Modifier.padding(innerPadding),
+                modifier = Modifier
+                    .padding(innerPadding)
+                    // 同情侣侧：登记已占用 inset，页内 imePadding 只补差值，输入框永远贴键盘
+                    .consumeWindowInsets(innerPadding),
                 // 与情侣模式外壳同款：1/5 屏方向感横移 + 淡入，取代纯 fade 的"闪一下"
                 enterTransition = {
                     val forward = tabIndexOf(tabs, targetState.destination.route) >=

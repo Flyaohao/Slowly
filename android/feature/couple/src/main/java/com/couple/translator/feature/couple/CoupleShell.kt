@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalDrawerSheet
@@ -165,7 +166,13 @@ fun CoupleShell(
             NavHost(
                 navController = tabNavController,
                 startDestination = BottomTab.Home.route,
-                modifier = Modifier.padding(innerPadding),
+                modifier = Modifier
+                    .padding(innerPadding)
+                    // 关键：把壳层已占用的 inset（tab 栏高度 + 系统栏）登记为「已消费」。
+                    // 页内 imePadding() 只会补足「键盘高 − 已占用高」的差值，
+                    // 底部实际预留 = max(innerPadding.bottom, 键盘高)，输入框在任意分辨率/
+                    // 输入法下都恰好贴住键盘（键盘盖住的 tab 栏不会再白占一份高度）。
+                    .consumeWindowInsets(innerPadding),
                 // Tab 之间是「平级切换」而不是「推入新页面」，所以不做整屏横移：
                 // 只给 1/5 屏的横向位移 + 淡入，方向由 tab 在底栏里的先后顺序决定。
                 // 旧版是纯 fadeIn/fadeOut，没有方向感，切换时像画面"闪"了一下。
