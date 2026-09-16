@@ -88,6 +88,10 @@ dependencies {
 
     // Core module
     implementation(project(":core"))
+
+    // 纯 JVM 单测：RealtimeNotice 的「事件 → 文案/跳转」映射是纯函数，
+    // 但分支多且改文案时最容易漏改一处，必须有测试兜住
+    testImplementation("junit:junit:4.13.2")
 }
 
 kapt {

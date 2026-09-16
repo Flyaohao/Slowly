@@ -15,6 +15,46 @@ import okhttp3.ResponseBody
 data class SseFrame(val event: String, val data: String)
 
 /**
+ * SSE 行解析器：逐行喂入，攒满一帧（空行）才吐出。
+ *
+ * 从 [sseFrames] 里抽出来是**为了能单测**：协议细节（心跳注释必须丢、
+ * `data:` 可以多行要攒齐、缺 event 或缺 data 的残帧不能派发）都是踩过坑的地方，
+ * 而原先它们焊死在 `ResponseBody` 扩展里，测一次就得起一个真 HTTP 流。
+ * 现在核心逻辑是纯函数，JVM 单测直接喂字符串即可。
+ *
+ * 注意：多行 `data:` 按**直接拼接**处理（不是 SSE 规范里的 `\n` 连接）——
+ * 服务端发的是单行 JSON，拼接只是兜底；改成 `\n` 反而会把 JSON 弄坏。
+ */
+internal class SseLineParser {
+
+    private var eventName: String? = null
+    private val dataBuf = StringBuilder()
+
+    /** 喂一行；返回 null 表示还凑不满一帧（或这行按协议该被忽略） */
+    fun feed(line: String): SseFrame? {
+        when {
+            // 空行 = 一帧结束（`data:` 可能多行，要等这一行才派发）
+            line.isEmpty() -> {
+                val name = eventName
+                val frame = if (name != null && dataBuf.isNotEmpty()) {
+                    SseFrame(name, dataBuf.toString())
+                } else {
+                    null
+                }
+                eventName = null
+                dataBuf.setLength(0)
+                return frame
+            }
+
+            line.startsWith("event:") -> eventName = line.substring(6).trim()
+            line.startsWith("data:") -> dataBuf.append(line.substring(5).trim())
+            // 其余（含 `:` 开头的心跳注释）按协议忽略
+        }
+        return null
+    }
+}
+
+/**
  * 把 okhttp 的流式响应体解析成 SSE 帧流。
  *
  * **为什么不引 EventSource 之类的库**：服务端报文就是极简三行帧
@@ -31,25 +71,10 @@ data class SseFrame(val event: String, val data: String)
  */
 fun ResponseBody.sseFrames(): Flow<SseFrame> = flow {
     val source = source()
-    var eventName: String? = null
-    val dataBuf = StringBuilder()
+    val parser = SseLineParser()
 
     while (true) {
         val line = source.readUtf8Line() ?: break
-        when {
-            // 空行 = 一帧结束，此时才派发（`data:` 可能有多行，需要攒齐）
-            line.isEmpty() -> {
-                val name = eventName
-                if (name != null && dataBuf.isNotEmpty()) {
-                    emit(SseFrame(name, dataBuf.toString()))
-                }
-                eventName = null
-                dataBuf.setLength(0)
-            }
-
-            line.startsWith("event:") -> eventName = line.substring(6).trim()
-            line.startsWith("data:") -> dataBuf.append(line.substring(5).trim())
-            // 其余（含 `:` 开头的心跳注释）按协议忽略
-        }
+        parser.feed(line)?.let { emit(it) }
     }
 }.flowOn(Dispatchers.IO)

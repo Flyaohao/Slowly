@@ -1,6 +1,7 @@
 package com.couple.translator.core.network
 
 import com.couple.translator.core.data.model.HomeDto
+import com.couple.translator.core.data.model.AiDto
 import com.couple.translator.core.data.model.AuthDto
 import com.couple.translator.core.data.model.ProfileDto
 import com.couple.translator.core.data.model.QuestionnaireDto
@@ -109,6 +110,22 @@ interface SharedApiService {
     suspend fun analyzeQuestionnaireStream(
         @Path("id") questionnaireId: Long,
     ): Response<ResponseBody>
+
+    /**
+     * AI 画像报告流式接口（SSE）。纯 Markdown 长文，无结构化字段。
+     *
+     * 端点挂在 couple 前缀下，但只要求登录、不要求已绑定（画像报告是个人维度，
+     * 后端 relation_id 显式置空），单身模式同样可用。
+     */
+    @Streaming
+    @POST("api/v1/couple/ai/profile-report/stream")
+    suspend fun profileReportStream(): Response<ResponseBody>
+
+    /** 回读上次的 AI 画像报告（ai_generation 覆盖式只留最新一条；data 为 null 表示还没生成过）。 */
+    @GET("api/v1/couple/ai/generations/profile_report")
+    suspend fun getProfileReportGeneration(
+        @Query("target_type") targetType: String = "none",
+    ): ApiResponse<AiDto.GenerationPayload>
 
     @GET("api/v1/questionnaires/history")
     suspend fun getSubmissionHistory(): ApiResponse<List<QuestionnaireDto.SubmissionResponse>>

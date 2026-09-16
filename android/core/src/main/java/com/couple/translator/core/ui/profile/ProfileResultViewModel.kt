@@ -43,6 +43,16 @@ data class ProfileResultUiState(
     val thinkingText: String = "",
     val thinkingSeconds: Int = 0,
     val isStructuring: Boolean = false,
+    // ---- AI 深度画像报告（独立于量表分析，纯 Markdown 长文）----
+    /** 回读到的已保存报告 */
+    val reportText: String = "",
+    /** 首次回读是否已完成（完成前不显示「生成报告」按钮，避免回读慢时重复生成） */
+    val reportLoaded: Boolean = false,
+    val isReportGenerating: Boolean = false,
+    val reportStreamText: String = "",
+    val isReportThinking: Boolean = false,
+    val reportThinkingText: String = "",
+    val reportThinkingSeconds: Int = 0,
 ) {
 
     val profileTypeName: String
@@ -80,9 +90,13 @@ class ProfileResultViewModel @Inject constructor(
     private var streamJob: Job? = null
     private var stopRequested = false
     private var streamStartedAt = 0L
+    private var reportJob: Job? = null
+    private var reportStopRequested = false
+    private var reportStartedAt = 0L
 
     init {
         loadSubmissions()
+        loadSavedReport()
     }
 
     fun clearError() {
@@ -368,9 +382,129 @@ class ProfileResultViewModel @Inject constructor(
         return seconds.coerceAtLeast(1)
     }
 
+    // ==================== AI 深度画像报告 ====================
+
+    /** 进页面先回读上次保存的报告（ai_generation 覆盖式只留最新一条）。 */
+    private fun loadSavedReport() {
+        viewModelScope.launch {
+            val result = profileRepository.getSavedProfileReport()
+            val payload = result.getOrNull()
+            _uiState.update {
+                it.copy(
+                    reportText = payload?.content?.trim().orEmpty(),
+                    reportLoaded = true,
+                )
+            }
+        }
+    }
+
+    /** 用户点「停止生成」：收敛本地状态，服务端靠连接断开自己止血。 */
+    fun stopProfileReport() {
+        if (!_uiState.value.isReportGenerating) return
+        reportStopRequested = true
+        reportJob?.cancel()
+        reportJob = null
+        AiStreamKeepAlive.stop(appContext)
+        _uiState.update {
+            it.copy(
+                isReportGenerating = false,
+                isReportThinking = false,
+                // 已流出来的内容保留展示，不算白生成
+                reportText = it.reportStreamText.trim(),
+                reportStreamText = "",
+            )
+        }
+    }
+
+    /** 生成（或重新生成）AI 深度画像报告。 */
+    fun startProfileReport() {
+        reportJob?.cancel()
+        reportStopRequested = false
+        reportStartedAt = System.currentTimeMillis()
+
+        _uiState.update {
+            it.copy(
+                isReportGenerating = true,
+                isReportThinking = true,
+                reportStreamText = "",
+                reportThinkingText = "",
+                reportThinkingSeconds = 0,
+                error = "",
+            )
+        }
+
+        AiStreamKeepAlive.start(appContext)
+
+        reportJob = viewModelScope.launch {
+            profileRepository.profileReportStream().collect { ev ->
+                when (ev) {
+                    is GenerationStreamEvent.Started -> Unit
+
+                    is GenerationStreamEvent.Thinking -> _uiState.update {
+                        it.copy(reportThinkingText = it.reportThinkingText + ev.content)
+                    }
+
+                    is GenerationStreamEvent.Delta -> _uiState.update {
+                        it.copy(
+                            reportStreamText = it.reportStreamText + ev.content,
+                            isReportThinking = false,
+                            reportThinkingSeconds = it.reportThinkingSeconds
+                                .takeIf { s -> s > 0 } ?: reportElapsedSeconds(),
+                        )
+                    }
+
+                    is GenerationStreamEvent.Structuring -> Unit // 纯 Markdown，无结构化阶段
+
+                    is GenerationStreamEvent.Finished -> {
+                        _uiState.update { state ->
+                            state.copy(
+                                isReportGenerating = false,
+                                isReportThinking = false,
+                                reportStreamText = "",
+                                reportText = ev.content.trim().ifBlank { state.reportText },
+                            )
+                        }
+                        AiStreamKeepAlive.stop(appContext)
+                    }
+
+                    is GenerationStreamEvent.Failure -> if (!reportStopRequested) {
+                        _uiState.update {
+                            it.copy(
+                                isReportGenerating = false,
+                                isReportThinking = false,
+                                error = ev.message,
+                            )
+                        }
+                        AiStreamKeepAlive.stop(appContext)
+                    }
+                }
+            }
+
+            // 兜底：服务端没发 done 就断开时状态必须收敛
+            if (!reportStopRequested && _uiState.value.isReportGenerating) {
+                _uiState.update {
+                    it.copy(
+                        isReportGenerating = false,
+                        isReportThinking = false,
+                        reportText = it.reportStreamText.trim().ifBlank { it.reportText },
+                        reportStreamText = "",
+                    )
+                }
+                AiStreamKeepAlive.stop(appContext)
+            }
+        }
+    }
+
+    private fun reportElapsedSeconds(): Int {
+        if (reportStartedAt == 0L) return 0
+        val seconds = ((System.currentTimeMillis() - reportStartedAt) / 1000).toInt()
+        return seconds.coerceAtLeast(1)
+    }
+
     override fun onCleared() {
         super.onCleared()
         streamJob?.cancel()
+        reportJob?.cancel()
         AiStreamKeepAlive.stop(appContext)
     }
 }

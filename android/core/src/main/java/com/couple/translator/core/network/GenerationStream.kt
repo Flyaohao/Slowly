@@ -182,7 +182,8 @@ fun generationStreamFlow(
     emit(GenerationStreamEvent.Failure(50000, netHint(e)))
 }.flowOn(Dispatchers.IO)
 
-private fun httpHint(code: Int): String = when (code) {
+/** HTTP 状态码 → 用户能看懂的一句话（internal 是为了单测覆盖到每个分支） */
+internal fun httpHint(code: Int): String = when (code) {
     400 -> "请求被拒绝，请检查输入或绑定状态"
     401 -> "登录已过期，请重新登录"
     403 -> "无权访问此内容"
@@ -191,7 +192,8 @@ private fun httpHint(code: Int): String = when (code) {
     else -> "服务异常（HTTP $code）"
 }
 
-private fun netHint(e: Throwable): String = when (e) {
+/** 网络异常 → 用户能看懂的一句话（internal 是为了单测覆盖到每个分支） */
+internal fun netHint(e: Throwable): String = when (e) {
     is java.net.SocketTimeoutException -> "等待响应超时，请重试"
     is java.net.SocketException -> "网络连接被中断（可能是切换了 Wi-Fi 或移动数据）"
     is java.io.IOException -> "网络读写失败，请检查网络后重试"

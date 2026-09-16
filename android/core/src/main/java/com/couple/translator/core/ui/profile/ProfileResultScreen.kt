@@ -344,6 +344,86 @@ fun ProfileResultScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // === AI 深度画像报告（独立流式长文，基于 11 维画像 + 依恋类型生成）===
+            Text(
+                text = "AI 深度画像报告",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = AppTextPrimary,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            when {
+                // 生成中：思考面板 + 正文打字机
+                uiState.isReportGenerating -> {
+                    AiThinkingPanel(
+                        thinking = uiState.reportThinkingText,
+                        isLive = uiState.isReportThinking,
+                        seconds = uiState.reportThinkingSeconds,
+                    )
+                    AppCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = AppSurface,
+                        shape = RoundedCornerShape(AppRadius.xl),
+                        contentPadding = PaddingValues(16.dp),
+                    ) {
+                        if (uiState.reportStreamText.isBlank()) {
+                            AiWaitingBubble()
+                        } else {
+                            AiStreamingText(content = uiState.reportStreamText, isStreaming = true)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { viewModel.stopProfileReport() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("停止生成", color = AppTextSecondary)
+                    }
+                }
+
+                // 已有报告（回读或刚生成完）
+                uiState.reportText.isNotBlank() -> {
+                    MarkdownCard(uiState.reportText)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { viewModel.startProfileReport() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("重新生成报告", color = AppTextSecondary)
+                    }
+                }
+
+                // 回读完成且从未生成过：给入口
+                uiState.reportLoaded -> {
+                    AppCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = AppSurface,
+                        shape = RoundedCornerShape(AppRadius.xl),
+                        contentPadding = PaddingValues(20.dp),
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "结合你的依恋类型与 11 个关系维度，生成一份更完整的深度解读",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AppTextSecondary,
+                                textAlign = TextAlign.Center,
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            AppPrimaryButton(
+                                text = "生成 AI 深度报告",
+                                onClick = { viewModel.startProfileReport() },
+                            )
+                        }
+                    }
+                }
+
+                // 回读尚未完成：先不渲染，避免回读慢时出现可重复点按的生成入口
+                else -> Unit
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             if (isCoupleMode) {
                 AppSecondaryButton(
                     text = "查看情侣组合画像",

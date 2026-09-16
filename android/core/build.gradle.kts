@@ -88,4 +88,8 @@ dependencies {
     // Markdown rendering (api = transitively available to feature modules)
     api("io.noties.markwon:core:4.6.2")
     api("io.noties.markwon:ext-strikethrough:4.6.2")
+
+    // 纯 JVM 单测：只覆盖不依赖 Android 框架的纯函数
+    // （SSE 行解析、URL 拼接、错误码→文案映射、SSE 帧解码）
+    testImplementation("junit:junit:4.13.2")
 }

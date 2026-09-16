@@ -32,7 +32,11 @@ fun RealtimeEvent.toNotice(): RealtimeNotice? = when (notificationType) {
         notificationId = AppNotifications.ID_LETTER_RECEIVED,
         notificationTitle = "收到一封新信件",
         notificationText = "对方给你写了一封信，点开看看",
-        route = Screen.LetterList.route,
+        // 带上 letter_id 就能直达那一封（信件详情挂在**根 NavHost** 上，深链够得着）；
+        // 老服务端不给 id 时退回信件列表——用户自己找得到，比"点了没反应"强。
+        route = letterId?.takeIf { it > 0L }
+            ?.let { "${Screen.LetterDetail.route}/$it" }
+            ?: Screen.LetterList.route,
     )
 
     "mediation_invite" -> RealtimeNotice(
