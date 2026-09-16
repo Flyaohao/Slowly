@@ -42,6 +42,12 @@ object AiDto {
         @Json(name = "event_id") val eventId: Long,
     )
 
+    /** 关系练习 AI 整理请求：要整理的练习记录 id。 */
+    @JsonClass(generateAdapter = true)
+    data class PracticeSummaryRequest(
+        @Json(name = "record_id") val recordId: Long,
+    )
+
     /**
      * 关系复盘的结构化结果。
      *

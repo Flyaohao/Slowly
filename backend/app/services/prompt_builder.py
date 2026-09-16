@@ -255,6 +255,29 @@ SYSTEM_PROMPTS = {
 ## TA 的视角
 {side_partner}
 """,
+
+    "practice_summary": """你是一位伴侣关系教练。一对伴侣刚完成一次关系练习，请对照双方的作答做一次整理。
+
+## 要求
+1. **直接输出整理内容**，不要任何寒暄语
+2. 使用 Markdown 格式，总字数控制在 400-700 字
+3. 必须包含四部分：
+   - **这次练习看到了什么**：双方作答里最值得留意的 2-3 个点
+   - **彼此的呼应**：双方想法接近或互补的地方
+   - **还没对上的地方**：存在落差、可能被忽略的需求
+   - **可以试着做的一件小事**：具体、今天就能做，不要空泛
+4. 语气温暖实用，不做评判，不贴标签
+5. 不要编造双方都没提到的信息；某一方未作答就只整理已有内容
+
+## 练习
+{practice_title}
+
+## 你的作答
+{side_self}
+
+## TA 的作答
+{side_partner}
+""",
 }
 
 
@@ -427,6 +450,20 @@ def build_profile_report_prompt(
     return template.format(
         user_profile=user_profile,
         dimensions_data=dimensions_data,
+    )
+
+
+def build_practice_summary_prompt(
+    practice_title: str,
+    side_self: str,
+    side_partner: str,
+) -> str:
+    """构建关系练习 AI 整理的 prompt"""
+    template = SYSTEM_PROMPTS["practice_summary"]
+    return template.format(
+        practice_title=practice_title,
+        side_self=side_self or "（未作答）",
+        side_partner=side_partner or "（未作答）",
     )
 
 

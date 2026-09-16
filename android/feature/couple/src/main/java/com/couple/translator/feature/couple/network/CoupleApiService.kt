@@ -147,6 +147,11 @@ interface CoupleApiService {
     @POST("api/v1/couple/ai/dual-summary/stream")
     suspend fun dualSummaryStream(@Body body: AiDto.DualSummaryRequest): Response<ResponseBody>
 
+    /** 关系练习 AI 整理流式版（SSE）。纯 Markdown 长文，无结构化字段。 */
+    @Streaming
+    @POST("api/v1/couple/ai/practice-summary/stream")
+    suspend fun practiceSummaryStream(@Body body: AiDto.PracticeSummaryRequest): Response<ResponseBody>
+
     /**
      * 回读上次的关系复盘结果（[kind] = `relationship_review`）。
      * `data` 为 null 表示还没复盘过。
