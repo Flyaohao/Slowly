@@ -173,7 +173,29 @@ def check_normalize() -> bool:
     ]
     for label, passed in checks:
         print("  %s %s" % ("✅" if passed else "❌", label))
-    return all(p for _, p in checks)
+
+    # 模型把「一段文字」输出成数组时的兜底。
+    # 线上真跑踩过：communication_guide 被输出成 ["建议一", "建议二"]，
+    # 一处类型不符就让整份结构化结果作废，卡片/维度/建议全丢。
+    lenient = QuestionnaireAnalysisOutput.model_validate(
+        {
+            "profile_analysis": ["第一段", "第二段"],
+            "communication_guide": ["建议一", "建议二"],
+            "strengths": [],
+            "dimension_analyses": [
+                {"key": "attachment_anxiety", "analysis": ["你很容易担心被冷落。", "需要更多确认。"]}
+            ],
+        }
+    )
+    lenient_checks = [
+        ("数组版 profile_analysis 被压成多行文本", "\n" in lenient.profile_analysis),
+        ("数组版 communication_guide 被压成多行文本", lenient.communication_guide == "建议一\n建议二"),
+        ("空数组不报错", lenient.strengths == ""),
+        ("维度解读同样兜住", "\n" in lenient.dimension_analyses[0].analysis),
+    ]
+    for label, passed in lenient_checks:
+        print("  %s %s" % ("✅" if passed else "❌", label))
+    return all(p for _, p in checks) and all(p for _, p in lenient_checks)
 
 
 def check_prompts() -> bool:

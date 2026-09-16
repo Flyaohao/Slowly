@@ -19,7 +19,7 @@
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 try:  # Python 3.8+
     from typing import Literal
@@ -182,6 +182,24 @@ class LetterReplyOutput(BaseModel):
     risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
 
 
+def flatten_text(value: Any) -> Any:
+    """把模型「用数组表达的一段文字」压回单个字符串。
+
+    实测踩过（qwen3.7-flash，2026-09-16）：prompt 里写「给出 2-3 条建议」，
+    模型就把 `communication_guide` 输出成 `["建议一", "建议二"]`，与 schema 的
+    `str` 冲突——一处类型不符会让**整份结构化结果**被判无效，字段全丢，
+    用户看到的正文还在，但卡片、维度、建议全没了。
+
+    文案类字段统一在这里兜住：数组用换行拼接、对象按「键：值」拼接，
+    其余原样交给 Pydantic 校验。
+    """
+    if isinstance(value, list):
+        return "\n".join(str(v).strip() for v in value if str(v).strip())
+    if isinstance(value, dict):
+        return "\n".join("%s：%s" % (k, v) for k, v in value.items())
+    return value
+
+
 class QuestionnaireDimensionAnalysis(BaseModel):
     """量表分析里单个维度的解读。
 
@@ -193,7 +211,12 @@ class QuestionnaireDimensionAnalysis(BaseModel):
     label: str = Field("", description="维度中文名，如「依恋焦虑」")
     score: float = Field(0.0, description="该维度得分 0-100，由系统给定，照抄不要改")
     level: str = Field("", description="高/中/低，由系统按分数给定")
-    analysis: str = Field("", description="1-2 句通俗解读，像朋友聊天，有画面感")
+    analysis: str = Field("", description="1-2 句通俗解读，一段文字（不要数组），像朋友聊天")
+
+    @field_validator("analysis", mode="before")
+    @classmethod
+    def _flatten_analysis(cls, value: Any) -> Any:
+        return flatten_text(value)
 
 
 class QuestionnaireAnalysisOutput(BaseModel):
@@ -205,17 +228,26 @@ class QuestionnaireAnalysisOutput(BaseModel):
     """
 
     profile_analysis: str = Field(
-        "", description="2-3 段整体解读：依恋类型的核心特点、在关系中的典型表现、可能的成因"
+        "", description="2-3 段整体解读：依恋类型的核心特点、在关系中的典型表现、可能的成因（一整段文字，不要数组）"
     )
     dimension_analyses: List[QuestionnaireDimensionAnalysis] = Field(
         default_factory=list, description="每个维度一条，按得分从高到低排序"
     )
-    strengths: str = Field("", description="2-3 句，用户在关系中的优势与积极特质")
+    strengths: str = Field(
+        "", description="2-3 句，用户在关系中的优势与积极特质（一整段文字，不要数组）"
+    )
     growth_tips: List[str] = Field(
         default_factory=list, description="3 条具体可执行的成长建议"
     )
-    communication_guide: str = Field("", description="2-3 条与伴侣沟通的实用建议")
+    communication_guide: str = Field(
+        "", description="2-3 条与伴侣沟通的实用建议，写成一段文字、建议之间换行（不要输出数组）"
+    )
     risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
+
+    @field_validator("profile_analysis", "strengths", "communication_guide", mode="before")
+    @classmethod
+    def _flatten_text_fields(cls, value: Any) -> Any:
+        return flatten_text(value)
 
 
 class MemoryDistillOutput(BaseModel):
