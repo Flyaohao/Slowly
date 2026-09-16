@@ -118,6 +118,29 @@ class AiRepository @Inject constructor(
     }
 
     /**
+     * 流式「回忆卡片」（纯 Markdown 长文，无结构化字段）。
+     * [targetType] 为 `anniversary` 或 `wishlist`，按条目回读互不覆盖。
+     */
+    fun memoryCardStream(targetType: String, targetId: Long): Flow<GenerationStreamEvent> =
+        generationStreamFlow(generationDecoder) {
+            apiService.memoryCardStream(AiDto.MemoryCardRequest(targetType, targetId))
+        }
+
+    /** 回读某条目上次的回忆卡片；`null` 表示还没生成过。 */
+    suspend fun getSavedMemoryCard(targetType: String, targetId: Long): Result<AiDto.GenerationPayload?> {
+        return try {
+            val response = apiService.getGeneration(MEMORY_CARD_KIND, targetType, targetId)
+            if (response.isSuccess) {
+                Result.success(response.data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * 回读上次的关系复盘（ai_generation 覆盖式只留最新一条）。
      * 返回 `null` 表示还没复盘过——这是正常情况，不是错误。
      */
@@ -154,6 +177,7 @@ class AiRepository @Inject constructor(
         const val REVIEW_KIND = "relationship_review"
         const val DUAL_SUMMARY_KIND = "dual_summary"
         const val PRACTICE_SUMMARY_KIND = "practice_summary"
+        const val MEMORY_CARD_KIND = "memory_card"
     }
 
     /**

@@ -152,6 +152,11 @@ interface CoupleApiService {
     @POST("api/v1/couple/ai/practice-summary/stream")
     suspend fun practiceSummaryStream(@Body body: AiDto.PracticeSummaryRequest): Response<ResponseBody>
 
+    /** 回忆卡片流式版（SSE）。anniversary / wishlist 条目，一条条目一张卡片。 */
+    @Streaming
+    @POST("api/v1/couple/ai/memory-card/stream")
+    suspend fun memoryCardStream(@Body body: AiDto.MemoryCardRequest): Response<ResponseBody>
+
     /**
      * 回读上次的关系复盘结果（[kind] = `relationship_review`）。
      * `data` 为 null 表示还没复盘过。
@@ -307,6 +312,10 @@ interface CoupleApiService {
 
     @POST("api/v1/couple/presence/companion-request")
     suspend fun sendCompanionRequest(@Body body: PresenceDto.CompanionRequest): ApiResponse<PresenceDto.MomentResponse>
+
+    /** 设置下次见面日期（couple_space.next_meet_date）。 */
+    @PUT("api/v1/couple/couples/me/space/meet-date")
+    suspend fun setMeetDate(@Body body: PresenceDto.MeetDateUpdate): ApiResponse<PresenceDto.MeetDateResponse>
 
     // Practice
     @GET("api/v1/couple/practices")

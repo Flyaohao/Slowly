@@ -18,6 +18,7 @@ from app.services.prompt_builder import (
     build_profile_report_prompt,
     build_dual_summary_prompt,
     build_practice_summary_prompt,
+    build_memory_card_prompt,
 )
 from app.services.scene_router import get_scene_config
 # 循环导入注意：ai_generation_service 也会 import 本模块的辅助函数，
@@ -666,6 +667,7 @@ def _format_profile(profile, scores: Dict[str, float]) -> str:
         "anxious": "焦虑依恋型",
         "dismissive": "疏离回避型",
         "fearful": "恐惧回避型",
+        "mixed": "混合型依恋",
     }
     ptype = type_names.get(profile.profile_type, profile.profile_type)
     dim_parts = []
@@ -1091,6 +1093,84 @@ def prepare_practice_summary(db: Session, user_id: int, record_id: int) -> dict:
         "output_model": None,
         "temperature": 0.6,
         "max_tokens": 2000,
+    }
+
+
+def prepare_memory_card(db: Session, user_id: int, target_type: str, target_id: int) -> dict:
+    """流式版「回忆卡片」的前处理（纯 Markdown 长文）。
+
+    target_type 仅支持 `anniversary` / `wishlist`——两条材料都来自
+    `anniversary_repo`，权限校验沿用 100001（不存在）/ 100002（不属于当前关系）。
+    """
+    from app.services import ai_generation_service  # 局部导入，避免模块加载环
+    from app.repositories import anniversary_repo
+
+    relation = couple_repo.get_active_relation_by_user(db, user_id)
+    if not relation:
+        raise ValueError("30005")
+
+    if target_type == "anniversary":
+        item = anniversary_repo.get_anniversary_by_id(db, target_id)
+        if not item:
+            raise ValueError("100001")
+        if item.relation_id != relation.id:
+            raise ValueError("100002")
+        item_kind = "纪念日"
+        item_detail = "\n".join(
+            part
+            for part in [
+                f"标题：{item.title}",
+                f"日期：{item.anniversary_date}",
+                f"描述：{(item.description or '').strip() or '（无）'}",
+            ]
+            if part
+        )
+    elif target_type == "wishlist":
+        item = anniversary_repo.get_wishlist_by_id(db, target_id)
+        if not item:
+            raise ValueError("100001")
+        if item.relation_id != relation.id:
+            raise ValueError("100002")
+        item_kind = "愿望"
+        status_text = "已完成" if item.status == "completed" else "期待中"
+        completed = (
+            f"，完成于 {item.completed_at:%Y-%m-%d}" if item.completed_at else ""
+        )
+        item_detail = "\n".join(
+            [
+                f"标题：{item.title}",
+                f"状态：{status_text}{completed}",
+                f"描述：{(item.description or '').strip() or '（无）'}",
+            ]
+        )
+    else:
+        raise ValueError("100003")
+
+    prompt = build_memory_card_prompt(item_kind=item_kind, item_detail=item_detail)
+
+    generation_id, cancel_event = ai_generation_service.begin(
+        db,
+        user_id=user_id,
+        relation_id=relation.id,
+        generation_kind="memory_card",
+        scene_key="memory_card",
+        target_type=target_type,
+        target_id=target_id,
+    )
+
+    return {
+        "generation_id": generation_id,
+        "cancel_event": cancel_event,
+        "generation_kind": "memory_card",
+        "scene_key": "memory_card",
+        "target_type": target_type,
+        "target_id": target_id,
+        "user_id": user_id,
+        "relation_id": relation.id,
+        "prompt": prompt,
+        "output_model": None,
+        "temperature": 0.7,
+        "max_tokens": 1500,
     }
 
 

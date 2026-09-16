@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.Event
+import androidx.compose.material.icons.outlined.HistoryEdu
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,6 +52,7 @@ import com.couple.translator.feature.couple.data.model.AnniversaryDto
 fun AnniversaryListScreen(
     onNavigateBack: () -> Unit,
     onNavigateToAdd: () -> Unit,
+    onNavigateToMemoryCard: (targetType: String, targetId: Long, itemTitle: String) -> Unit = { _, _, _ -> },
     viewModel: AnniversaryListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -103,6 +105,9 @@ fun AnniversaryListScreen(
                 items(uiState.anniversaries) { anniversary ->
                     AnniversaryListItem(
                         anniversary = anniversary,
+                        onMemoryCard = {
+                            onNavigateToMemoryCard("anniversary", anniversary.id, anniversary.title)
+                        },
                         onDelete = { viewModel.deleteAnniversary(anniversary.id) },
                     )
                 }
@@ -115,6 +120,7 @@ fun AnniversaryListScreen(
 @Composable
 private fun AnniversaryListItem(
     anniversary: AnniversaryDto.AnniversaryResponse,
+    onMemoryCard: () -> Unit,
     onDelete: () -> Unit,
 ) {
     AppCard(
@@ -146,6 +152,13 @@ private fun AnniversaryListItem(
                         maxLines = 1,
                     )
                 }
+            }
+            IconButton(onClick = onMemoryCard) {
+                Icon(
+                    Icons.Outlined.HistoryEdu,
+                    contentDescription = "回忆卡片",
+                    tint = AppAccent,
+                )
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Filled.Delete, contentDescription = "删除", tint = AppErrorRed)

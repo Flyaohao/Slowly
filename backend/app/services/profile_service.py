@@ -24,6 +24,7 @@ PROFILE_TYPE_LABELS = {
     "anxious": "焦虑依恋型",
     "dismissive": "疏离回避型",
     "fearful": "恐惧回避型",
+    "mixed": "混合型依恋",
 }
 
 
@@ -160,6 +161,12 @@ def _calculate_dimension_scores(answers_with_meta: List[dict]) -> Dict[str, floa
 def _classify_attachment(anxiety: float, avoidance: float) -> str:
     high_anxiety = anxiety >= 50
     high_avoidance = avoidance >= 50
+
+    # 混合型：两个维度都贴着阈值（45~55 的中间地带），焦虑与回避特质
+    # 交织且谁都压不过谁——硬塞进单一类型会丢掉「时而是 X 时而是 Y」的真实形态。
+    if 45 <= anxiety < 55 and 45 <= avoidance < 55:
+        return "mixed"
+
     if not high_anxiety and not high_avoidance:
         return "secure"
     elif high_anxiety and not high_avoidance:

@@ -253,6 +253,7 @@ def _build_couple_summary(profile_a, profile_b, conflict_pattern: str) -> str:
         "anxious": "焦虑依恋型",
         "dismissive": "疏离回避型",
         "fearful": "恐惧回避型",
+        "mixed": "混合型依恋",
     }
     pattern_names = {
         "pursue_withdraw": "追问-退缩循环",

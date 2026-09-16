@@ -48,6 +48,13 @@ object AiDto {
         @Json(name = "record_id") val recordId: Long,
     )
 
+    /** 回忆卡片请求：anniversary / wishlist 条目。 */
+    @JsonClass(generateAdapter = true)
+    data class MemoryCardRequest(
+        @Json(name = "target_type") val targetType: String,
+        @Json(name = "target_id") val targetId: Long,
+    )
+
     /**
      * 关系复盘的结构化结果。
      *

@@ -204,6 +204,7 @@ private fun ProfileMiniCard(
         "anxious" -> "焦虑型"
         "dismissive" -> "疏离型"
         "fearful" -> "恐惧型"
+        "mixed" -> "混合型"
         else -> "未知"
     }
 

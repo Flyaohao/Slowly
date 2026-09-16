@@ -35,6 +35,8 @@ import com.couple.translator.feature.couple.ai.ColdWarScreen
 import com.couple.translator.feature.couple.ai.ReviewScreen
 import com.couple.translator.feature.couple.anniversary.AddAnniversaryScreen
 import com.couple.translator.feature.couple.anniversary.AnniversaryListScreen
+import com.couple.translator.feature.couple.memorycard.MemoryCardScreen
+import com.couple.translator.feature.couple.presence.PresenceScreen
 import com.couple.translator.core.ui.auth.ForgotPasswordScreen
 import com.couple.translator.core.ui.guide.GuideScreen
 import com.couple.translator.core.ui.auth.LoginScreen
@@ -615,6 +617,28 @@ fun NavGraph(
                 onNavigateToAdd = {
                     navController.navigate(Screen.AddAnniversary.route)
                 },
+                onNavigateToMemoryCard = { targetType, targetId, itemTitle ->
+                    navController.navigate(
+                        "memory_card?targetType=$targetType&targetId=$targetId&itemTitle=" +
+                            android.net.Uri.encode(itemTitle)
+                    )
+                },
+            )
+        }
+
+        composable(
+            route = Screen.MemoryCard.route,
+            arguments = listOf(
+                navArgument("targetType") { defaultValue = "anniversary" },
+                navArgument("targetId") { type = NavType.LongType; defaultValue = 0L },
+                navArgument("itemTitle") { defaultValue = "" },
+            ),
+        ) { entry ->
+            MemoryCardScreen(
+                targetType = entry.arguments?.getString("targetType") ?: "anniversary",
+                targetId = entry.arguments?.getLong("targetId") ?: 0L,
+                itemTitle = entry.arguments?.getString("itemTitle").orEmpty(),
+                onNavigateBack = { navController.popBackStack() },
             )
         }
 
@@ -632,6 +656,12 @@ fun NavGraph(
                 onNavigateToAdd = {
                     navController.navigate(Screen.AddWishlist.route)
                 },
+                onNavigateToMemoryCard = { targetType, targetId, itemTitle ->
+                    navController.navigate(
+                        "memory_card?targetType=$targetType&targetId=$targetId&itemTitle=" +
+                            android.net.Uri.encode(itemTitle)
+                    )
+                },
             )
         }
 
@@ -639,6 +669,13 @@ fun NavGraph(
             AddWishlistScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onCreated = { navController.popBackStack() },
+            )
+        }
+
+        // 异地陪伴
+        composable(Screen.Presence.route) {
+            PresenceScreen(
+                onNavigateBack = { navController.popBackStack() },
             )
         }
 

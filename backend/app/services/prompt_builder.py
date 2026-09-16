@@ -278,6 +278,21 @@ SYSTEM_PROMPTS = {
 ## TA 的作答
 {side_partner}
 """,
+
+    "memory_card": """你是一位温柔的伴侣关系记录者。请为下面这条{item_kind}写一张回忆卡片。
+
+## 要求
+1. **直接输出卡片内容**，不要任何寒暄语
+2. 使用 Markdown，总字数控制在 250-450 字
+3. 必须包含两部分：
+   - **一段叙事**：以「你们」称呼这对伴侣，把标题、日期、描述串成有画面感的一小段记忆；材料没提到的细节不要编造
+   - **重访这份记忆**：给 3 个适合两人一起聊的小问题，编号列出
+4. 语气温暖克制，不煽情不堆砌形容词
+5. 若条目是尚未完成的愿望，按「期待中的回忆」来写；已完成或已发生的，按「已经发生的回忆」来写
+
+## 条目
+{item_detail}
+""",
 }
 
 
@@ -442,6 +457,7 @@ def build_profile_report_prompt(
         "anxious": "焦虑依恋型",
         "dismissive": "疏离回避型",
         "fearful": "恐惧回避型",
+        "mixed": "混合型依恋",
     }
     type_name = type_names.get(profile_type, "未知类型")
     user_profile = f"依恋类型：{type_name}，置信度：{confidence * 100:.0f}%"
@@ -450,6 +466,15 @@ def build_profile_report_prompt(
     return template.format(
         user_profile=user_profile,
         dimensions_data=dimensions_data,
+    )
+
+
+def build_memory_card_prompt(item_kind: str, item_detail: str) -> str:
+    """构建纪念日/愿望回忆卡片的 prompt"""
+    template = SYSTEM_PROMPTS["memory_card"]
+    return template.format(
+        item_kind=item_kind,
+        item_detail=item_detail,
     )
 
 

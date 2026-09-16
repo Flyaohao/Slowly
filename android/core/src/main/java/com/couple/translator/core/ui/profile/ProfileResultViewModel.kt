@@ -61,6 +61,7 @@ data class ProfileResultUiState(
             "anxious" -> "焦虑依恋型"
             "dismissive" -> "疏离回避型"
             "fearful" -> "恐惧回避型"
+            "mixed" -> "混合型依恋"
             else -> "未知"
         }
 
@@ -70,6 +71,7 @@ data class ProfileResultUiState(
             "anxious" -> "你渴望亲密，有时会担心伴侣不够在乎你。"
             "dismissive" -> "你重视独立自主，有时会回避过深的情感交流。"
             "fearful" -> "你既渴望亲密又害怕受伤，在关系中常感到矛盾。"
+            "mixed" -> "你的焦虑与回避特质交织：时而想靠近，时而想抽离，这本身没有对错。"
             else -> ""
         }
 

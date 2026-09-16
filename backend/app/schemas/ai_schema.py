@@ -93,6 +93,11 @@ class PracticeSummaryRequest(BaseModel):
     record_id: int = Field(..., description="关系练习记录 id")
 
 
+class MemoryCardRequest(BaseModel):
+    target_type: str = Field(..., pattern="^(anniversary|wishlist)$", description="条目类型")
+    target_id: int = Field(..., description="条目 id")
+
+
 class LetterAnalysisOut(BaseModel):
     summary: Optional[str] = None
     key_concerns: Optional[List[str]] = None

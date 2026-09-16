@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.CardGiftcard
+import androidx.compose.material.icons.outlined.HistoryEdu
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,6 +54,7 @@ import com.couple.translator.feature.couple.data.model.WishlistDto
 fun WishlistScreen(
     onNavigateBack: () -> Unit,
     onNavigateToAdd: () -> Unit,
+    onNavigateToMemoryCard: (targetType: String, targetId: Long, itemTitle: String) -> Unit = { _, _, _ -> },
     viewModel: WishlistViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -116,6 +118,9 @@ fun WishlistScreen(
                     items(pending) { item ->
                         WishlistItemCard(
                             item = item,
+                            onMemoryCard = {
+                                onNavigateToMemoryCard("wishlist", item.id, item.title)
+                            },
                             onComplete = { viewModel.completeWishlist(item.id) },
                             onDelete = { viewModel.deleteWishlist(item.id) },
                         )
@@ -134,6 +139,9 @@ fun WishlistScreen(
                     items(completed) { item ->
                         WishlistItemCard(
                             item = item,
+                            onMemoryCard = {
+                                onNavigateToMemoryCard("wishlist", item.id, item.title)
+                            },
                             onComplete = {},
                             onDelete = { viewModel.deleteWishlist(item.id) },
                         )
@@ -149,6 +157,7 @@ fun WishlistScreen(
 @Composable
 private fun WishlistItemCard(
     item: WishlistDto.WishlistResponse,
+    onMemoryCard: () -> Unit,
     onComplete: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -187,6 +196,13 @@ private fun WishlistItemCard(
                         color = AppSuccessGreen,
                     )
                 }
+            }
+            IconButton(onClick = onMemoryCard) {
+                Icon(
+                    Icons.Outlined.HistoryEdu,
+                    contentDescription = "回忆卡片",
+                    tint = AppAccent,
+                )
             }
             if (!isCompleted) {
                 IconButton(onClick = onComplete) {

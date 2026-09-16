@@ -57,6 +57,7 @@ def get_relation_profile(user_id: int, include_partner: bool = True) -> str:
             "anxious": "焦虑依恋型",
             "dismissive": "疏离回避型",
             "fearful": "恐惧回避型",
+            "mixed": "混合型依恋",
         }
         lines = [
             "【用户画像】依恋类型: %s（置信度 %s）"

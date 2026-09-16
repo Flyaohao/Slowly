@@ -20,6 +20,7 @@ from app.schemas.ai_schema import (
     ReviewRequest,
     DualSummaryRequest,
     PracticeSummaryRequest,
+    MemoryCardRequest,
 )
 from app.services import ai_generation_service, ai_service, letter_ai_service
 from app.services.sse import sse_encode, SSE_HEADERS as _SSE_HEADERS
@@ -698,6 +699,39 @@ def practice_summary_stream(
                 "90002": (404, "练习记录不存在"),
                 "90003": (403, "无权查看该练习"),
                 "90004": (400, "还没有任何作答，先完成练习再来整理"),
+            },
+        )
+
+    return StreamingResponse(
+        sse_encode(ai_generation_service.stream_generation_events(prepared)),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
+
+
+@router.post("/memory-card/stream")
+@ai_limit()
+def memory_card_stream(
+    request: Request,
+    req: MemoryCardRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """纪念日/愿望回忆卡片流式接口（SSE），纯 Markdown 长文。
+
+    一条条目一张卡片：一段有画面感的叙事 + 3 个适合两人一起聊的问题。
+    """
+    try:
+        prepared = ai_service.prepare_memory_card(
+            db, current_user.id, req.target_type, req.target_id
+        )
+    except ValueError as e:
+        _raise_prepared_error(
+            e,
+            {
+                "100001": (404, "条目不存在"),
+                "100002": (403, "无权查看该条目"),
+                "100003": (400, "不支持的条目类型"),
             },
         )
 

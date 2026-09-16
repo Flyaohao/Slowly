@@ -26,4 +26,14 @@ object PresenceDto {
     data class CompanionRequest(
         val message: String? = null,
     )
+
+    @JsonClass(generateAdapter = true)
+    data class MeetDateUpdate(
+        @Json(name = "meet_date") val meetDate: String,
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class MeetDateResponse(
+        @Json(name = "next_meet_date") val nextMeetDate: String? = null,
+    )
 }

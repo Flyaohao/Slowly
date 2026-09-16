@@ -49,6 +49,8 @@ enum class Screen(val route: String) {
     AddAnniversary("add_anniversary"),
     Wishlist("wishlist"),
     AddWishlist("add_wishlist"),
+    MemoryCard("memory_card?targetType={targetType}&targetId={targetId}&itemTitle={itemTitle}"),
+    Presence("presence"),
     AvatarCustomize("avatar_customize"),
 
     // 单身模式专属

@@ -231,7 +231,8 @@ fun NewHomeScreen(
 
                     Box(modifier = Modifier.padding(top = AppSpacing.section)) {
                         MeetCountdown(
-                            targetDate = null,
+                            targetDate = uiState.homeData?.space?.nextMeetDate
+                                ?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() },
                             modifier = Modifier.padding(horizontal = AppSpacing.screenH),
                         )
                     }

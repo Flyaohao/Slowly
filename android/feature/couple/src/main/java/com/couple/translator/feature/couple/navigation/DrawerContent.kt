@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
@@ -129,6 +130,11 @@ fun DrawerContent(
                 icon = Icons.Outlined.AutoAwesome,
                 label = "AI 形象",
                 onClick = { onNavigateToRoute(Screen.AvatarCustomize.route) },
+            )
+            DrawerNavItem(
+                icon = Icons.Outlined.LocationOn,
+                label = "异地陪伴",
+                onClick = { onNavigateToRoute(Screen.Presence.route) },
             )
         }
 
