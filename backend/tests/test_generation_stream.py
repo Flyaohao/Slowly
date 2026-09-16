@@ -6,6 +6,7 @@ v2.2 把信件改写 / AI 回信 / 表达改写 / 画像报告 / 量表分析全
     A. Prompt 层（纯逻辑）：结构化场景的流式变体含双出口协议，
        字段契约与 Pydantic 模型一致
     A2. 归一化层（纯逻辑）：量表分析的分数一律以系统算出的为准
+    A3. 源码级：所有 StreamingResponse 都过了 sse_encode（防 500）
     B. 协议层：/rewrite-letter/stream 真实 TCP 拿到完整事件序列
     C. 协议层：/rewrite/stream（表达改写）真实 TCP
     D. 持久化与回读：结果落 ai_generation，GET /generations/{kind} 取回
@@ -205,6 +206,39 @@ def check_prompts() -> bool:
     return all_ok
 
 
+def check_stream_wrapping() -> bool:
+    """A3. 源码级：每个 StreamingResponse 都必须把生成器过一遍 sse_encode。
+
+    这条检查是被真实事故逼出来的：量表分析端点直接 yield 事件字典，
+    少了 sse_encode 那层，Starlette 拿 dict 去 encode，第一个 chunk 就
+    `AttributeError: 'dict' object has no attribute 'encode'`，HTTP 500。
+    在 CI/离线阶段就能发现，不必等真跑一次模型。
+    """
+    print("\n" + "=" * 72)
+    print("A3. 流式响应组装：都过了 sse_encode")
+    print("=" * 72)
+
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parent.parent / "app"
+    total, bad = 0, []
+    for path in root.rglob("*.py"):
+        src = path.read_text(encoding="utf-8")
+        for m in re.finditer(r"StreamingResponse\(", src):
+            total += 1
+            window = src[m.end(): m.end() + 300]
+            if "sse_encode" not in window:
+                bad.append("%s: %s" % (path.relative_to(root), window.split("\n")[0].strip()[:50]))
+
+    print("  扫描到 %d 处 StreamingResponse" % total)
+    for item in bad:
+        print("  ❌ 未包 sse_encode：%s" % item)
+    if not bad:
+        print("  ✅ 全部已包装")
+    return total > 0 and not bad
+
+
 # ---------------------------------------------------------------------- #
 # 测试数据
 # ---------------------------------------------------------------------- #
@@ -372,6 +406,7 @@ def main() -> int:
     results = []
     results.append(("A. Prompt 层", check_prompts()))
     results.append(("A2. 归一化层", check_normalize()))
+    results.append(("A3. 流式组装", check_stream_wrapping()))
 
     relation_id, user_id = pick_active_relation()
     letter_id = ensure_test_letter(relation_id, user_id)
