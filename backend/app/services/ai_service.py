@@ -679,21 +679,17 @@ def _get_partner_id(db: Session, relation_id: int, user_id: int) -> Optional[int
 
 
 def _format_profile(profile, scores: Dict[str, float]) -> str:
+    """画像注入的唯一出口。签名不变，调用方无感。
+
+    由 profile_service.build_profile_card 产出中文语义卡（维度名 +
+    行为化解读 + 沟通宜忌），替换原先「英文 key=分数」的参数表——
+    模型不再需要自己翻译 attachment_anxiety=72 是什么意思。
+    """
     if not profile:
         return "未完成问卷"
-    type_names = {
-        "secure": "安全型",
-        "anxious": "焦虑依恋型",
-        "dismissive": "疏离回避型",
-        "fearful": "恐惧回避型",
-        "mixed": "混合型依恋",
-    }
-    ptype = type_names.get(profile.profile_type, profile.profile_type)
-    dim_parts = []
-    for k, v in scores.items():
-        dim_parts.append(f"{k}={v}")
-    dims_str = ", ".join(dim_parts) if dim_parts else "无"
-    return f"依恋类型: {ptype}, 置信度: {profile.confidence}, 维度分数: [{dims_str}]"
+    from app.services.profile_service import build_profile_card
+
+    return build_profile_card(profile.profile_type, scores, profile.confidence)
 
 
 def _call_llm(prompt: Any, scene_key: str) -> dict:
