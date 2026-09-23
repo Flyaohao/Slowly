@@ -390,3 +390,20 @@ alembic/versions/*.pyc
 # RAG 向量库持久化数据（可由 scripts/build_vectorstore.py 重建，不入库）
 backend/data/
 backend/pip_install.log
+
+# ---- 根目录临时产物：构建 / 部署 / 测试过程日志，非源码 ----
+.build_out.txt
+.install_log.txt
+.sftp_probe.txt
+.test_out*.txt
+backend_deploy.tar.gz
+package-lock.json
+
+# ---- 本地 IDE / 工具配置 ----
+.claude/
+
+# ---- 内部文档：只在本地保留，不进公开仓库 ----
+# README.md 是仓库门面，显式放行；其余根目录 .md（设计/核对/工作计划）
+# 属于开发过程留档，含内部口径，不对外公开。
+/*.md
+!/README.md
