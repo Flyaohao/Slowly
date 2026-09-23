@@ -20,6 +20,7 @@ AI 链路全部接入真实大模型（含 RAG、Agent、流式输出），已�
 
 - [它是什么](#它是什么)
 - [技术栈](#技术栈)
+- [AI 架构](#ai-架构)
 - [快速开始](#快速开始)
 - [项目结构](#项目结构)
 - [几个值得一看的设计](#几个值得一看的设计)
@@ -71,6 +72,35 @@ AI 链路全部接入真实大模型（含 RAG、Agent、流式输出），已�
 
 **AI**：阿里云百炼 DashScope（OpenAI 兼容端点）。主模型 `qwen3.7-flash`（推理模型，先产出思考再落笔正文），
 降级链 `qwen-plus → deepseek-v3 → qwen-turbo`，记忆抽取等后台轻量任务专用 `qwen-turbo`。
+
+---
+
+## AI 架构
+
+**多场景分流**：按场景装配不同的 system prompt 与各自独立的 Pydantic 输出模型，
+而不是用一个万能 prompt 硬扛所有场景——每个场景的提示词模板、输出 schema、校验规则各自独立演进。
+
+**Prompt 版本化**：system prompt 存于 `ai_prompt_template` 表，支持多版本并存与按用户稳定分流（A/B 灰度）。
+换提示词无需改代码发版，库里加一版并置 `active` 即可生效；多条 `active` 并存时按 `user_id` 取模
+**稳定**分流（同一用户始终命中同一版本，体验不横跳、实验数据可比）。
+数据库不可用、场景无模板、查询异常、模板被写坏这四类情况一律**静默回退**代码内置文案——
+prompt 组装不成为可用性故障点。取用时会还原入库时的花括号转义（`{{user_profile}}` → `{user_profile}`），
+否则占位符失效、用户画像会静默丢失。
+
+**LangChain 消息组装**：用 `ChatPromptTemplate` 组装 system + human 分层消息——
+人设、用户画像、冲突循环背景进 system，RAG 检索结果、长期记忆与本次用户输入进 human，
+取代原先全部塞进一条超长 system 的做法（模型更难分清「背景」和「本次要处理的事」）。
+结构化与流式两条出口共用同一份 `system_template`，避免两个 active 版本并存时出现版本分叉。
+
+**RAG**：ChromaDB 向量库，collection `couple_theory`（情侣理论语料），
+embedding 用 DashScope `text-embedding-v4`（1024 维）；检索结果注入 human 消息。
+向量库缺失时 `rag_service` 回退关键词检索，不会阻断请求。
+
+**结构化输出**：Function Calling 承载 Pydantic schema（服务端不支持 `json_schema`），
+配三级降级：`tool_calls` → 约束重试 → prompt 内嵌 JSON。
+
+**流式**：SSE 双通道——`event:thinking` 进「深度思考」折叠面板、`event:delta` 走打字机正文，
+配 2 秒心跳保活，客户端断开即取消上游生成、停止计费。
 
 ---
 
