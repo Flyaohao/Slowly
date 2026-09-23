@@ -19,16 +19,33 @@ def get_all_scenes(db: Session) -> List[AiScene]:
     return db.query(AiScene).all()
 
 
-def get_active_prompt_template(db: Session, scene_key: str) -> Optional[AiPromptTemplate]:
-    return (
+def get_active_prompt_template(
+    db: Session, scene_key: str, user_id: Optional[int] = None
+) -> Optional[AiPromptTemplate]:
+    """取该场景当前生效的 prompt 模板。
+
+    - **单版本场景**：返回 `status=active` 中 version 最高的一条。
+    - **多版本场景（灰度 / A/B 实验）**：在全部 active 版本里按 `user_id` 稳定分流。
+      必须是稳定分流而非随机——同一用户若在不同请求间来回命中不同版本，
+      同一段对话的 prompt 会横跳，体验被污染、实验数据也不可比。
+
+    `user_id` 传 None 或只有一个候选版本时退化为"取最高版本"，
+    与该方法此前的语义完全一致，因此对旧调用方是向后兼容的。
+    """
+    candidates = (
         db.query(AiPromptTemplate)
         .filter(
             AiPromptTemplate.scene_key == scene_key,
             AiPromptTemplate.status == "active",
         )
-        .order_by(AiPromptTemplate.version.desc())
-        .first()
+        .order_by(AiPromptTemplate.version.asc())
+        .all()
     )
+    if not candidates:
+        return None
+    if user_id is None or len(candidates) == 1:
+        return candidates[-1]
+    return candidates[user_id % len(candidates)]
 
 
 def save_prompt_version(

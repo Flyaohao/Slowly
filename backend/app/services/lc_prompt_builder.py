@@ -1,14 +1,20 @@
-"""基于 LangChain 的 Prompt 组装层
+"""基于 LangChain 的 Prompt 组装层（聊天主链路实际使用的实现）
 
 定位
 ----
-与 `prompt_builder.build_prompt()` **保持完全一致的变量契约**
-（user_profile / partner_profile / conflict_pattern / history / rag_context /
-memory_context / user_input），因此两条链路可以逐场景对照、渐进替换。
+本模块是**面向模型的消息（messages）组装唯一实现**：把「人设 + 画像 + 冲突循环 +
+历史对话」放进 system，把「RAG 检索结果 + 长期记忆 + 本次输入」放进 human。
+`prompt_builder.build_prompt() / build_stream_prompt()` 只是把这里产出的消息
+压平成单条字符串的投影，供旧式调用方与单测使用——两者内容同源，不存在第二套拼装逻辑。
 
-LangChain 在这里只承担两件事：
-    1. Prompt 模板化与角色划分（System 承载人设与画像，Human 承载上下文与输入）
-    2. 多轮对话记忆的统一封装
+LangChain 在这里承担三件事：
+
+1. **模板化与变量校验**：`ChatPromptTemplate` 负责占位符解析，
+   缺变量会在组装阶段就报错，而不是把 `{user_profile}` 原样发给模型；
+2. **角色划分**：system 承载人设与画像，human 承载本次输入。
+   从前是把所有内容拼成一条超长 system 字符串，模型难以区分「背景」与「本次要处理的事」；
+3. **多轮记忆的统一封装**（`get_conversation_memory` / `history_to_messages`），
+   供后续把历史从「文本拼接」迁移到「消息列表」时使用。
 
 不侵入业务逻辑：数据库访问、路由、鉴权仍由原有分层负责。
 """
@@ -17,7 +23,11 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.prompts import ChatPromptTemplate
 
-from app.services.prompt_builder import SYSTEM_PROMPTS
+from app.services.prompt_builder import (
+    STREAM_INSTRUCTION,
+    SYSTEM_PROMPTS,
+    truncate_at_json_marker,
+)
 
 try:
     from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -35,32 +45,93 @@ CHAT_SCENES = (
     "cold_war",
     "mediation",
     "letter_understand",
+    "relationship_review",
 )
 
 #: LangChain 消息 type → OpenAI messages role
 _ROLE_MAP = {"system": "system", "human": "user", "ai": "assistant"}
+
+#: 两组出口共用的模板变量
+_SYSTEM_VARS = ("user_profile", "partner_profile", "conflict_pattern", "history")
 
 #: Human 部分：先给检索到的理论上下文与记忆，再给用户输入
 _HUMAN_TEMPLATE = """{rag_context}{memory_context}## 用户输入
 {user_input}"""
 
 
-def build_chat_prompt(scene_key: str) -> ChatPromptTemplate:
-    """按场景构造 ChatPromptTemplate。
+def _render(template: str, variables: Dict[str, Any], role: str = "system") -> str:
+    """用 `ChatPromptTemplate` 渲染单条消息，返回纯文本。
 
-    与旧实现的分工差异：
-        旧版把所有内容拼成**一条**超长 string 交给模型；
-        LangChain 版拆成 system / human 两条消息，角色边界更清晰，
-        模型对「人设与画像」和「本次输入」的区分更准确。
+    变量缺失会抛 `KeyError` / `ValueError`，由调用方决定是否回退——
+    这里不吞异常，因为「模板里出现未知占位符」是需要被看见的信号。
     """
-    if scene_key not in SYSTEM_PROMPTS:
-        scene_key = "private_advisor"
+    prompt = ChatPromptTemplate.from_messages([(role, template)])
+    return prompt.format_messages(**variables)[0].content
 
-    system_template = SYSTEM_PROMPTS[scene_key]
-    return ChatPromptTemplate.from_messages([
-        ("system", system_template),
-        ("human", _HUMAN_TEMPLATE),
-    ])
+
+def build_chat_messages(
+    scene_key: str,
+    user_profile: str,
+    partner_profile: str,
+    conflict_pattern: str,
+    user_input: str,
+    history: str = "",
+    rag_context: str = "",
+    memory_context: str = "",
+    mode: str = "structured",
+    system_template: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """产出可直接发给 LLM 的 messages 列表（OpenAI 兼容格式）。
+
+    `mode`：
+
+    - `"structured"`：system 保留模板尾部的 JSON 字段说明，
+      配合 Function Calling 回填结构化结果；
+    - `"stream"`：在同一处分界点截掉字段说明，换成自然语言输出要求——
+      流式链路下用户读的是正文，不该看到 `summary:` 这类字段名。
+
+    `system_template`：由 `prompt_builder.resolve_system_prompt()` 解析出的、
+    当前对该场景生效的模板（可能来自 DB，支持版本化与 A/B 分流）。
+    传 None 时使用代码内置模板。
+    """
+    base = system_template or SYSTEM_PROMPTS.get(
+        scene_key, SYSTEM_PROMPTS["private_advisor"]
+    )
+    if mode == "stream":
+        base = truncate_at_json_marker(base) + "\n\n" + STREAM_INSTRUCTION
+
+    profile_vars = {
+        "user_profile": user_profile,
+        "partner_profile": partner_profile,
+        "conflict_pattern": conflict_pattern,
+        "history": history,
+    }
+
+    try:
+        system_text = _render(base, profile_vars)
+    except (KeyError, ValueError, IndexError) as exc:
+        # DB 模板里可能混进未知占位符（例如把 {dimensions_data} 写进了对话场景）。
+        # 这种模板一旦渲染失败就会挡掉整轮对话，回退到内置模板是更划算的选择。
+        fallback = SYSTEM_PROMPTS.get(scene_key, SYSTEM_PROMPTS["private_advisor"])
+        if mode == "stream":
+            fallback = truncate_at_json_marker(fallback) + "\n\n" + STREAM_INSTRUCTION
+        system_text = _render(fallback, profile_vars)
+
+    # 上下文块自带尾部分隔，为空时不留多余空行
+    human_text = _render(
+        _HUMAN_TEMPLATE,
+        {
+            "rag_context": (rag_context + "\n\n") if rag_context else "",
+            "memory_context": (memory_context + "\n\n") if memory_context else "",
+            "user_input": user_input,
+        },
+        role="human",
+    )
+
+    return [
+        {"role": "system", "content": system_text},
+        {"role": "user", "content": human_text},
+    ]
 
 
 def build_messages(
@@ -73,31 +144,18 @@ def build_messages(
     rag_context: str = "",
     memory_context: str = "",
 ) -> List[Dict[str, Any]]:
-    """产出可直接发给 LLM 的 messages 列表。
-
-    返回 OpenAI 兼容格式：[{"role": "system"|"user", "content": "..."}]
-    """
-    prompt = build_chat_prompt(scene_key)
-
-    # rag_context / memory_context 需要自带尾部分隔，为空时不留空白
-    rag_block = (rag_context + "\n\n") if rag_context else ""
-    memory_block = (memory_context + "\n\n") if memory_context else ""
-    # history 注入 system，让模型把它当作"已知背景"而非"新输入"
-    system_suffix = ("\n\n## 历史对话\n" + history) if history else ""
-
-    formatted = prompt.format_messages(
+    """`build_chat_messages(mode="structured")` 的别名，保留旧调用方签名。"""
+    return build_chat_messages(
+        scene_key=scene_key,
         user_profile=user_profile,
         partner_profile=partner_profile,
         conflict_pattern=conflict_pattern,
-        history=system_suffix,
-        rag_context=rag_block,
-        memory_context=memory_block,
         user_input=user_input,
+        history=history,
+        rag_context=rag_context,
+        memory_context=memory_context,
+        mode="structured",
     )
-    return [
-        {"role": _ROLE_MAP.get(m.type, "user"), "content": m.content}
-        for m in formatted
-    ]
 
 
 def get_conversation_memory(k: int = 20):

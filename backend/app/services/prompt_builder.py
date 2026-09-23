@@ -1,8 +1,11 @@
 import json
+import logging
 from typing import Optional
 
 from app.schemas.ai_output import inline_json_schema
 from app.services.structured_stream import STRUCTURED_MARKER
+
+logger = logging.getLogger("couple.prompt")
 
 
 SYSTEM_PROMPTS = {
@@ -318,6 +321,114 @@ MEMORY_DISTILL_PROMPT = """你是记忆整理助手。下面是一轮情感沟�
 - memory_text: 一句话陈述（20-40 字，第三人称，不要包含隐私信息）"""
 
 
+#: "请以 JSON 格式回复" 是结构化场景模板的统一分界点，
+#: 流式变体直接在此处截断，把结构化字段说明替换成自然语言要求。
+_JSON_MARKER = "请以 JSON 格式回复"
+
+#: 流式变体追加的自然语言输出要求（与结构化字段说明互斥）
+STREAM_INSTRUCTION = """## 输出格式（重要）
+请直接用简体中文、以 Markdown 分段的形式回复用户，像面对面咨询那样自然表达。
+不要输出 JSON、不要输出字段名、不要提及"结构化输出"。
+把上述各要点融合成连贯的建议：先共情安抚，再分析对方可能的心态，然后给出可以直接使用的回复话术，最后提醒要避免的表达。
+控制在 300 字以内，段落之间换行分隔，"可以直接说的话"用短横线列出。"""
+
+
+def truncate_at_json_marker(template: str) -> str:
+    """把结构化 system 模板裁到「请以 JSON 格式回复」之前。
+
+    结构化模板尾部那段字段清单只对 Function Calling 有意义；流式链路要的是
+    一段自然语言，必须在同一处分界点截断，否则用户会读到「summary: …」这类
+    字段名。本模块的文本投影与 `lc_prompt_builder` 的消息组装共用这一处实现，
+    避免同一条分界规则写两遍、日后分叉。
+    """
+    cut = template.find(_JSON_MARKER)
+    return template[:cut].rstrip() if cut != -1 else template.rstrip()
+
+
+def messages_to_text(messages) -> str:
+    """把 system / human 分层消息压平成单条文本（用于留档与人工对照）。"""
+    return "\n\n".join(m.get("content", "") for m in messages)
+
+
+def resolve_system_prompt(
+    scene_key: str,
+    db=None,
+    user_id: Optional[int] = None,
+) -> str:
+    """解析该场景此刻真正生效的 system prompt 文本。
+
+    取值优先级：
+
+    1. `ai_prompt_template` 表中该场景 `status=active` 的模板。
+       多个 active 版本并存时，由 `ai_repo.get_active_prompt_template` 按
+       `user_id` 稳定分流——这就是「prompt 版本化 / A/B 灰度」的落地方式：
+       换提示词不必改代码、不必重新发版，在库里加一版并置 active 即可。
+    2. 代码内置的 `SYSTEM_PROMPTS[scene_key]`。
+
+    两个必须成立的约束：
+
+    - **DB 侧任何异常都静默回退静态模板**。prompt 组装是模型调用的前置步骤，
+      不允许成为可用性故障点——库连不上时用户仍应拿到完整回答。
+    - **模板必须还原花括号转义**。入库时按存储约定把 `{user_profile}` 写成
+      `{{user_profile}}`（见 `scripts/seed_ai_scenes.py`），取用时不还原的话
+      `.format()` 只会得到字面量的双花括号，占位符全部失效、画像静默丢失。
+      同理，还原后若连 `{user_profile}` 都不含，说明这条模板被写坏了
+      （例如误把渲染后的成品存进去），此时回退内置模板比硬用更安全。
+    """
+    fallback = SYSTEM_PROMPTS.get(scene_key, SYSTEM_PROMPTS["private_advisor"])
+    if db is None:
+        return fallback
+
+    try:
+        from app.repositories import ai_repo
+
+        template = ai_repo.get_active_prompt_template(db, scene_key, user_id=user_id)
+    except Exception as exc:  # noqa: BLE001 —— 退化为静态模板即可，不该影响主链路
+        logger.warning("[PROMPT] 读取 DB 模板失败，回退内置模板 scene=%s: %s", scene_key, exc)
+        return fallback
+
+    if not template or not (template.template_content or "").strip():
+        return fallback
+
+    text = template.template_content.replace("{{", "{").replace("}}", "}")
+    if "{user_profile}" not in text:
+        logger.warning(
+            "[PROMPT] DB 模板缺少 {user_profile} 占位符，回退内置模板 scene=%s version=%s",
+            scene_key, getattr(template, "version", "?"),
+        )
+        return fallback
+
+    logger.info(
+        "[PROMPT] 采用 DB 模板 scene=%s version=%s user=%s",
+        scene_key, getattr(template, "version", "?"), user_id,
+    )
+    return text
+
+
+def _chat_messages(scene_key, user_profile, partner_profile, conflict_pattern,
+                   user_input, history, rag_context, memory_context,
+                   system_template, mode):
+    """延迟导入并转调 `lc_prompt_builder`。
+
+    本模块不能顶层 import `lc_prompt_builder`——后者要 import 本模块的
+    `SYSTEM_PROMPTS` 与 `truncate_at_json_marker`，顶层互引会成环。
+    """
+    from app.services.lc_prompt_builder import build_chat_messages
+
+    return build_chat_messages(
+        scene_key=scene_key,
+        user_profile=user_profile,
+        partner_profile=partner_profile,
+        conflict_pattern=conflict_pattern,
+        user_input=user_input,
+        history=history,
+        rag_context=rag_context,
+        memory_context=memory_context,
+        mode=mode,
+        system_template=system_template,
+    )
+
+
 def build_prompt(
     scene_key: str,
     user_profile: str,
@@ -327,36 +438,20 @@ def build_prompt(
     history: str,
     rag_context: str = "",
     memory_context: str = "",
+    system_template: Optional[str] = None,
 ) -> str:
-    template = SYSTEM_PROMPTS.get(scene_key, SYSTEM_PROMPTS["private_advisor"])
+    """结构化 Prompt 的**文本形态**。
 
-    prompt = template.format(
-        user_profile=user_profile,
-        partner_profile=partner_profile,
-        conflict_pattern=conflict_pattern,
-        history=history,
-    )
-
-    if memory_context:
-        prompt += "\n\n" + memory_context
-
-    if rag_context:
-        prompt += "\n\n" + rag_context
-
-    prompt += f"\n\n## 用户输入\n{user_input}"
-
-    return prompt
-
-
-#: "请以 JSON 格式回复" 是结构化场景模板的统一分界点，
-#: 流式变体直接在此处截断，把结构化字段说明替换成自然语言要求。
-_JSON_MARKER = "请以 JSON 格式回复"
-
-_STREAM_INSTRUCTION = """## 输出格式（重要）
-请直接用简体中文、以 Markdown 分段的形式回复用户，像面对面咨询那样自然表达。
-不要输出 JSON、不要输出字段名、不要提及"结构化输出"。
-把上述各要点融合成连贯的建议：先共情安抚，再分析对方可能的心态，然后给出可以直接使用的回复话术，最后提醒要避免的表达。
-控制在 300 字以内，段落之间换行分隔，"可以直接说的话"用短横线列出。"""
+    主链路向模型提交的是 system / human 分层消息
+    （`lc_prompt_builder.build_chat_messages`）；本函数把同一份消息压平成一条
+    字符串，供仍按「单条 prompt」调用的场景、单测与人工对照使用。
+    两者内容同源——压平不会有第二套拼装逻辑，因此不存在漂移风险。
+    """
+    return messages_to_text(_chat_messages(
+        scene_key, user_profile, partner_profile, conflict_pattern,
+        user_input, history, rag_context, memory_context,
+        system_template, "structured",
+    ))
 
 
 def build_stream_prompt(
@@ -368,8 +463,9 @@ def build_stream_prompt(
     history: str,
     rag_context: str = "",
     memory_context: str = "",
+    system_template: Optional[str] = None,
 ) -> str:
-    """流式变体 Prompt：与 `build_prompt` 同源，仅把结构化 JSON 要求换成自然语言要求。
+    """流式变体 Prompt 的文本形态（`build_prompt` 的自然语言版）。
 
     为什么需要两个版本：
     - 结构化输出依赖 Function Calling，模型必须一次性回填完整 JSON，
@@ -378,29 +474,11 @@ def build_stream_prompt(
       落库时再把正文与风险等级一起写入 structured_output，
       保证流式与非流式的历史记录结构一致。
     """
-    base = SYSTEM_PROMPTS.get(scene_key, SYSTEM_PROMPTS["private_advisor"])
-
-    cut = base.find(_JSON_MARKER)
-    if cut != -1:
-        base = base[:cut].rstrip()
-
-    prompt = base.format(
-        user_profile=user_profile,
-        partner_profile=partner_profile,
-        conflict_pattern=conflict_pattern,
-        history=history,
-    )
-
-    if memory_context:
-        prompt += "\n\n" + memory_context
-
-    if rag_context:
-        prompt += "\n\n" + rag_context
-
-    prompt += f"\n\n## 用户输入\n{user_input}"
-    prompt += "\n\n" + _STREAM_INSTRUCTION
-
-    return prompt
+    return messages_to_text(_chat_messages(
+        scene_key, user_profile, partner_profile, conflict_pattern,
+        user_input, history, rag_context, memory_context,
+        system_template, "stream",
+    ))
 
 
 def build_structured_stream_prompt(

@@ -12,14 +12,15 @@ from app.repositories import (
 )
 from app.schemas.ai_output import RewriteOutput, ReviewOutput
 from app.services.prompt_builder import (
-    build_prompt,
-    build_stream_prompt,
     build_structured_stream_prompt,
     build_profile_report_prompt,
     build_dual_summary_prompt,
     build_practice_summary_prompt,
     build_memory_card_prompt,
+    messages_to_text,
+    resolve_system_prompt,
 )
+from app.services.lc_prompt_builder import build_chat_messages
 from app.services.scene_router import get_scene_config
 # 循环导入注意：ai_generation_service 也会 import 本模块的辅助函数，
 # 不能放模块顶层，prepare_* 内部再导入。
@@ -126,12 +127,25 @@ def _preprocess(
         rag_context=rag_context,
         memory_context=memory_context,
     )
-    # 同一份上下文，两种出口：结构化 JSON 版 / 自然语言流式版
-    prompt = build_prompt(**prompt_args)
-    stream_prompt = build_stream_prompt(**prompt_args)
+    # prompt 版本化：优先取 DB 中该场景 active 的模板（多版本时按 user_id 稳定分流），
+    # 取不到才回退代码内置文案。结构化与流式两条出口共用同一份模板——
+    # 若各解析一次，两个 active 版本并存时可能出现「结构化用 v2、流式用 v1」的分叉。
+    system_template = resolve_system_prompt(scene_key, db=db, user_id=user_id)
+    # 同一份上下文，两种出口：结构化 JSON 版 / 自然语言流式版。
+    # 二者都由 LangChain 组装成 system + human 分层消息（见 lc_prompt_builder）：
+    # 人设与画像进 system，检索上下文、长期记忆与本次输入进 human。
+    messages = build_chat_messages(
+        **prompt_args, mode="structured", system_template=system_template
+    )
+    stream_messages = build_chat_messages(
+        **prompt_args, mode="stream", system_template=system_template
+    )
 
     ai_repo.create_message(db, session_id, "user", user_input)
-    ai_repo.save_prompt_version(db, user_id, relation_id, scene_key, prompt)
+    # 留档用压平后的文本，便于直接读「这一轮到底给模型看了什么」
+    ai_repo.save_prompt_version(
+        db, user_id, relation_id, scene_key, messages_to_text(messages)
+    )
 
     # 必须在此提交，不能留到调用方：
     # 流式端点会先带着这份数据返回 StreamingResponse，请求级 db 随即被销毁，
@@ -143,8 +157,8 @@ def _preprocess(
         "session": session,
         "session_id": session_id,
         "scene": scene,
-        "prompt": prompt,
-        "stream_prompt": stream_prompt,
+        "messages": messages,
+        "stream_messages": stream_messages,
         "user_input": user_input,
         "rag_chunks": rag_chunks,
     }
@@ -178,7 +192,7 @@ def chat(
     session = ctx["session"]
     session_id = ctx["session_id"]
 
-    ai_response = _call_llm(ctx["prompt"], scene_key)
+    ai_response = _call_llm(ctx["messages"], scene_key)
 
     # `_call_llm` 已经过 `llm.invoke_structured()` 的 Pydantic 强校验
     # （字段名、类型、枚举都在那里定死），因此这里直接落库即可。
@@ -258,7 +272,7 @@ def prepare_chat(
         "session_id": ctx["session_id"],
         "scene_key": scene_key,
         "scene_name": ctx["scene"].name,
-        "stream_prompt": ctx["stream_prompt"],
+        "stream_messages": ctx["stream_messages"],
         "rag_hit": len(ctx["rag_chunks"]),
         # 记忆沉淀需要在响应体阶段（请求级 db 已销毁）用独立会话写库，
         # 故这里把落库所需的三个基本类型一并拍平带过去。
@@ -269,16 +283,21 @@ def prepare_chat(
 
 
 def _stream_with_heartbeat(
-    prompt: str, scene_key: str, interval: float = HEARTBEAT_INTERVAL
+    messages: List[Dict[str, Any]],
+    scene_key: str,
+    interval: float = HEARTBEAT_INTERVAL,
 ) -> Iterator[Optional[Tuple[str, str]]]:
     """产出 `(kind, text)` 增量，静默期产出 `None` 作为心跳信号。
 
     真正的实现在 `app.services.sse.stream_with_heartbeat`（心跳机制、取消信号、
-    后台线程的说明都在那边），这里只做一层「单条 system prompt」的适配，
-    免得每个调用方都手写一遍消息结构。
+    后台线程的说明都在那边），这里只做一层「消息列表 + 采样参数」的适配，
+    免得每个调用方都手写一遍。
+
+    `messages` 由 `lc_prompt_builder.build_chat_messages` 组装（system 承载人设
+    与画像，human 承载检索上下文、长期记忆与本次输入）。
     """
     return stream_with_heartbeat(
-        [{"role": "system", "content": prompt}],
+        messages,
         scene_key,
         temperature=0.7,
         max_tokens=1200,
@@ -332,7 +351,7 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
     buffer: List[str] = []
     thinking_buffer: List[str] = []
     try:
-        for item in _stream_with_heartbeat(prepared["stream_prompt"], prepared["scene_key"]):
+        for item in _stream_with_heartbeat(prepared["stream_messages"], prepared["scene_key"]):
             if item is None:
                 # 兜底保活：模型连推理都不吐时，用注释帧证明连接还活着
                 yield {"comment": "keep-alive"}
@@ -677,16 +696,23 @@ def _format_profile(profile, scores: Dict[str, float]) -> str:
     return f"依恋类型: {ptype}, 置信度: {profile.confidence}, 维度分数: [{dims_str}]"
 
 
-def _call_llm(prompt: str, scene_key: str) -> dict:
+def _call_llm(prompt: Any, scene_key: str) -> dict:
     """调用真实大模型，返回结构化结果字典。
 
     函数签名与返回值结构保持与旧版占位实现完全一致，
     因此 `letter_ai_service` / `mediation_service` 无需改动即可受益。
 
+    `prompt` 兼容两种入参：
+
+    - **消息列表**（`[{role, content}, …]`）：聊天主链路走这条，
+      由 `lc_prompt_builder.build_chat_messages` 组装成 system + human 分层。
+    - **单条字符串**：信件解读/改写、调解等自行拼装 prompt 的场景沿用，
+      内部包成一条 system 消息——与该函数此前的行为逐字节一致。
+
     实现路径：
-        prompt → llm.invoke_structured()（Function Calling 承载 Pydantic Schema）
-              → 拿到强校验后的输出模型
-              → model_dump() 展平成 dict，并补一个人类可读的 raw_text 供会话历史展示
+        messages → llm.invoke_structured()（Function Calling 承载 Pydantic Schema）
+                 → 拿到强校验后的输出模型
+                 → model_dump() 展平成 dict，并补一个人类可读的 raw_text 供会话历史展示
 
     任何异常都不会向上抛，而是返回降级文案，保证对话不中断。
     """
@@ -694,7 +720,11 @@ def _call_llm(prompt: str, scene_key: str) -> dict:
         logger.warning("[AI] 未配置 AI_API_KEY，返回降级回复 scene=%s", scene_key)
         return _degraded_response("AI 服务尚未配置，请联系管理员")
 
-    messages = [{"role": "system", "content": prompt}]
+    messages = (
+        [{"role": "system", "content": prompt}]
+        if isinstance(prompt, str)
+        else list(prompt)
+    )
     try:
         result = llm.invoke_structured(messages, scene=scene_key)
     except LlmError as exc:
