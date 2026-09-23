@@ -160,13 +160,14 @@ def case_audit():
 def case_rate_limit():
     print("\n[5] 限流配置与用户键")
     from app.core import config
-    from app.core.limiter import get_request_key, limiter
+    from app.core.limiter import ai_limit, get_request_key, limiter
     from app.security.jwt import create_access_token
 
     check("默认限流值为 20/hour", config.AI_RATE_LIMIT == "20/hour", config.AI_RATE_LIMIT)
 
-    from app.api.v1.couple.ai import _ai_limit
-    check("开启时返回真装饰器", _ai_limit() is not None and hasattr(_ai_limit(), "__call__"))
+    # 装饰器工厂来自 app.core.limiter（couple/single/questionnaires 各路由共用同一份），
+    # 不存在按模块拆分的 _ai_limit
+    check("开启时返回真装饰器", ai_limit() is not None and hasattr(ai_limit(), "__call__"))
 
     token = create_access_token(7)
 

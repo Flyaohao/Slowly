@@ -364,12 +364,12 @@ google-services.json
 # Spec & design documents
 spec/
 
-# Deploy script & artifacts
-deploy_update.py
-deploy_*.py
-deploy_*.sh
-deploy_*.zip
-deploy_*.tar.gz
+# Deploy script & artifacts（仅锚定仓库根目录，不能误伤 deploy/ 目录）
+/deploy_update.py
+/deploy_*.py
+/deploy_*.sh
+/deploy_*.zip
+/deploy_*.tar.gz
 backend_upload.zip
 # 一次性部署验证脚本（含服务器巡检/流式探测，不进仓库）
 verify_stream.py
@@ -401,6 +401,10 @@ package-lock.json
 
 # ---- 本地 IDE / 工具配置 ----
 .claude/
+
+# ---- 必须入库的构建产物：Gradle wrapper（缺失则克隆后 ./gradlew 无法运行）----
+# 必须放在 *.jar 规则之后，gitignore 后者覆盖前者
+!android/gradle/wrapper/gradle-wrapper.jar
 
 # ---- 内部文档：只在本地保留，不进公开仓库 ----
 # README.md 是仓库门面，显式放行；其余根目录 .md（设计/核对/工作计划）
