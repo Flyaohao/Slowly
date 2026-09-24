@@ -16,6 +16,9 @@ import sys
 import time
 from datetime import datetime, timedelta
 
+# 测试隔离：prepare_chat/_preprocess 链路可能触发 distill 后台线程写库
+os.environ["COUPLE_DISABLE_MEMORY_DISTILL"] = "1"
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 FAILURES = []

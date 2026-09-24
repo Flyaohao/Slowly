@@ -17,6 +17,11 @@ import sys
 import threading
 import time
 
+# 测试隔离：流式落库会触发 distill_in_background 的 daemon 线程真调模型，
+# 线程在进程退出后才写 ai_memory，用例清理抓不到 → 污染开发库。
+# 必须在 import app 之前设好（app 加载即绑定 memory_service）。
+os.environ["COUPLE_DISABLE_MEMORY_DISTILL"] = "1"
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import httpx  # noqa: E402
@@ -24,7 +29,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.core.database import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models.ai import AiChatMessage  # noqa: E402
+from app.models.ai import AiChatMessage, AiChatSession  # noqa: E402
 from app.models.couple_relation import CoupleRelation  # noqa: E402
 from app.security.jwt import create_access_token  # noqa: E402
 from app.services.prompt_builder import build_prompt, build_stream_prompt  # noqa: E402
@@ -208,7 +213,32 @@ def check_http_layer(user_id: int, base_url: str, label: str, use_asgi: bool) ->
         "ok": ok, "total": total, "ttft": first_delta_at,
         "first_visible": first_visible_at, "thinking_count": len(thinkings),
         "content": content, "done": done, "delta_count": len(deltas),
+        # 供 main() 的 finally 清理本次创建的会话（含其消息）
+        "session_id": (meta.get("data") or {}).get("session_id") if meta else None,
     }
+
+
+def cleanup_sessions(session_ids) -> None:
+    """删掉本次用例创建的 ai_chat_message + ai_chat_session，避免污染开发库。"""
+    ids = [sid for sid in session_ids if sid]
+    if not ids:
+        return
+    db = SessionLocal()
+    try:
+        n_msg = (
+            db.query(AiChatMessage)
+            .filter(AiChatMessage.session_id.in_(ids))
+            .delete(synchronize_session=False)
+        )
+        n_sess = (
+            db.query(AiChatSession)
+            .filter(AiChatSession.id.in_(ids))
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        print("  [清理] 会话 %s：message×%d session×%d" % (ids, n_msg, n_sess))
+    finally:
+        db.close()
 
 
 def start_local_server(user_id: int):
@@ -275,44 +305,53 @@ def main() -> int:
     print("测试用户: user_id=%d（active 情侣关系中的一方）" % user_id)
 
     results = []
-
-    prompt_ok = check_prompt_layer()
-    results.append(("A. Prompt 层", prompt_ok))
-
-    asgi = check_http_layer(user_id, "", "B. 协议层（ASGI 直连）", use_asgi=True)
-    results.append(("B. 协议层", asgi.get("ok", False)))
+    created_sessions = []
 
     try:
-        server, base = start_local_server(user_id)
-        tcp = check_http_layer(user_id, base, "C. 真流式（真实 TCP）", use_asgi=False)
-        results.append(("C. 真流式", tcp.get("ok", False)))
-        ttft, total = tcp.get("ttft"), tcp.get("total")
-        visible = tcp.get("first_visible")
-        if total:
-            if ttft:
-                print("\n  ⏱ 真实 TCP 下的关键指标：正文首字 %.2fs / 整体 %.2fs = %.0f%%"
-                      % (ttft, total, ttft / total * 100))
-            if visible:
-                print("     首个可见反馈 %.2fs / 整体 %.2fs = %.0f%%（thinking 帧 %d 帧）"
-                      % (visible, total, visible / total * 100, tcp.get("thinking_count", 0)))
-        # 门槛改为"首个可见反馈"而非"正文首字"：用户感知的是屏幕上什么时候有东西，
-        # 不是正文什么时候开始。推理模型的思考帧约 0.5s 就到，正文首字 18s+ 是模型固有
-        # 特性、改不了也不该由这条用例来卡。正文首字仍然打印出来记录在案。
-        if visible and total:
-            results.append(("C2. 首个可见反馈显著早于整体（<60%）", visible / total < 0.6))
-        elif ttft and total:
-            results.append(("C2. 首个可见反馈显著早于整体（<60%）", ttft / total < 0.6))
-        server.should_exit = True
-        time.sleep(0.5)
-    except Exception as exc:
-        print("\n  ⚠️ 真实 TCP 验证跳过：%s" % exc)
+        prompt_ok = check_prompt_layer()
+        results.append(("A. Prompt 层", prompt_ok))
 
-    persist_ok = False
-    if asgi.get("done"):
-        persist_ok = check_persistence(
-            asgi["done"]["data"].get("message_id", 0), asgi.get("content", "")
-        )
-    results.append(("D. 落库", persist_ok))
+        asgi = check_http_layer(user_id, "", "B. 协议层（ASGI 直连）", use_asgi=True)
+        results.append(("B. 协议层", asgi.get("ok", False)))
+        if asgi.get("session_id"):
+            created_sessions.append(asgi["session_id"])
+
+        try:
+            server, base = start_local_server(user_id)
+            tcp = check_http_layer(user_id, base, "C. 真流式（真实 TCP）", use_asgi=False)
+            results.append(("C. 真流式", tcp.get("ok", False)))
+            if tcp.get("session_id"):
+                created_sessions.append(tcp["session_id"])
+            ttft, total = tcp.get("ttft"), tcp.get("total")
+            visible = tcp.get("first_visible")
+            if total:
+                if ttft:
+                    print("\n  ⏱ 真实 TCP 下的关键指标：正文首字 %.2fs / 整体 %.2fs = %.0f%%"
+                          % (ttft, total, ttft / total * 100))
+                if visible:
+                    print("     首个可见反馈 %.2fs / 整体 %.2fs = %.0f%%（thinking 帧 %d 帧）"
+                          % (visible, total, visible / total * 100, tcp.get("thinking_count", 0)))
+            # 门槛改为"首个可见反馈"而非"正文首字"：用户感知的是屏幕上什么时候有东西，
+            # 不是正文什么时候开始。推理模型的思考帧约 0.5s 就到，正文首字 18s+ 是模型固有
+            # 特性、改不了也不该由这条用例来卡。正文首字仍然打印出来记录在案。
+            if visible and total:
+                results.append(("C2. 首个可见反馈显著早于整体（<60%）", visible / total < 0.6))
+            elif ttft and total:
+                results.append(("C2. 首个可见反馈显著早于整体（<60%）", ttft / total < 0.6))
+            server.should_exit = True
+            time.sleep(0.5)
+        except Exception as exc:
+            print("\n  ⚠️ 真实 TCP 验证跳过：%s" % exc)
+
+        persist_ok = False
+        if asgi.get("done"):
+            persist_ok = check_persistence(
+                asgi["done"]["data"].get("message_id", 0), asgi.get("content", "")
+            )
+        results.append(("D. 落库", persist_ok))
+    finally:
+        # 验收③：本次创建的 session/message 必须清掉，别只清 ai_memory
+        cleanup_sessions(created_sessions)
 
     print("\n" + "=" * 72)
     print("汇总")

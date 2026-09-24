@@ -18,6 +18,9 @@ P0-5 验收（非流式）：/ai/chat 响应含 evidence，三块依据非空。
 import os
 import sys
 
+# 测试隔离：chat() 会触发 distill_in_background 真调模型写库，进程退出后才落
+os.environ["COUPLE_DISABLE_MEMORY_DISTILL"] = "1"
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 FAILURES = []

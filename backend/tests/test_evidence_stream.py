@@ -16,6 +16,9 @@ _stream_with_heartbeat 与 _persist_streamed_message。
 import os
 import sys
 
+# 测试隔离：防 persist 路径触发 distill 后台线程写库（本用例虽 mock persist，统一设上）
+os.environ["COUPLE_DISABLE_MEMORY_DISTILL"] = "1"
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 FAILURES = []

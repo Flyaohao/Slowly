@@ -1,4 +1,5 @@
 import logging
+import os
 import threading
 from typing import Optional, List, Dict
 from datetime import datetime
@@ -338,7 +339,13 @@ def distill_in_background(
 
     必须在**请求级会话之外**调用（流式链路的响应体是在请求会话销毁之后
     才被消费的），因此这里自己开 SessionLocal。
+
+    测试隔离：`COUPLE_DISABLE_MEMORY_DISTILL=1` 时直接 return——
+    daemon 线程在测试进程退出后才落库，用例 finally 抓不到，会污染开发库。
+    默认不设该变量，线上行为零变化。
     """
+    if os.getenv("COUPLE_DISABLE_MEMORY_DISTILL") == "1":
+        return None
     if not llm.api_key:
         return None
     if len((user_input or "").strip()) < _MIN_INPUT_LEN:
