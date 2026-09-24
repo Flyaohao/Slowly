@@ -10,7 +10,7 @@ from sqlalchemy import and_
 from app.models.ai import AiMemory
 from app.core.config import AI_MEMORY_MODEL
 from app.services.llm_client import llm, LlmClient, LlmError
-from app.services.prompt_builder import MEMORY_DISTILL_PROMPT
+from app.services.prompt_builder import MEMORY_DISTILL_PROMPT, SESSION_SUMMARY_PROMPT
 
 logger = logging.getLogger("couple.memory")
 
@@ -367,5 +367,90 @@ def distill_in_background(
 
     threading.Thread(
         target=_worker, name="ai-memory-distill", daemon=True
+    ).start()
+    return None
+
+
+def distill_session_summary_in_background(
+    session_id: int,
+    user_id: int,
+    relation_id: int,
+    scene_key: str,
+) -> None:
+    """P0-10A 改动七：会话归档后蒸馏 ≤120 字叙事摘要写入 ai_memory。
+
+    - memory_type="session_summary"、visibility="private"（合法枚举仅 private/couple）
+    - relation_id 必传（NOT NULL）
+    - **不做 embedding**（P0-4 --backfill 负责；本路径直插 AiMemory，不走
+      create_memory 的向量化挂钩）
+    - 复用 distill_llm（qwen-turbo）与 distill_in_background 同款开关/线程纪律
+    - 默认不设开关 → 线上行为不变
+    """
+    if os.getenv("COUPLE_DISABLE_MEMORY_DISTILL") == "1":
+        return None
+    if not distill_llm.api_key:
+        return None
+
+    def _worker():
+        from app.core.database import SessionLocal
+        from app.models.ai import AiChatMessage
+
+        db = SessionLocal()
+        try:
+            msgs = (
+                db.query(AiChatMessage)
+                .filter(AiChatMessage.session_id == session_id)
+                .order_by(AiChatMessage.created_at.asc())
+                .all()
+            )
+            if not msgs:
+                return
+            conversation = "\n".join(
+                "%s: %s" % (m.role, (m.content or "")[:500]) for m in msgs
+            )[:6000]
+            raw = distill_llm.invoke(
+                [
+                    {
+                        "role": "user",
+                        "content": SESSION_SUMMARY_PROMPT.format(
+                            conversation=conversation
+                        ),
+                    }
+                ],
+                scene="session_summary",
+                temperature=0.3,
+                max_tokens=200,
+            )
+            summary = (raw or "").strip()
+            if not summary:
+                return
+            if len(summary) > 120:
+                summary = summary[:119] + "…"
+            # 直插：绕过 create_memory 的 vectorize 挂钩（约束：本路径不做 embedding）
+            # 也不做字面去重——session_summary 每段会话一条，天然不重复
+            row = AiMemory(
+                user_id=user_id,
+                relation_id=relation_id,
+                memory_type="session_summary",
+                memory_text=summary,
+                visibility="private",
+            )
+            db.add(row)
+            db.commit()
+            logger.info(
+                "[MEMORY] 会话摘要已沉淀 session=%s len=%d",
+                session_id,
+                len(summary),
+            )
+        except Exception:
+            logger.exception(
+                "[MEMORY] 会话摘要蒸馏失败 session=%s", session_id
+            )
+            db.rollback()
+        finally:
+            db.close()
+
+    threading.Thread(
+        target=_worker, name="session-summary", daemon=True
     ).start()
     return None

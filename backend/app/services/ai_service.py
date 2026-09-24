@@ -1,4 +1,7 @@
 import logging
+import os
+import threading
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 from typing import Any, Dict, Iterator, List, Optional, Tuple
@@ -43,6 +46,51 @@ from app.services.llm_client import llm, LlmError
 from app.services.sse import HEARTBEAT_INTERVAL, stream_with_heartbeat
 
 logger = logging.getLogger("couple.ai")
+
+#: 分段阈值（手册 D1）：距上一条消息超过 6 小时 / 会话累计 token 超 6000
+SESSION_TIMEOUT = timedelta(hours=6)
+SESSION_BUDGET_TOKENS = 6000
+
+
+def should_start_new_session(session, scene_key: str, now: datetime) -> Optional[str]:
+    """返回分段原因，None 表示可续接。按优先级自上而下判定（P0-10A 改动四）。
+
+    1. session 为 None 或 status != 'active' → "archived"
+    2. scene_key 不一致 → "scene_switch"
+    3. now - last_message_at > 6h → "timeout"
+    4. token_total > 6000 → "budget"
+    5. 否则 None（可续接）
+    """
+    if session is None or getattr(session, "status", "active") != "active":
+        return "archived"
+    if session.scene_key != scene_key:
+        return "scene_switch"
+    last = getattr(session, "last_message_at", None) or getattr(session, "created_at", None)
+    if last is not None and now - last > SESSION_TIMEOUT:
+        return "timeout"
+    if (getattr(session, "token_total", 0) or 0) > SESSION_BUDGET_TOKENS:
+        return "budget"
+    return None
+
+
+def _archive_session_with_summary(
+    db: Session, session, reason: str, user_id: int, relation_id: int
+) -> None:
+    """归档旧会话并异步沉淀 session_summary（改动七）。只归档不报错。"""
+    try:
+        ai_repo.archive_session(db, session.id, reason)
+    except Exception:
+        logger.exception("[SESSION] 归档失败 id=%s", session.id)
+        return
+    # 后台蒸馏：不持请求级 db；开关与记忆抽取同一变量（测试隔离）
+    from app.services.memory_service import distill_session_summary_in_background
+
+    distill_session_summary_in_background(
+        session_id=session.id,
+        user_id=user_id,
+        relation_id=relation_id,
+        scene_key=session.scene_key,
+    )
 
 
 def _preprocess(
@@ -96,17 +144,47 @@ def _preprocess(
     if couple_prof:
         conflict_pattern = couple_prof.conflict_pattern
 
-    if not session_id:
-        scene_config = get_scene_config(scene_key)
-        privacy = scene_config.get("privacy_level", "private")
-        session = ai_repo.create_session(
-            db, user_id, relation_id, scene_key, title=scene.name, privacy_level=privacy
-        )
-        session_id = session.id
-    else:
+    # ---- P0-10A 改动四：分段 / 续接（服务端权威）----
+    now = datetime.now()
+    session = None
+    segment_reason: Optional[str] = None
+
+    if session_id:
         session = ai_repo.get_session_by_id(db, session_id)
         if not session or session.user_id != user_id:
             raise ValueError("50002")
+        # 显式传入：归属校验后照旧使用；scene 不一致 → 按分段处理（修切场景串味）
+        if session.scene_key != scene_key or session.status != "active":
+            reason = (
+                "scene_switch" if session.scene_key != scene_key else "archived"
+            )
+            _archive_session_with_summary(db, session, reason, user_id, relation_id)
+            segment_reason = reason
+            session = None
+    else:
+        active = ai_repo.get_active_session(db, user_id, relation_id, scene_key)
+        if active is not None:
+            reason = should_start_new_session(active, scene_key, now)
+            if reason is None:
+                session = active  # 续接
+            else:
+                _archive_session_with_summary(db, active, reason, user_id, relation_id)
+                segment_reason = reason
+                session = None
+
+    if session is None:
+        scene_config = get_scene_config(scene_key)
+        privacy = scene_config.get("privacy_level", "private")
+        session = ai_repo.create_session(
+            db,
+            user_id,
+            relation_id,
+            scene_key,
+            title=scene.name,
+            privacy_level=privacy,
+            segment_reason=segment_reason,
+        )
+    session_id = session.id
 
     history = ai_repo.get_messages_by_session(db, session_id)
     recent_history = history[-20:] if len(history) > 20 else history
@@ -280,6 +358,16 @@ def chat(
 
     session.title = session.title or scene.name
     db.commit()
+
+    # P0-10A 改动六：第 1 轮回答落库后异步生成 ≤12 字标题
+    if (session.message_count or 0) <= 2:
+        _schedule_session_title(
+            session_id=session_id,
+            user_text=ctx["user_input"],
+            assistant_text=assistant_msg.content,
+            scene_name=scene.name,
+            scene_key=scene_key,
+        )
 
     # 记忆沉淀：由模型判断本轮是否含值得长期记住的信息，写进 AiMemory。
     # 放后台线程 + 独立会话，既不占用本次响应时间，也不受请求级会话销毁影响。
@@ -532,6 +620,19 @@ def _persist_streamed_message(
             risk_level=risk_level,
         )
         db.commit()
+        # P0-10A 改动六：流式链路同样在第 1 轮回答后生成标题
+        from app.models.ai import AiChatSession as _Sess
+
+        sess = db.query(_Sess).filter(_Sess.id == session_id).first()
+        if sess is not None and (sess.message_count or 0) <= 2:
+            scene = ai_repo.get_scene_by_key(db, scene_key)
+            _schedule_session_title(
+                session_id=session_id,
+                user_text=user_input,
+                assistant_text=content,
+                scene_name=scene.name if scene else scene_key,
+                scene_key=scene_key,
+            )
         # 记忆沉淀同样走后台线程 + 独立会话：本函数所在阶段请求级 db 已经销毁，
         # 不能复用这里的 db 之外的任何会话。
         if user_id and relation_id:
@@ -637,9 +738,120 @@ def get_sessions(db: Session, user_id: int) -> List[dict]:
             "privacy_level": s.privacy_level,
             "created_at": s.created_at,
             "updated_at": s.updated_at,
+            # P0-10A：列表可展示会话边界信息（向后兼容，老客户端忽略新字段）
+            "status": s.status,
+            "message_count": s.message_count or 0,
+            "last_message_at": s.last_message_at,
+            "segment_reason": s.segment_reason,
         }
         for s in sessions
     ]
+
+
+def get_active_session_info(
+    db: Session, user_id: int, relation_id: int, scene_key: str
+) -> Dict[str, Any]:
+    """GET /ai/sessions/active 的服务层（P0-10A 改动五）。
+
+    resumable=true  → 可直接续接
+    resumable=false 且 session_id 非空 → 返回「最近一段」供展示
+                     （超时/超预算，客户端提示上次聊到…继续还是新开）
+    session_id=null → 该 scope 无 active 会话
+    """
+    session = ai_repo.get_active_session(db, user_id, relation_id, scene_key)
+    if session is None:
+        return {
+            "session_id": None,
+            "title": None,
+            "message_count": 0,
+            "last_message_at": None,
+            "resumable": False,
+        }
+    reason = should_start_new_session(session, scene_key, datetime.now())
+    # get_active_session 已按 scene_key + status=active 过滤，
+    # 此处 reason 只可能是 None / timeout / budget
+    return {
+        "session_id": session.id,
+        "title": session.title,
+        "message_count": session.message_count or 0,
+        "last_message_at": (
+            session.last_message_at.isoformat() if session.last_message_at else None
+        ),
+        "resumable": reason is None,
+    }
+
+
+def _schedule_session_title(
+    session_id: int,
+    user_text: str,
+    assistant_text: str,
+    scene_name: str,
+    scene_key: str,
+) -> None:
+    """P0-10A 改动六：第 1 轮回答后异步生成 ≤12 字标题。
+
+    只在 title 仍为场景名/空时覆盖；LLM 失败回退用户输入前 12 字；
+    异常只记日志。测试隔离开关与记忆抽取共用（避免测试真调模型）。
+    """
+    if os.getenv("COUPLE_DISABLE_MEMORY_DISTILL") == "1":
+        return None
+
+    def _worker():
+        from app.core.database import SessionLocal
+        from app.services.memory_service import distill_llm
+
+        db = SessionLocal()
+        try:
+            session = ai_repo.get_session_by_id(db, session_id)
+            if session is None:
+                return
+            # 已是语义标题（非场景名）→ 不覆盖，避免冲掉用户/历史改名
+            if session.title and session.title != scene_name:
+                return
+
+            fallback = (user_text or "").strip()[:12]
+            title = fallback
+            try:
+                if distill_llm.api_key:
+                    raw = distill_llm.invoke(
+                        [
+                            {
+                                "role": "system",
+                                "content": (
+                                    "根据对话生成一个不超过12个字的中文标题，"
+                                    "只输出标题本身，不要引号、标点或解释。"
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": "用户：%s\n助手：%s"
+                                % ((user_text or "")[:200], (assistant_text or "")[:200]),
+                            },
+                        ],
+                        scene="session_title",
+                        temperature=0.3,
+                        max_tokens=30,
+                    )
+                    raw = (raw or "").strip().strip("「」\"'")[:12]
+                    if raw:
+                        title = raw
+            except Exception:
+                logger.warning("[SESSION] 标题 LLM 失败，回退前12字", exc_info=True)
+
+            if title:
+                session.title = title
+                db.commit()
+                logger.info("[SESSION] 标题已更新 session=%s → %s", session_id, title)
+        except Exception:
+            logger.exception("[SESSION] 标题生成异常 session=%s", session_id)
+            db.rollback()
+        finally:
+            db.close()
+
+    threading.Thread(
+        target=_worker, name="session-title", daemon=True
+    ).start()
+    return None
 
 
 def get_session_messages(db: Session, user_id: int, session_id: int) -> List[dict]:

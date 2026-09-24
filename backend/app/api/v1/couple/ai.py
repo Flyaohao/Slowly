@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -148,6 +148,34 @@ def get_sessions(
 ):
     sessions = ai_service.get_sessions(db, current_user.id)
     return ApiResponse(data=sessions)
+
+
+@router.get("/sessions/active", response_model=ApiResponse)
+def get_active_session(
+    scene_key: str = Query(..., min_length=1),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """P0-10A：服务端权威判定「当前该续接哪段会话」。
+
+    GET /ai/sessions/active?scene_key=xxx
+    data: {session_id, title, message_count, last_message_at, resumable}
+    - resumable=true → 客户端直接续接
+    - resumable=false 且 session_id 非空 → 最近一段，供「上次聊到…」提示
+    - session_id=null → 无 active 会话，新开
+    业务错误 {code,message,data} + HTTP 200（与其它 AI 端点一致）；
+    未登录仍走 get_current_user 的 401。
+    """
+    relation = couple_repo.get_active_relation_by_user(db, current_user.id)
+    if not relation:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 30005, "message": "请先绑定情侣关系", "data": None},
+        )
+    data = ai_service.get_active_session_info(
+        db, current_user.id, relation.id, scene_key
+    )
+    return ApiResponse(data=data)
 
 
 @router.get("/sessions/{session_id}/messages", response_model=ApiResponse)

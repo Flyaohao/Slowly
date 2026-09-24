@@ -1,4 +1,6 @@
-from sqlalchemy import String, Text, Integer, BigInteger, ForeignKey, Index, JSON
+from datetime import datetime
+
+from sqlalchemy import String, Text, Integer, BigInteger, DateTime, ForeignKey, Index, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional, List
 
@@ -35,6 +37,13 @@ class AiPromptVersion(BigIntPKMixin, Base):
 
 class AiChatSession(BigIntPKMixin, TimestampMixin, Base):
     __tablename__ = "ai_chat_session"
+    # 会话列表与 GET /sessions/active 共用：scope 定位 + 按 last_message_at 排序
+    __table_args__ = (
+        Index(
+            "ix_ai_session_scope",
+            "user_id", "relation_id", "scene_key", "status", "last_message_at",
+        ),
+    )
 
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
     relation_id: Mapped[int] = mapped_column(
@@ -47,7 +56,18 @@ class AiChatSession(BigIntPKMixin, TimestampMixin, Base):
     partner_user_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("user.id"), nullable=True
     )
+    #: 调解专用状态，与会话生命周期 status 正交，勿混用
     mediation_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+
+    # ---- P0-10A 会话边界 ----
+    #: active / archived（与 mediation_status 无关）
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    last_message_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    message_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    #: 按字符数近似累计（不用 tiktoken，红线禁新依赖）
+    token_total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    #: 分段原因：timeout / scene_switch / manual / budget / archived
+    segment_reason: Mapped[Optional[str]] = mapped_column(String(30))
 
     messages: Mapped[List["AiChatMessage"]] = relationship(back_populates="session")
 
