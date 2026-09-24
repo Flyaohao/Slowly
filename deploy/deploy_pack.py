@@ -15,7 +15,10 @@
 import os
 import tarfile
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
+# 本脚本位于 deploy/ 子目录，源码与产物都在仓库根目录。
+# ⚠️ 若按脚本自身目录取 ROOT，会去找 deploy/backend（不存在）→ 打出**空包**，
+#    后续上传/解包/重建全部"成功"却什么都没换 —— 静默失效，务必保持指向根目录。
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "backend")
 OUT = os.path.join(ROOT, "backend_deploy.tar.gz")
 
@@ -33,6 +36,8 @@ def keep(path, name):
 
 def main():
     count = 0
+    if not os.path.isdir(SRC):
+        raise SystemExit("找不到源码目录：%s" % SRC)
     with tarfile.open(OUT, "w:gz") as tar:
         for dirpath, dirnames, filenames in os.walk(SRC):
             dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
@@ -49,6 +54,8 @@ def main():
     print(f"  文件数 {count}，压缩后 {size / 1024:.0f} KB")
     if os.path.exists(os.path.join(SRC, ".env")):
         print("  已排除 backend/.env（服务器上的那份不会被覆盖）")
+    if count == 0:
+        raise SystemExit("[FAIL] 包内 0 文件，立即中止（否则会静默部署成旧代码）")
 
 
 if __name__ == "__main__":
