@@ -110,7 +110,11 @@ def _preprocess(
     )
 
     user_profile_text = _format_profile(user_profile, user_scores)
-    partner_profile_text = _format_profile(partner_profile, partner_scores)
+    # 伴侣段：有画像用「TA 的画像」卡，双方都有时再拼「你们的关系」；
+    # 对方未完成问卷 → 整段留空（不输出占位，避免模型把占位当事实）。
+    partner_profile_text = _build_partner_section(
+        user_profile, user_scores, partner_profile, partner_scores
+    )
 
     rag_chunks = retrieve_chunks(db, user_input)
     rag_context = build_rag_context(rag_chunks)
@@ -679,7 +683,7 @@ def _get_partner_id(db: Session, relation_id: int, user_id: int) -> Optional[int
 
 
 def _format_profile(profile, scores: Dict[str, float]) -> str:
-    """画像注入的唯一出口。签名不变，调用方无感。
+    """画像注入的唯一出口（用户侧）。签名不变，调用方无感。
 
     由 profile_service.build_profile_card 产出中文语义卡（维度名 +
     行为化解读 + 沟通宜忌），替换原先「英文 key=分数」的参数表——
@@ -690,6 +694,43 @@ def _format_profile(profile, scores: Dict[str, float]) -> str:
     from app.services.profile_service import build_profile_card
 
     return build_profile_card(profile.profile_type, scores, profile.confidence)
+
+
+def _build_partner_section(
+    user_profile,
+    user_scores: Dict[str, float],
+    partner_profile,
+    partner_scores: Dict[str, float],
+) -> str:
+    """伴侣画像段 + 关系模式段（P0-2）。
+
+    - 对方无画像 → 返回空串：不输出「TA 的画像」也不输出「你们的关系」，
+      更不输出「未完成问卷」占位（占位会被模型当成事实）
+    - 对方有画像、己方也有 → TA 卡之后追加「你们的关系」（derive_relationship_pattern）
+    - 对方有画像、己方没有 → 只出 TA 卡，不判关系（关系需要双方分数）
+
+    `_preprocess` 与测试共用本函数，保证验收打的是真实拼装路径。
+    """
+    if not partner_profile:
+        return ""
+
+    from app.services.profile_service import (
+        build_profile_card,
+        derive_relationship_pattern,
+    )
+
+    section = build_profile_card(
+        partner_profile.profile_type,
+        partner_scores,
+        partner_profile.confidence,
+        title="TA 的画像",
+    )
+    if user_profile:
+        pattern_name, pattern_desc = derive_relationship_pattern(
+            user_scores, partner_scores
+        )
+        section += f"\n\n【你们的关系】「{pattern_name}」型\n{pattern_desc}"
+    return section
 
 
 def _call_llm(prompt: Any, scene_key: str) -> dict:

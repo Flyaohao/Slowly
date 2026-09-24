@@ -335,10 +335,15 @@ def _format_score(score: float) -> str:
     return f"{score:g}"
 
 
-def build_profile_card(profile_type: str, scores: Dict[str, float], confidence: float) -> str:
+def build_profile_card(
+    profile_type: str,
+    scores: Dict[str, float],
+    confidence: float,
+    title: str = "画像",
+) -> str:
     """把结构化画像翻译成给模型看的中文语义卡。
 
-    返回格式固定为::
+    返回格式固定为（`title` 默认「画像」，伴侣侧传「TA 的画像」）::
 
         【画像】焦虑依恋型 · 置信度 0.77
         - 安全感确认需求 82（高）：需要反复确认关系是稳的…
@@ -352,7 +357,7 @@ def build_profile_card(profile_type: str, scores: Dict[str, float], confidence: 
       - 输出中不得出现任何英文 snake_case key
     """
     type_label = PROFILE_TYPE_LABELS.get(profile_type, profile_type)
-    lines = [f"【画像】{type_label} · 置信度 {confidence}"]
+    lines = [f"【{title}】{type_label} · 置信度 {confidence}"]
 
     ranked = sorted(
         scores.items(),
@@ -389,3 +394,42 @@ def build_profile_card(profile_type: str, scores: Dict[str, float], confidence: 
         lines.append("【沟通宜忌】" + "；".join(parts))
 
     return "\n".join(lines)
+
+
+def derive_relationship_pattern(
+    user_a_scores: Dict[str, float], user_b_scores: Dict[str, float]
+) -> tuple:
+    """从双方维度分推出关系模式，返回 (模式名, 一句话解释)。
+
+    判定基准是「更焦虑方」（attachment_anxiety 更高的一侧记为 A）：
+    单看一方的焦虑/回避组合就能读出互动方向——高焦虑+低回避是追的一方，
+    低焦虑+高回避是退的一方。若两侧同时焦虑高、回避高，优先判为
+    「双高拉扯」（双方都在自保，谁也不像单纯的追或退）。
+
+    与 conflict_detector.detect_conflict_pattern 产出的英文枚举
+    （pursue_withdraw 等，客户端 conflictPatternName 在用）互不影响：
+    本函数只服务 prompt 注入，不写库、不动 API 字段。
+    """
+    a_anx = user_a_scores.get("attachment_anxiety", 50)
+    a_avoid = user_a_scores.get("attachment_avoidance", 50)
+    b_anx = user_b_scores.get("attachment_anxiety", 50)
+    b_avoid = user_b_scores.get("attachment_avoidance", 50)
+
+    # 两侧都偏高（焦虑与回避均 >=50）→ 双高拉扯优先
+    if a_anx >= 50 and a_avoid >= 50 and b_anx >= 50 and b_avoid >= 50:
+        return ("双高拉扯", "双方都在自保，先降温再谈事")
+
+    # A = 更焦虑方
+    if b_anx > a_anx:
+        a_anx, a_avoid = b_anx, b_avoid
+
+    high_anx = a_anx >= 50
+    high_avoid = a_avoid >= 50
+
+    if high_anx and not high_avoid:
+        return ("追与退", "你越追问 TA 越退，TA 越退你越追问，双方都是受害者")
+    if not high_anx and high_avoid:
+        return ("沉默的墙", "需要有人先开第一口")
+    if high_anx and high_avoid:
+        return ("双高拉扯", "双方都在自保，先降温再谈事")
+    return ("安全基地", "关系健康，重点是加分而不是救火")
