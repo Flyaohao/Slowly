@@ -147,6 +147,48 @@ def submit_questionnaire(db: Session, user_id: int, questionnaire_id: int) -> di
         couple_profile = profile_repo.get_latest_couple_profile(db, relation.id)
         couple_profile_ready = couple_profile is not None
 
+        # P0-3 量表源：接在 _try_generate_couple_profile 之后（差异 3 裁决）。
+        # 双方画像都在时生成关系模式记忆；只有己方画像时跳过。
+        # 单身用户 relation 为 None 已在上方 if 外，天然跳过。
+        if couple_profile_ready:
+            try:
+                from datetime import datetime
+                from app.services.memory_events import (
+                    MemoryEvent,
+                    distill_event_in_background,
+                )
+                from app.services.profile_service import derive_relationship_pattern
+
+                pa = profile_repo.get_latest_profile(db, relation.user_a_id)
+                pb = profile_repo.get_latest_profile(db, relation.user_b_id)
+                if pa and pb:
+                    sa = {
+                        d.dimension_key: d.score
+                        for d in profile_repo.get_dimension_scores(db, pa.id)
+                    }
+                    sb = {
+                        d.dimension_key: d.score
+                        for d in profile_repo.get_dimension_scores(db, pb.id)
+                    }
+                    pname, pdesc = derive_relationship_pattern(sa, sb)
+                    distill_event_in_background(MemoryEvent(
+                        source="questionnaire",
+                        source_id=questionnaire_id,
+                        user_id=user_id,
+                        relation_id=relation.id,
+                        content=f"你们是「{pname}」型：{pdesc}",
+                        occurred_at=datetime.utcnow(),
+                        extra={"context": "量表测评生成关系模式"},
+                    ))
+            except Exception:
+                # 记忆是锦上添花，绝不影响问卷提交主流程
+                import logging
+
+                logging.getLogger("couple.questionnaire").warning(
+                    "[MEMORY] 量表关系模式记忆构造失败 user=%s", user_id,
+                    exc_info=True,
+                )
+
     # Create submission record
     q_obj = questionnaire_repo.get_questionnaire_by_id(db, questionnaire_id)
     q_title = q_obj.title if q_obj else "关系画像问卷"

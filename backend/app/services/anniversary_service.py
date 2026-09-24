@@ -24,6 +24,19 @@ def create_anniversary(db: Session, user_id: int, data: dict) -> Anniversary:
     })
     db.commit()
     db.refresh(item)
+
+    # P0-3：纪念日不经 AI，结构化直写（名称+日期），复用同一套去重。
+    from app.services.memory_events import MemoryEvent, distill_event_in_background
+
+    distill_event_in_background(MemoryEvent(
+        source="anniversary",
+        source_id=item.id,
+        user_id=user_id,
+        relation_id=relation.id,
+        content=f"{item.title}是 {item.anniversary_date.month} 月 {item.anniversary_date.day} 日",
+        occurred_at=datetime.utcnow(),
+        extra={"context": f"纪念日：{item.title}"},
+    ))
     return item
 
 

@@ -141,6 +141,84 @@ def _to_dict(memory: AiMemory) -> dict:
 # 3. 不阻塞响应 —— 放到后台线程 + 独立会话里跑。
 # --------------------------------------------------------------------------
 
+def _is_duplicate_memory(
+    db: Session, user_id: int, relation_id: int, memory_text: str
+) -> bool:
+    """按 (user_id, relation_id, memory_text) 完全相等去重。
+
+    从 distill_and_save 内联逻辑抽出：AI 抽取路径与结构化直写路径
+    （纪念日 / 量表，不经模型）必须共用这一套，否则重复事件会刷重复记忆。
+    """
+    return (
+        db.query(AiMemory)
+        .filter(
+            and_(
+                AiMemory.user_id == user_id,
+                AiMemory.relation_id == relation_id,
+                AiMemory.memory_text == memory_text,
+            )
+        )
+        .first()
+        is not None
+    )
+
+
+def save_structured_memory(
+    db: Session,
+    user_id: int,
+    relation_id: int,
+    memory_text: str,
+    memory_type: Optional[str] = None,
+) -> Optional[dict]:
+    """不经 AI、直接构造好的记忆落库。复用 `_is_duplicate_memory` 去重。
+
+    供纪念日（名称+日期）、量表（关系模式）这类**确定性文本**使用——
+    内容没有歧义，不值得花一次模型调用；但去重与异常吞掉的纪律与 AI 路径一致。
+    """
+    text = (memory_text or "").strip()
+    if not text:
+        return None
+    mtype = memory_type if memory_type in MEMORY_TYPES else _DEFAULT_MEMORY_TYPE
+    try:
+        if _is_duplicate_memory(db, user_id, relation_id, text):
+            return None
+        saved = create_memory(db, user_id, relation_id, mtype, text)
+        logger.info("[MEMORY] 结构化落库 user=%s type=%s", user_id, mtype)
+        return saved
+    except Exception:
+        logger.exception("[MEMORY] 结构化记忆落库失败 user=%s", user_id)
+        db.rollback()
+        return None
+
+
+def build_distill_user_message(
+    scene_key: str,
+    user_input: str,
+    assistant_text: str = "",
+    focus: str = "",
+    context: str = "",
+) -> str:
+    """组装提交给抽取模型的 user 消息。
+
+    - `focus` 为空 → **对话模板，与本函数抽出之前的硬编码逐字节一致**
+      （chat 链路零回归的保证，改动四坑 1）
+    - `focus` 非空 → 事件模板：场景 + 可选事件描述 + 抽取重点 + 内容。
+      信件/纪念馆/双视角等非对话源走这条，避免硬套「AI 回复」空段落
+    """
+    if not focus:
+        return "场景：%s\n\n用户说：%s\n\nAI 回复：%s" % (
+            scene_key,
+            user_input,
+            assistant_text or "",
+        )
+    parts = ["场景：%s" % scene_key]
+    if context:
+        parts.append("事件：%s" % context)
+    parts.append("抽取重点：%s" % focus)
+    parts.append("内容：\n%s" % user_input)
+    return "\n\n".join(parts)
+
+
 def distill_and_save(
     db: Session,
     user_id: int,
@@ -148,11 +226,15 @@ def distill_and_save(
     scene_key: str,
     user_input: str,
     assistant_text: str,
+    focus: str = "",
+    context: str = "",
 ) -> Optional[dict]:
-    """从一轮对话里抽取一条长期记忆并落库。返回新记忆，未写库则返回 None。
+    """从一轮对话/一个事件里抽取一条长期记忆并落库。返回新记忆，未写库则返回 None。
 
     调用方需传入可用的 `db`（流式链路请用 `distill_in_background`，
     因为那时请求级会话已经销毁）。
+
+    `focus` / `context` 为可选（P0-3 改动四）：为空时行为与旧版逐字节一致。
     """
     text = (user_input or "").strip()
     if len(text) < _MIN_INPUT_LEN:
@@ -164,8 +246,10 @@ def distill_and_save(
                 {"role": "system", "content": MEMORY_DISTILL_PROMPT},
                 {
                     "role": "user",
-                    "content": "场景：%s\n\n用户说：%s\n\nAI 回复：%s"
-                    % (scene_key, user_input, assistant_text or ""),
+                    "content": build_distill_user_message(
+                        scene_key, user_input, assistant_text,
+                        focus=focus, context=context,
+                    ),
                 },
             ],
             scene="memory_distill",
@@ -191,18 +275,7 @@ def distill_and_save(
         return None
 
     try:
-        duplicated = (
-            db.query(AiMemory)
-            .filter(
-                and_(
-                    AiMemory.user_id == user_id,
-                    AiMemory.relation_id == relation_id,
-                    AiMemory.memory_text == memory_text,
-                )
-            )
-            .first()
-        )
-        if duplicated:
+        if _is_duplicate_memory(db, user_id, relation_id, memory_text):
             return None
         saved = create_memory(db, user_id, relation_id, memory_type, memory_text)
         logger.info("[MEMORY] 已沉淀记忆 user=%s type=%s", user_id, memory_type)
@@ -219,6 +292,8 @@ def distill_in_background(
     scene_key: str,
     user_input: str,
     assistant_text: str,
+    focus: str = "",
+    context: str = "",
 ) -> None:
     """后台线程里沉淀记忆：开独立会话，不阻塞也不影响对话响应。
 
@@ -236,7 +311,8 @@ def distill_in_background(
         db = SessionLocal()
         try:
             distill_and_save(
-                db, user_id, relation_id, scene_key, user_input, assistant_text
+                db, user_id, relation_id, scene_key, user_input, assistant_text,
+                focus=focus, context=context,
             )
         except Exception:
             logger.exception("[MEMORY] 后台沉淀异常 user=%s", user_id)

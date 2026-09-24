@@ -68,6 +68,21 @@ def create_letter(db: Session, user_id: int, data: dict) -> Letter:
     letter = letter_repo.create_letter(db, letter_data)
     db.commit()
     db.refresh(letter)
+
+    # P0-3：仅 status=sent 时沉淀记忆（草稿还会编辑，先不抽）；
+    # 单身信 relation_id=None 挂不上 ai_memory，跳过。后台线程，不阻塞创建。
+    if letter.status == "sent" and letter.relation_id:
+        from app.services.memory_events import MemoryEvent, distill_event_in_background
+
+        distill_event_in_background(MemoryEvent(
+            source="letter",
+            source_id=letter.id,
+            user_id=user_id,
+            relation_id=letter.relation_id,
+            content=letter.content,
+            occurred_at=datetime.utcnow(),
+            extra={"context": f"信件标题：{letter.title}"},
+        ))
     return letter
 
 
@@ -223,6 +238,19 @@ def send_letter(db: Session, user_id: int, letter_id: int) -> Letter:
 
     db.commit()
     db.refresh(letter)
+
+    # P0-3：draft→sent 时刻沉淀（上方已保证 relation_id 非空）
+    from app.services.memory_events import MemoryEvent, distill_event_in_background
+
+    distill_event_in_background(MemoryEvent(
+        source="letter",
+        source_id=letter.id,
+        user_id=user_id,
+        relation_id=letter.relation_id,
+        content=letter.content,
+        occurred_at=datetime.utcnow(),
+        extra={"context": f"信件标题：{letter.title}"},
+    ))
 
     # 通知收件人
     if letter.receiver_id:

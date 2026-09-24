@@ -69,6 +69,7 @@ def submit_record(db: Session, user_id: int, event_id: int, data: dict) -> DualP
 
     partner_id = _get_partner_id(relation, user_id)
     partner_record = dual_perspective_repo.get_record_by_event_and_user(db, event_id, partner_id)
+    just_completed = bool(partner_record)
     if partner_record:
         event.status = "both_sides"
     else:
@@ -76,6 +77,25 @@ def submit_record(db: Session, user_id: int, event_id: int, data: dict) -> DualP
 
     db.commit()
     db.refresh(record)
+
+    # P0-3：仅在翻成 both_sides 那一次抽「认知差异」（双方 content 都在场）。
+    if just_completed:
+        from datetime import datetime
+        from app.services.memory_events import MemoryEvent, distill_event_in_background
+
+        distill_event_in_background(MemoryEvent(
+            source="dual",
+            source_id=event.id,
+            user_id=user_id,
+            relation_id=relation.id,
+            content=(
+                f"事件：{event.title}\n"
+                f"我方记录：{record.content}\n"
+                f"对方记录：{partner_record.content}"
+            ),
+            occurred_at=datetime.utcnow(),
+            extra={"context": f"双视角：{event.title}"},
+        ))
     return record
 
 

@@ -31,6 +31,20 @@ def create_item(db: Session, user_id: int, data: dict) -> MuseumItem:
     })
     db.commit()
     db.refresh(item)
+
+    # P0-3：纪念馆新增 → 抽「共同记忆锚点」。后台线程，不阻塞创建。
+    from datetime import datetime
+    from app.services.memory_events import MemoryEvent, distill_event_in_background
+
+    distill_event_in_background(MemoryEvent(
+        source="museum",
+        source_id=item.id,
+        user_id=user_id,
+        relation_id=relation.id,
+        content=f"{item.title}\n{item.story or ''}".strip(),
+        occurred_at=datetime.utcnow(),
+        extra={"context": f"纪念馆新增：{item.title}"},
+    ))
     return item
 
 
