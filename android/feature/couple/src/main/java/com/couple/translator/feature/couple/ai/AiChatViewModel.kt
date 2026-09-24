@@ -81,6 +81,16 @@ data class AiChatUiState(
     val quotePickerLoading: Boolean = false,
     /** P0-8：加载失败必须可见，不许静默（项目红线） */
     val quotePickerError: String = "",
+    // ---- P0-10B 会话边界（起/续/止/名）----
+    /** 「正在继续 · {title}」；null 时顶部显示「新的对话」 */
+    val sessionTitle: String? = null,
+    /** 服务端判定当前 active 是否可直接续接 */
+    val resumable: Boolean = true,
+    /** 不可续接的「最近一段」（timeout/budget），只展示不自动加载 */
+    val staleSessionId: Long? = null,
+    val staleSessionTitle: String? = null,
+    /** 本次发送发生过分段 → 消息列表尾部插「—— 新的对话 ——」 */
+    val segmentNotice: Boolean = false,
     val error: String = "",
 ) {
     /** 输入框是否应禁用：请求中或流式输出中都禁用，避免同会话并发（含表达改写流式） */
@@ -145,15 +155,142 @@ class AiChatViewModel @Inject constructor(
         _uiState.update { it.copy(sceneKey = sceneKey, quoteChip = null) }
     }
 
+    /** P0-10B：从会话列表进入时同步状态条标题（loadSession 不带 title）。 */
+    fun setSessionTitle(title: String?) {
+        if (title.isNullOrBlank()) return
+        _uiState.update { it.copy(sessionTitle = title) }
+    }
+
     /**
      * 切换聊天场景。
      *
      * 只接受目录里的场景（[AiSceneCatalog]），而不是任意字符串——
      * 这正是此前 `ModeDrawerSheet` 能把 `reply` / `apologize` 这类
      * 后端不存在的 key 塞进请求的原因。
+     *
+     * P0-10B（§2.4）：切场景**不**调 closeSession——服务端按 scene_key
+     * 分别维护 active，切回来还能续；分段由服务端规则/显式新对话触发。
      */
     fun selectScene(scene: AiScene) {
         setSceneKey(scene.key)
+        // 清本地会话状态后按新场景向服务端要 active
+        _uiState.update {
+            it.copy(
+                sessionId = null,
+                messages = emptyList(),
+                sessionTitle = null,
+                segmentNotice = false,
+                staleSessionId = null,
+                staleSessionTitle = null,
+                evidence = null,
+                quoteChip = null,
+            )
+        }
+        refreshActiveSession()
+    }
+
+    // ------------------------------------------------------------------ #
+    // P0-10B 会话边界：起 / 续 / 止 / 名
+    // ------------------------------------------------------------------ //
+
+    /**
+     * 服务端权威刷新当前 active 会话——**唯一入口**（§2.3 规则）。
+     *
+     * 不放 init：init 只在 VM 首次创建跑一次，进程存活时再进页面不会刷新；
+     * 正确挂点是 NewAiChatScreen 的 LaunchedEffect(Unit)（切 tab 重组即重跑）。
+     *
+     * 规则：isBusy 绝不覆盖；失败静默当新会话；resumable=false 只记 stale 不自动加载。
+     */
+    fun refreshActiveSession() {
+        if (_uiState.value.isBusy) return
+        val sceneKey = _uiState.value.sceneKey
+        val currentId = _uiState.value.sessionId
+        viewModelScope.launch {
+            aiRepository.getActiveSession(sceneKey).fold(
+                onSuccess = { info ->
+                    // 跨模块 data class 属性不能 smart cast，先落到局部 val
+                    val activeId = info.sessionId
+                    if (activeId == null) {
+                        // 该 scope 无 active：保持本地现状（新会话）
+                        _uiState.update {
+                            it.copy(resumable = false, staleSessionId = null, staleSessionTitle = null)
+                        }
+                    } else if (info.resumable) {
+                        if (activeId == currentId) {
+                            // 同一会话：只刷新标题，绝不覆盖正在展示的消息
+                            _uiState.update {
+                                it.copy(sessionTitle = info.title, resumable = true)
+                            }
+                        } else {
+                            _uiState.update {
+                                it.copy(
+                                    sessionId = activeId,
+                                    sessionTitle = info.title,
+                                    resumable = true,
+                                    staleSessionId = null,
+                                    staleSessionTitle = null,
+                                )
+                            }
+                            loadSession(activeId)
+                        }
+                    } else {
+                        // 不可续接（timeout/budget）：只记「最近一段」，等用户点继续
+                        _uiState.update {
+                            it.copy(
+                                resumable = false,
+                                staleSessionId = activeId,
+                                staleSessionTitle = info.title,
+                            )
+                        }
+                    }
+                },
+                onFailure = {
+                    // 失败 → 静默当新会话（不弹错、不卡页面）
+                },
+            )
+        }
+    }
+
+    /**
+     * 「新对话」：先服务端归档旧会话（方案甲 POST close），失败也继续清本地。
+     * 不清 sceneKey。
+     */
+    fun startNewChat() {
+        val prevId = _uiState.value.sessionId
+        viewModelScope.launch {
+            if (prevId != null) {
+                aiRepository.closeSession(prevId) // 失败也继续
+            }
+            _uiState.update {
+                it.copy(
+                    sessionId = null,
+                    messages = emptyList(),
+                    sessionTitle = null,
+                    segmentNotice = false,
+                    staleSessionId = null,
+                    staleSessionTitle = null,
+                    evidence = null,
+                    quoteChip = null,
+                    streamingContent = "",
+                    thinkingContent = "",
+                    isStreaming = false,
+                )
+            }
+        }
+    }
+
+    /** 「继续」上次不可续接的最近一段：显式带 id 加载，下一句也带 id 稳定续接。 */
+    fun resumeStaleSession() {
+        val staleId = _uiState.value.staleSessionId ?: return
+        _uiState.update {
+            it.copy(
+                sessionId = staleId,
+                staleSessionId = null,
+                staleSessionTitle = null,
+                resumable = true,
+            )
+        }
+        loadSession(staleId)
     }
 
     // ------------------------------------------------------------------ #
@@ -443,6 +580,8 @@ class AiChatViewModel @Inject constructor(
                 thinkingFinished = false,
                 thinkingSeconds = 0,
                 evidence = null,
+                // 新一次发送：上一轮的分段分隔行随新消息上下文重置（Meta 若再分段会重新置 true）
+                segmentNotice = false,
                 error = "",
             )
         }
@@ -455,10 +594,23 @@ class AiChatViewModel @Inject constructor(
                 message = text,
             )
 
+            // 发出时的 sessionId：Meta 回来若不同 = 服务端发生了分段（§2.5/改动二）
+            val sentSessionId = state.sessionId
+
             aiRepository.chatStream(request).collect { ev ->
                 when (ev) {
                     is AiDto.ChatStreamEvent.Meta -> _uiState.update {
-                        it.copy(sessionId = ev.sessionId)
+                        it.copy(
+                            sessionId = ev.sessionId,
+                            // 服务端新建了会话（分段）→ 列表尾插分隔行
+                            segmentNotice = if (sentSessionId != null && ev.sessionId != sentSessionId) {
+                                true
+                            } else {
+                                it.segmentNotice
+                            },
+                            // 首轮：标题用用户输入前 12 字兜底（不轮询抢服务端异步标题）
+                            sessionTitle = it.sessionTitle ?: rawInput.take(12),
+                        )
                     }
 
                     // 思考增量：只喂给「深度思考」面板，不拼进正文

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -29,6 +30,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,6 +46,7 @@ import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppSurfaceMuted
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
 
@@ -54,7 +57,7 @@ import com.couple.translator.core.ui.theme.AppTextTertiary
 @Composable
 fun AiSessionListScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToSession: (Long, String) -> Unit,
+    onNavigateToSession: (sessionId: Long, sceneKey: String, title: String?) -> Unit,
     viewModel: AiSessionListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -98,7 +101,8 @@ fun AiSessionListScreen(
                             AppEmptyState(
                                 icon = Icons.Outlined.Psychology,
                                 title = "还没有会话记录",
-                                subtitle = "开始一段对话，AI 会陪你梳理关系。",
+                                // P0-10B：空态说清价值——会话会被记住
+                                subtitle = "军师会记住你们的每一段对话，聊过的内容随时可以回来看。",
                             )
                         }
                     }
@@ -115,7 +119,7 @@ fun AiSessionListScreen(
                                 SessionItem(
                                     session = session,
                                     sceneLabel = sceneLabel,
-                                    onClick = { onNavigateToSession(session.id, session.sceneKey) },
+                                    onClick = { onNavigateToSession(session.id, session.sceneKey, session.title) },
                                     onDelete = { viewModel.deleteSession(session.id) },
                                 )
                             }
@@ -146,13 +150,29 @@ private fun SessionItem(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = session.title ?: sceneLabel(session.sceneKey),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = session.title ?: sceneLabel(session.sceneKey),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    // P0-10B：分段/结束在列表里可感知
+                    if (session.status == "archived") {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "已结束",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AppTextTertiary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(AppSurfaceMuted)
+                                .padding(horizontal = 6.dp, vertical = 1.dp),
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -166,6 +186,15 @@ private fun SessionItem(
                     session.createdAt?.let {
                         Text(
                             text = it.take(10),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTextTertiary,
+                        )
+                    }
+                    // 副标题补 messageCount（后端已返回、DTO 已接）
+                    if (session.messageCount > 0) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "${session.messageCount} 条",
                             style = MaterialTheme.typography.bodySmall,
                             color = AppTextTertiary,
                         )

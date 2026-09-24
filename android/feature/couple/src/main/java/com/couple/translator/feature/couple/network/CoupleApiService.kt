@@ -387,6 +387,16 @@ interface CoupleApiService {
     @GET("api/v1/couple/ai/sessions")
     suspend fun getAiSessions(): ApiResponse<List<AiDto.SessionResponse>>
 
+    /** P0-10B：服务端权威的「当前该续接哪段会话」 */
+    @GET("api/v1/couple/ai/sessions/active")
+    suspend fun getActiveSession(
+        @Query("scene_key") sceneKey: String,
+    ): ApiResponse<AiDto.ActiveSessionResponse>
+
+    /** P0-10B：显式结束会话（归档+沉淀摘要）；「新对话」必须先调 */
+    @POST("api/v1/couple/ai/sessions/{id}/close")
+    suspend fun closeSession(@Path("id") sessionId: Long): ApiResponse<AiDto.CloseSessionResponse>
+
     /**
      * 场景清单。客户端不再硬编码场景，改为启动时拉一次。
      * 这是「后端加了场景、客户端却不知道」这类问题的根治手段。

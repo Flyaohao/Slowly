@@ -31,6 +31,7 @@ import com.couple.translator.core.ui.theme.ThemeMode
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
 import com.couple.translator.feature.couple.ai.AiSessionListScreen
+import com.couple.translator.feature.couple.ai.PendingSessionHolder
 import com.couple.translator.feature.couple.ai.ReviewScreen
 import com.couple.translator.feature.couple.anniversary.AddAnniversaryScreen
 import com.couple.translator.feature.couple.anniversary.AnniversaryListScreen
@@ -320,7 +321,11 @@ fun NavGraph(
         composable(Screen.AiSessionList.route) {
             AiSessionListScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToSession = { sessionId, sceneKey ->
+                onNavigateToSession = { sessionId, sceneKey, title ->
+                    // P0-10B 改动三：跨导航图传参（列表在根图、军师页在 CoupleShell）。
+                    // 此前只 popBackStack，参数收下即丢 → 历史记录点不进去。
+                    // title 一并带给状态条，否则 loadSession 后标题残留上一段会话。
+                    PendingSessionHolder.set(sessionId, sceneKey, title)
                     navController.popBackStack()
                 },
             )

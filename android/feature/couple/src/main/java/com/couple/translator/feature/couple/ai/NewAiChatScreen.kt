@@ -55,6 +55,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.AiDto
@@ -107,6 +109,23 @@ fun NewAiChatScreen(
         }
     }
 
+    // P0-10B 改动四：再进页面即刷新。放 Screen 的 LaunchedEffect 而非 VM init——
+    // VM 由 hiltViewModel() 作用在 tab 的 NavBackStackEntry，切 tab 时 Screen
+    // 重组而 VM 存活，init 不会重跑；LaunchedEffect(Unit) 正好实现「再进即刷新」。
+    // 优先消费列表页传来的待进入会话，否则向服务端要 active。
+    LaunchedEffect(Unit) {
+        val pending = PendingSessionHolder.consume()
+        if (pending != null) {
+            viewModel.setSceneKey(pending.sceneKey)
+            viewModel.loadSession(pending.sessionId)
+            // loadSession 只拉消息与 id，不同步标题——不补会残留上一段的
+            //「正在继续 · xxx」（真机实测缺陷）
+            viewModel.setSessionTitle(pending.title)
+        } else {
+            viewModel.refreshActiveSession()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -123,6 +142,17 @@ fun NewAiChatScreen(
                     onClick = onNavigateToSessionList,
                 )
             },
+        )
+
+        // P0-10B 改动四：固定高度会话状态条（禁止 wrapContentHeight 抖动）
+        SessionStatusBar(
+            sessionId = uiState.sessionId,
+            sessionTitle = uiState.sessionTitle,
+            sceneLabel = AiSceneCatalog.labelOf(uiState.sceneKey),
+            staleSessionTitle = uiState.staleSessionTitle,
+            hasStale = uiState.staleSessionId != null,
+            onNewChat = viewModel::startNewChat,
+            onResumeStale = viewModel::resumeStaleSession,
         )
 
         LazyColumn(
@@ -192,6 +222,21 @@ fun NewAiChatScreen(
             uiState.evidence?.let { evidence ->
                 item {
                     EvidencePanel(evidence = evidence)
+                }
+            }
+
+            // P0-10B：本次发生分段 → 轻量分隔，不弹窗不打断
+            if (uiState.segmentNotice) {
+                item {
+                    Text(
+                        text = "—— 新的对话 ——",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppTextTertiary,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        textAlign = TextAlign.Center,
+                    )
                 }
             }
 
@@ -378,6 +423,86 @@ private fun AiReplyBubble(
                     style = MaterialTheme.typography.bodyLarge,
                     color = AppTextPrimary,
                 )
+            }
+        }
+    }
+}
+
+/**
+ * P0-10B 改动四：会话状态条（AppTopBar 与 LazyColumn 之间，固定高度）。
+ *
+ * - sessionId != null → 「正在继续 · {title ?: 场景名}」+ 右侧「新对话」
+ * - sessionId == null → 「新的对话」+ 右侧「新对话」（点了也无害：close 会跳过 null）
+ * - staleSessionTitle != null → 改为「上次聊到 {title}」+「继续」
+ */
+@Composable
+private fun SessionStatusBar(
+    sessionId: Long?,
+    sessionTitle: String?,
+    sceneLabel: String,
+    staleSessionTitle: String?,
+    hasStale: Boolean,
+    onNewChat: () -> Unit,
+    onResumeStale: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(36.dp)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        when {
+            hasStale && staleSessionTitle != null -> {
+                Text(
+                    text = "上次聊到 $staleSessionTitle",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppTextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onResumeStale) {
+                    Text(
+                        text = "继续",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppAccent,
+                    )
+                }
+            }
+
+            sessionId != null -> {
+                Text(
+                    text = "正在继续 · ${sessionTitle ?: sceneLabel}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppTextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onNewChat) {
+                    Text(
+                        text = "新对话",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppAccent,
+                    )
+                }
+            }
+
+            else -> {
+                Text(
+                    text = "新的对话",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppTextTertiary,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onNewChat) {
+                    Text(
+                        text = "新对话",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppAccent,
+                    )
+                }
             }
         }
     }

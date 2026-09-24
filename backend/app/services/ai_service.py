@@ -951,6 +951,25 @@ def delete_session(db: Session, user_id: int, session_id: int) -> None:
     ai_repo.delete_session(db, session_id)
 
 
+def close_session(db: Session, user_id: int, session_id: int) -> Dict[str, Any]:
+    """P0-10B 前置：用户显式「新对话 / 结束这段对话」。
+
+    - 归档 + 触发 session_summary 蒸馏（复用 _archive_session_with_summary，
+      reason="user_ended"——同时补上 P0-10A 遗留 e.7）
+    - 幂等：已 archived 再调仍返回 200，不重复蒸馏
+    - 非本人 / 不存在 → ValueError("50002")，由端点转 403
+    """
+    session = ai_repo.get_session_by_id(db, session_id)
+    if not session or session.user_id != user_id:
+        raise ValueError("50002")
+    if session.status != "archived":
+        _archive_session_with_summary(
+            db, session, "user_ended", user_id, session.relation_id
+        )
+        db.commit()
+    return {"closed": True, "session_id": session_id}
+
+
 def _get_partner_id(db: Session, relation_id: int, user_id: int) -> Optional[int]:
     from app.models.couple_relation import CoupleRelation
     relation = db.query(CoupleRelation).filter(CoupleRelation.id == relation_id).first()

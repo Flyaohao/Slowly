@@ -217,6 +217,32 @@ object AiDto {
         @Json(name = "privacy_level") val privacyLevel: String = "private",
         @Json(name = "created_at") val createdAt: String? = null,
         @Json(name = "updated_at") val updatedAt: String? = null,
+        // P0-10B：后端已返回，Moshi 此前静默忽略——补进 DTO 供列表副标题/已结束标签
+        @Json(name = "message_count") val messageCount: Int = 0,
+        @Json(name = "status") val status: String? = null,
+        @Json(name = "last_message_at") val lastMessageAt: String? = null,
+        @Json(name = "segment_reason") val segmentReason: String? = null,
+    )
+
+    /**
+     * P0-10B：GET /ai/sessions/active 的 data。
+     * resumable=true → 直接续接；false 且 sessionId 非空 → 「最近一段」仅展示；
+     * sessionId=null → 该 scope 无 active 会话。
+     */
+    @JsonClass(generateAdapter = true)
+    data class ActiveSessionResponse(
+        @Json(name = "session_id") val sessionId: Long? = null,
+        @Json(name = "title") val title: String? = null,
+        @Json(name = "message_count") val messageCount: Int = 0,
+        @Json(name = "last_message_at") val lastMessageAt: String? = null,
+        @Json(name = "resumable") val resumable: Boolean = false,
+    )
+
+    /** P0-10B：POST /sessions/{id}/close 的 data */
+    @JsonClass(generateAdapter = true)
+    data class CloseSessionResponse(
+        @Json(name = "closed") val closed: Boolean = false,
+        @Json(name = "session_id") val sessionId: Long = 0,
     )
 
     @JsonClass(generateAdapter = true)

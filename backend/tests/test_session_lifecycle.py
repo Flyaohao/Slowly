@@ -342,9 +342,105 @@ def case_active_endpoint_service():
         db.close()
 
 
+def case_i_close_endpoint():
+    """P0-10B 前置：POST /sessions/{id}/close —— 401 / 403 / 归档 / 幂等。"""
+    print("\n[i] close 端点：401 / 403 / 归档 / 幂等")
+    from fastapi.testclient import TestClient
+
+    from app.main import app as fastapi_app
+    from app.security.jwt import create_access_token
+
+    client = TestClient(fastapi_app)
+
+    # i1 未登录 401
+    r = client.post("/api/v1/couple/ai/sessions/1/close")
+    check("i1 未登录 → 401", r.status_code == 401, str(r.status_code))
+
+    # 准备：造一条属于 rel.user_a 的 active 会话
+    from app.core.database import SessionLocal
+    from app.models.couple_relation import CoupleRelation
+    from app.repositories import ai_repo
+
+    db = SessionLocal()
+    sid = None
+    uid = None
+    uid_b = None
+    try:
+        rel = db.query(CoupleRelation).filter(CoupleRelation.status == "active").first()
+        uid = rel.user_a_id
+        s = ai_repo.create_session(
+            db, uid, rel.id, "private_advisor",
+            title="close测试", privacy_level="private",
+        )
+        db.commit()
+        sid = s.id
+        other = (
+            db.query(CoupleRelation)
+            .filter(CoupleRelation.status == "active", CoupleRelation.id != rel.id)
+            .first()
+        )
+        uid_b = other.user_a_id if other else None
+    finally:
+        db.close()
+
+    headers_a = {"Authorization": "Bearer %s" % create_access_token(uid)}
+
+    # i2 越权 403
+    if uid_b is not None:
+        headers_b = {"Authorization": "Bearer %s" % create_access_token(uid_b)}
+        r2 = client.post(
+            "/api/v1/couple/ai/sessions/%d/close" % sid, headers=headers_b
+        )
+        check("i2 越权 → 403 code=50002",
+              r2.status_code == 403 and (r2.json().get("detail") or {}).get("code") == 50002,
+              str(r2.status_code) + str(r2.json())[:120])
+    else:
+        check("i2 越权（无第二关系，跳过）", True)
+
+    # i3 正常关闭 → 200 + 归档字段
+    r3 = client.post(
+        "/api/v1/couple/ai/sessions/%d/close" % sid, headers=headers_a
+    )
+    d3 = (r3.json() or {}).get("data") or {}
+    check("i3 关闭 → 200 closed=true",
+          r3.status_code == 200 and d3.get("closed") is True
+          and d3.get("session_id") == sid,
+          str(r3.json())[:160])
+
+    db = SessionLocal()
+    try:
+        sess = ai_repo.get_session_by_id(db, sid)
+        check("i3 归档 status=archived", sess.status == "archived", sess.status)
+        check("i3 segment_reason=user_ended",
+              sess.segment_reason == "user_ended", str(sess.segment_reason))
+    finally:
+        db.close()
+
+    # i4 重复调幂等 200
+    r4 = client.post(
+        "/api/v1/couple/ai/sessions/%d/close" % sid, headers=headers_a
+    )
+    d4 = (r4.json() or {}).get("data") or {}
+    check("i4 幂等 → 仍 200 closed=true",
+          r4.status_code == 200 and d4.get("closed") is True,
+          str(r4.status_code))
+
+    # 清理（按 id，session_summary 由开关=1 未写库）
+    db = SessionLocal()
+    try:
+        from app.models.ai import AiChatMessage, AiChatSession
+        from sqlalchemy import delete
+        db.execute(delete(AiChatMessage).where(AiChatMessage.session_id == sid))
+        db.execute(delete(AiChatSession).where(AiChatSession.id == sid))
+        db.commit()
+        print(f"  已清理 close 测试会话 {sid}")
+    finally:
+        db.close()
+
+
 def main() -> int:
     print("=" * 72)
-    print("P0-10A 会话生命周期（a–h + 隔离）")
+    print("P0-10A/B 会话生命周期（a–i + 隔离）")
     print("=" * 72)
 
     c0 = _row_counts()
@@ -356,6 +452,7 @@ def main() -> int:
     case_abcd_preprocess()
     case_h_session_summary_unit()
     case_active_endpoint_service()
+    case_i_close_endpoint()
 
     c1 = _row_counts()
     print(f"\n收尾 rows session/message/memory = {c1}")

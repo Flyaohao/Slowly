@@ -270,6 +270,36 @@ class AiRepository @Inject constructor(
         }
     }
 
+    /** P0-10B：GET /sessions/active——续接判定由服务端权威决定 */
+    suspend fun getActiveSession(sceneKey: String): Result<AiDto.ActiveSessionResponse> {
+        return try {
+            val response = apiService.getActiveSession(sceneKey)
+            val data = response.data
+            if (response.isSuccess && data != null) {
+                Result.success(data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** P0-10B：POST /sessions/{id}/close——「新对话」前先归档旧会话 */
+    suspend fun closeSession(sessionId: Long): Result<AiDto.CloseSessionResponse> {
+        return try {
+            val response = apiService.closeSession(sessionId)
+            val data = response.data
+            if (response.isSuccess && data != null) {
+                Result.success(data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun getSessionMessages(sessionId: Long): Result<List<AiDto.MessageResponse>> {
         return try {
             val response = apiService.getSessionMessages(sessionId)

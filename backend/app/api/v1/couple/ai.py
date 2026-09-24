@@ -230,6 +230,28 @@ def submit_feedback(
     return ApiResponse()
 
 
+@router.post("/sessions/{session_id}/close", response_model=ApiResponse)
+def close_session(
+    session_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """P0-10B：显式结束当前会话（归档 + 沉淀 session_summary）。
+
+    客户端「新对话」必须先调本端点——否则下一句 sessionId=null 时服务端
+    会静默续接仍为 active 的旧会话（见 P0-10B 执行 prompt §2.1）。
+    幂等：已归档再调仍 200。
+    """
+    try:
+        data = ai_service.close_session(db, current_user.id, session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": 50002, "message": "无权访问此会话", "data": None},
+        )
+    return ApiResponse(data=data)
+
+
 @router.delete("/sessions/{session_id}", response_model=ApiResponse)
 def delete_session(
     session_id: int,
