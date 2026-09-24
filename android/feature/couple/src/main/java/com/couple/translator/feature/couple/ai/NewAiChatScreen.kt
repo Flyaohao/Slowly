@@ -52,6 +52,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -191,6 +192,13 @@ fun NewAiChatScreen(
             } else if (uiState.isLoading || uiState.isStreaming) {
                 // 请求已发出但连思考增量都还没到（0.5s 内的极短窗口）
                 item { AiWaitingBubble() }
+            }
+
+            // P0-5：最近一次回答的判断依据（画像/记忆/理论），默认收起
+            uiState.evidence?.let { evidence ->
+                item {
+                    EvidencePanel(evidence = evidence)
+                }
             }
 
             item { Spacer(modifier = Modifier.height(8.dp)) }
@@ -440,10 +448,132 @@ private fun AgentTraceCard(toolCalls: List<AiDto.AgentToolCall>, steps: Int) {
 }
 
 private fun toolLabel(name: String): String = when (name) {
-    "get_relation_profile" -> "已查询关系画像"
-    "search_theory" -> "已检索依恋理论"
-    "get_ai_memory" -> "已查询 AI 记忆"
-    else -> "已调用工具 $name"
+    "get_relation_profile" -> "看了看你们的画像"
+    "search_theory" -> "翻了翻相关的理论"
+    "get_ai_memory" -> "回想了你们之前说过的话"
+    else -> "用了用「$name」"
+}
+
+/**
+ * P0-5「我依据了什么」：可折叠依据面板。
+ *
+ * 三块内容全部来自后端 evidence 帧（零新增 LLM）：画像卡与 prompt 同源，
+ * 记忆/理论是本轮真实召回。折叠态用 rememberSaveable 保持，且以 evidence
+ * 为 key——新回答到来时自动回到默认收起。
+ */
+@Composable
+private fun EvidencePanel(evidence: AiDto.EvidencePayload) {
+    var expanded by rememberSaveable(evidence) { mutableStateOf(false) }
+    val hasProfile = evidence.selfProfileCard.isNotBlank() ||
+        evidence.partnerProfileCard.isNotBlank() ||
+        evidence.relationshipPattern.isNotBlank()
+    val hasMemory = evidence.recalledMemories.isNotEmpty()
+    val hasTheory = evidence.theoryChunks.isNotEmpty()
+
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = { expanded = !expanded },
+        containerColor = AppSurface,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = if (expanded) "▾ 我依据了什么" else "▸ 我依据了什么",
+                style = MaterialTheme.typography.labelMedium,
+                color = AppTextSecondary,
+                modifier = Modifier.weight(1f),
+            )
+            if (evidence.voiceStyleLabel.isNotBlank()) {
+                Text(
+                    text = "当前语气：${evidence.voiceStyleLabel}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppTextTertiary,
+                )
+            }
+        }
+
+        if (expanded) {
+            if (hasProfile) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "📋 你们的画像",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AppAccent,
+                )
+                if (evidence.selfProfileCard.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = evidence.selfProfileCard,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextPrimary,
+                    )
+                }
+                if (evidence.partnerProfileCard.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = evidence.partnerProfileCard,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextPrimary,
+                    )
+                }
+                if (evidence.relationshipPattern.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = evidence.relationshipPattern,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextPrimary,
+                    )
+                }
+            }
+
+            if (hasMemory) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "🧠 我记得的",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AppAccent,
+                )
+                evidence.recalledMemories.forEach { mem ->
+                    val meta = listOf(mem.source, mem.createdAt)
+                        .filter { !it.isNullOrBlank() }
+                        .joinToString(" · ")
+                    Text(
+                        text = "· ${mem.content}" + if (meta.isNotBlank()) "（$meta）" else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextSecondary,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+
+            if (hasTheory) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "📚 参考的理论",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AppAccent,
+                )
+                evidence.theoryChunks.forEach { chunk ->
+                    val head = chunk.title.ifBlank { "参考" }
+                    Text(
+                        text = "· $head：${chunk.snippet}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextSecondary,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+
+            if (!hasProfile && !hasMemory && !hasTheory) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "这一轮没有可用的画像、记忆或理论依据",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextTertiary,
+                )
+            }
+        }
+    }
 }
 
 @Composable

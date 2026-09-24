@@ -35,6 +35,7 @@ class AiRepository @Inject constructor(
     private val thinkingAdapter by lazy { moshi.adapter(AiDto.StreamThinkingPayload::class.java) }
     private val doneAdapter by lazy { moshi.adapter(AiDto.StreamDonePayload::class.java) }
     private val errorAdapter by lazy { moshi.adapter(AiDto.StreamErrorPayload::class.java) }
+    private val evidenceAdapter by lazy { moshi.adapter(AiDto.EvidencePayload::class.java) }
 
     /** 表达改写 / 画像报告等新流式端点共用的通用解码器（ai_generation 协议） */
     private val generationDecoder = GenerationStreamDecoder(moshi)
@@ -368,6 +369,13 @@ class AiRepository @Inject constructor(
                     val p = thinkingAdapter.fromJson(json)
                     // 思考帧解析失败不该中断整条流：它只是过程展示，丢掉即可
                     if (p == null) null else AiDto.ChatStreamEvent.Thinking(p.content)
+                }
+
+                "evidence" -> {
+                    // P0-5 判断依据帧：解析失败静默丢弃（与 thinking 同策略），
+                    // 绝不能变成 Failure 把整条已收完正文的流判死
+                    val p = evidenceAdapter.fromJson(json)
+                    if (p == null) null else AiDto.ChatStreamEvent.Evidence(p)
                 }
 
                 "done" -> {

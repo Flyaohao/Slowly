@@ -118,6 +118,8 @@ object AiDto {
     data class ChatResponse(
         @Json(name = "session_id") val sessionId: Long,
         @Json(name = "message") val message: MessageResponse,
+        /** P0-5：军师判断依据（画像/记忆/理论）；blocked 时为 null */
+        @Json(name = "evidence") val evidence: EvidencePayload? = null,
     ) {
         // 便捷访问器：让调用方写法无需改动
         val messageId: Long get() = message.id
@@ -126,6 +128,40 @@ object AiDto {
         val structuredOutput: StructuredOutput? get() = message.structuredOutput
         val riskLevel: String? get() = message.riskLevel
     }
+
+    /**
+     * P0-5「我依据了什么」：一次回答用到的三块依据。
+     *
+     * 由后端 `_preprocess` 组装、零新增 LLM 调用——画像卡与 prompt 同源，
+     * 记忆/理论是本轮真实召回结果。流式走独立 `evidence` 帧，非流式挂在
+     * [ChatResponse.evidence]。
+     */
+    @JsonClass(generateAdapter = true)
+    data class EvidencePayload(
+        @Json(name = "scene_key") val sceneKey: String = "",
+        @Json(name = "self_profile_card") val selfProfileCard: String = "",
+        @Json(name = "partner_profile_card") val partnerProfileCard: String = "",
+        @Json(name = "relationship_pattern") val relationshipPattern: String = "",
+        @Json(name = "recalled_memories") val recalledMemories: List<EvidenceMemory> = emptyList(),
+        @Json(name = "theory_chunks") val theoryChunks: List<EvidenceTheory> = emptyList(),
+        @Json(name = "avatar_name") val avatarName: String = "",
+        @Json(name = "voice_style") val voiceStyle: String = "",
+        @Json(name = "voice_style_label") val voiceStyleLabel: String = "",
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class EvidenceMemory(
+        @Json(name = "content") val content: String = "",
+        @Json(name = "source") val source: String = "",
+        @Json(name = "created_at") val createdAt: String? = null,
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class EvidenceTheory(
+        @Json(name = "title") val title: String = "",
+        @Json(name = "snippet") val snippet: String = "",
+        @Json(name = "score") val score: Double = 0.0,
+    )
 
     /**
      * 结构化输出（各场景共用的一张宽表）。
@@ -259,6 +295,10 @@ object AiDto {
 
         /** 思考过程增量，喂给「深度思考」面板；不参与正文拼接 */
         data class Thinking(val content: String) : ChatStreamEvent
+
+        /** P0-5：正文完整后的判断依据帧（evidence → done），不参与正文拼接 */
+        data class Evidence(val payload: EvidencePayload) : ChatStreamEvent
+
         data class Done(
             val sessionId: Long,
             val messageId: Long,

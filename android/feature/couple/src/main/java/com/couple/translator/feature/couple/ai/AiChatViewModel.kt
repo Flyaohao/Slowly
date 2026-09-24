@@ -55,6 +55,8 @@ data class AiChatUiState(
     /** 最近一次 Agent 回答携带的工具调用轨迹（查画像 / 检索理论），渲染在对应气泡上方 */
     val agentToolCalls: List<AiDto.AgentToolCall> = emptyList(),
     val agentSteps: Int = 0,
+    /** P0-5：最近一次回答的判断依据（画像/记忆/理论）；新提问时清空 */
+    val evidence: AiDto.EvidencePayload? = null,
     val error: String = "",
 ) {
     /** 输入框是否应禁用：请求中或流式输出中都禁用，避免同会话并发（含表达改写流式） */
@@ -348,6 +350,7 @@ class AiChatViewModel @Inject constructor(
                 thinkingContent = "",
                 thinkingFinished = false,
                 thinkingSeconds = 0,
+                evidence = null,
                 error = "",
             )
         }
@@ -379,6 +382,11 @@ class AiChatViewModel @Inject constructor(
                             thinkingSeconds = it.thinkingSeconds
                                 .takeIf { s -> s > 0 } ?: elapsedSeconds(),
                         )
+                    }
+
+                    // P0-5：evidence 帧在 done 之前到达，只存不拼正文
+                    is AiDto.ChatStreamEvent.Evidence -> _uiState.update {
+                        it.copy(evidence = ev.payload)
                     }
 
                     is AiDto.ChatStreamEvent.Done -> finishStream(ev)

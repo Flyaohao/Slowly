@@ -12,7 +12,9 @@ from app.repositories import (
     safety_repo,
 )
 from app.schemas.ai_output import RewriteOutput, ReviewOutput
+from app.schemas.advisor_context import AdvisorContext
 from app.services.prompt_builder import (
+    DEFAULT_AVATAR_NAME,
     build_structured_stream_prompt,
     build_persona_instruction,
     build_profile_report_prompt,
@@ -35,7 +37,7 @@ from app.services.safety_service import (
     merge_risk_levels,
 )
 from app.services.rag_service import retrieve_chunks, build_rag_context
-from app.services.memory_service import get_memory_context, distill_in_background
+from app.services.memory_service import get_memories, get_memory_context, distill_in_background
 from app.services.llm_client import llm, LlmError
 from app.services.sse import HEARTBEAT_INTERVAL, stream_with_heartbeat
 
@@ -114,8 +116,12 @@ def _preprocess(
     user_profile_text = _format_profile(user_profile, user_scores)
     # 伴侣段：有画像用「TA 的画像」卡，双方都有时再拼「你们的关系」；
     # 对方未完成问卷 → 整段留空（不输出占位，避免模型把占位当事实）。
-    partner_profile_text = _build_partner_section(
+    # 拆成两块是为了 evidence 展示（P0-5）能分开渲染；prompt 仍拼成一段。
+    partner_card, rel_block = _build_partner_parts(
         user_profile, user_scores, partner_profile, partner_scores
+    )
+    partner_profile_text = (
+        f"{partner_card}\n\n{rel_block}" if rel_block else partner_card
     )
 
     rag_chunks = retrieve_chunks(db, user_input)
@@ -158,6 +164,35 @@ def _preprocess(
     messages = _append_persona(messages, persona)
     stream_messages = _append_persona(stream_messages, persona)
 
+    # P0-5 判断依据：同一份局部数据的第二出口（零新增 LLM 调用）。
+    # 记忆取与 get_memory_context 相同的近 10 条；理论取本轮 rag_chunks。
+    # 在请求级 db 内拍平成基本类型，流式生成器可安全携带。
+    recent_memories = get_memories(db, user_id, relation_id)[:10]
+    evidence = AdvisorContext(
+        scene_key=scene_key,
+        self_profile_card=user_profile_text if user_profile else "",
+        partner_profile_card=partner_card,
+        relationship_pattern=rel_block,
+        recalled_memories=[
+            {
+                "content": m.get("memory_text", ""),
+                "source": m.get("memory_type", ""),
+                "created_at": m.get("created_at"),
+            }
+            for m in recent_memories
+        ],
+        theory_chunks=[
+            {
+                "title": c.get("doc_title", ""),
+                "snippet": (c.get("chunk_text") or "")[:80],
+                "score": c.get("score", 0),
+            }
+            for c in rag_chunks
+        ],
+        avatar_name=(avatar.name if avatar else "") or DEFAULT_AVATAR_NAME,
+        voice_style=(avatar.voice_style if avatar else "") or "gentle",
+    ).to_display()
+
     ai_repo.create_message(db, session_id, "user", user_input)
     # 留档用压平后的文本，便于直接读「这一轮到底给模型看了什么」
     ai_repo.save_prompt_version(
@@ -178,6 +213,7 @@ def _preprocess(
         "stream_messages": stream_messages,
         "user_input": user_input,
         "rag_chunks": rag_chunks,
+        "evidence": evidence,
     }
 
 
@@ -203,6 +239,7 @@ def chat(
                 "created_at": None,
             },
             "blocked": True,
+            "evidence": None,
         }
 
     scene = ctx["scene"]
@@ -255,6 +292,8 @@ def chat(
             "risk_level": risk_level,
             "created_at": assistant_msg.created_at,
         },
+        # P0-5：判断依据随非流式响应一出（已在 _preprocess 拍平，无 ORM）
+        "evidence": ctx.get("evidence"),
     }
 
 
@@ -291,6 +330,8 @@ def prepare_chat(
         "scene_name": ctx["scene"].name,
         "stream_messages": ctx["stream_messages"],
         "rag_hit": len(ctx["rag_chunks"]),
+        # P0-5：evidence 已是纯 dict，可在响应体阶段随生成器携带
+        "evidence": ctx.get("evidence"),
         # 记忆沉淀需要在响应体阶段（请求级 db 已销毁）用独立会话写库，
         # 故这里把落库所需的三个基本类型一并拍平带过去。
         "user_id": user_id,
@@ -424,6 +465,12 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
         scene_key=prepared["scene_key"],
         user_input=prepared.get("user_input", ""),
     )
+
+    # P0-5：正文完整后的末帧之一——判断依据。独立事件名，不与 thinking/delta 混用；
+    # 数据在 prepare_chat 已拍平，此处不碰 db。
+    evidence = prepared.get("evidence")
+    if evidence:
+        yield {"event": "evidence", "data": evidence}
 
     yield {
         "event": "done",
@@ -725,41 +772,64 @@ def _append_persona(messages: List[Dict[str, Any]], persona: str) -> List[Dict[s
     return out
 
 
-def _build_partner_section(
+def _build_partner_parts(
     user_profile,
     user_scores: Dict[str, float],
     partner_profile,
     partner_scores: Dict[str, float],
-) -> str:
-    """伴侣画像段 + 关系模式段（P0-2）。
+) -> Tuple[str, str]:
+    """拆出伴侣段的两块：(TA 画像卡, 关系模式块)。
 
-    - 对方无画像 → 返回空串：不输出「TA 的画像」也不输出「你们的关系」，
-      更不输出「未完成问卷」占位（占位会被模型当成事实）
-    - 对方有画像、己方也有 → TA 卡之后追加「你们的关系」（derive_relationship_pattern）
-    - 对方有画像、己方没有 → 只出 TA 卡，不判关系（关系需要双方分数）
-
-    `_preprocess` 与测试共用本函数，保证验收打的是真实拼装路径。
+    对方无画像 → ("", "")：不输出占位（P0-2）。
+    己方无画像 → 只出 TA 卡、关系块为空（关系需要双方分数）。
+    供 prompt 拼装（`_build_partner_section`）与 evidence 展示共用同一判定。
     """
     if not partner_profile:
-        return ""
+        return "", ""
 
     from app.services.profile_service import (
         build_profile_card,
         derive_relationship_pattern,
     )
 
-    section = build_profile_card(
+    partner_card = build_profile_card(
         partner_profile.profile_type,
         partner_scores,
         partner_profile.confidence,
         title="TA 的画像",
     )
-    if user_profile:
-        pattern_name, pattern_desc = derive_relationship_pattern(
-            user_scores, partner_scores
-        )
-        section += f"\n\n【你们的关系】「{pattern_name}」型\n{pattern_desc}"
-    return section
+    if not user_profile:
+        return partner_card, ""
+    pattern_name, pattern_desc = derive_relationship_pattern(
+        user_scores, partner_scores
+    )
+    rel_block = f"【你们的关系】「{pattern_name}」型\n{pattern_desc}"
+    return partner_card, rel_block
+
+
+def _build_partner_section(
+    user_profile,
+    user_scores: Dict[str, float],
+    partner_profile,
+    partner_scores: Dict[str, float],
+) -> str:
+    """伴侣画像段 + 关系模式段（P0-2），prompt 拼装入口。
+
+    - 对方无画像 → 返回空串：不输出「TA 的画像」也不输出「你们的关系」，
+      更不输出「未完成问卷」占位（占位会被模型当成事实）
+    - 对方有画像、己方也有 → TA 卡之后追加「你们的关系」
+    - 对方有画像、己方没有 → 只出 TA 卡，不判关系
+
+    `_preprocess` 与测试共用本函数，保证验收打的是真实拼装路径。
+    """
+    partner_card, rel_block = _build_partner_parts(
+        user_profile, user_scores, partner_profile, partner_scores
+    )
+    if not partner_card:
+        return ""
+    if rel_block:
+        return f"{partner_card}\n\n{rel_block}"
+    return partner_card
 
 
 def _call_llm(prompt: Any, scene_key: str) -> dict:
