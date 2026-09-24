@@ -329,21 +329,6 @@ class AiRepository @Inject constructor(
         }
     }
 
-    /** Agent 问答：模型自主决定是否调用工具（查画像 / 检索理论），返回答复 + 工具调用轨迹。 */
-    suspend fun agentChat(question: String, history: List<AiDto.AgentHistoryItem>? = null): Result<AiDto.AgentResponse> {
-        return try {
-            val response = apiService.agentChat(AiDto.AgentRequest(question, history))
-            val data = response.data
-            if (response.isSuccess && data != null) {
-                Result.success(data)
-            } else {
-                Result.failure(Exception(response.message))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
     /**
      * 把一帧 SSE 报文解码成客户端事件。
      *

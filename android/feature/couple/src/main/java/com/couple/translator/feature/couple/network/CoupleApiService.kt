@@ -192,9 +192,6 @@ interface CoupleApiService {
     @POST("api/v1/couple/ai/generate-reply")
     suspend fun generateReply(@Body body: LetterDto.GenerateReplyRequest): ApiResponse<LetterDto.GenerateReplyResponse>
 
-    @POST("api/v1/couple/ai/agent")
-    suspend fun agentChat(@Body body: AiDto.AgentRequest): ApiResponse<AiDto.AgentResponse>
-
     // Mediation
     @POST("api/v1/couple/ai/mediation/start")
     suspend fun startMediation(@Body body: MediationDto.MediationStartRequest): ApiResponse<MediationDto.MediationSessionResponse>
