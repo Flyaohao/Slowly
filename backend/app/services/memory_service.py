@@ -118,6 +118,21 @@ def update_visibility(db: Session, memory_id: int, user_id: int, visibility: str
         raise ValueError("50002")
     memory.visibility = visibility
     db.commit()
+    # 一致性维护（非修 bug）：当前召回不读 metadata.visibility（走 SQL 双保险），
+    # 但同步 chroma 避免日后有人按 metadata 过滤时拿到陈旧值。
+    try:
+        from app.services.memory_retrieval import _get_collection
+
+        col = _get_collection()
+        if col is not None:
+            got = col.get(ids=[str(memory_id)])
+            if got and got.get("ids"):
+                metas = (got.get("metadatas") or [None])[0] or {}
+                metas = dict(metas)
+                metas["visibility"] = visibility
+                col.update(ids=[str(memory_id)], metadatas=[metas])
+    except Exception as exc:
+        logger.warning("[MEMORY] 同步向量 metadata 失败 id=%s: %s", memory_id, exc)
     return _to_dict(memory)
 
 
@@ -127,6 +142,16 @@ def delete_memory(db: Session, memory_id: int, user_id: int) -> None:
         raise ValueError("50002")
     db.delete(memory)
     db.commit()
+    # 缺陷三：DB 是权威、向量是派生——commit 成功后同步删向量。
+    # 向量库异常不能让删除接口失败（只记日志）。
+    try:
+        from app.services.memory_retrieval import _get_collection
+
+        col = _get_collection()
+        if col is not None:
+            col.delete(ids=[str(memory_id)])
+    except Exception as exc:
+        logger.warning("[MEMORY] 同步删向量失败 id=%s: %s", memory_id, exc)
 
 
 def _to_dict(memory: AiMemory) -> dict:

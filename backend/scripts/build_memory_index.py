@@ -40,22 +40,57 @@ def _get_store_fresh():
 def status() -> int:
     db = SessionLocal()
     try:
-        n_db = db.query(AiMemory).count()
+        db_ids = set(r[0] for r in db.query(AiMemory.id).all())
     finally:
         db.close()
+    n_db = len(db_ids)
     store = _get_store_fresh()
     n_vec = 0
+    chroma_ids = set()
     if store is not None:
         try:
-            n_vec = store.count()
+            got = store.get(include=[])
+            chroma_ids = set(int(x) for x in (got.get("ids") or []))
+            n_vec = len(chroma_ids)
         except Exception as exc:
             print("读取向量库失败: %s" % exc)
             return 1
+    orphans = chroma_ids - db_ids
+    missing = db_ids - chroma_ids
     print("ai_memory 行数: %d" % n_db)
     print("couple_memory 向量数: %d" % n_vec)
-    print("待回填: %d" % max(0, n_db - n_vec))
-    if n_db > n_vec:
+    # 缺陷三-3：单独打印孤儿，不用 max(0, n_db-n_vec) 掩盖
+    print("孤儿向量: %d%s" % (len(orphans), (" ids=%s" % sorted(orphans)) if orphans else ""))
+    print("缺向量(待回填): %d" % len(missing))
+    if missing:
         print("→ 运行: python scripts/build_memory_index.py --backfill")
+    if orphans:
+        print("→ 运行: python scripts/build_memory_index.py --prune")
+    if n_db != n_vec and not missing and not orphans:
+        # 理论上不会到这；防御性提示
+        print("→ 行数与向量数不一致但差集为空，请人工检查")
+    return 0
+
+
+def prune() -> int:
+    """删除孤儿向量（chroma 有、DB 无）。幂等：第二次删除 0 条。"""
+    col = _get_store_fresh()
+    if col is None:
+        print("无法打开 couple_memory，中止")
+        return 1
+    db = SessionLocal()
+    try:
+        db_ids = set(r[0] for r in db.query(AiMemory.id).all())
+    finally:
+        db.close()
+    got = col.get(include=[])
+    chroma_ids = set(int(x) for x in (got.get("ids") or []))
+    orphans = sorted(chroma_ids - db_ids)
+    if not orphans:
+        print("删除孤儿 0 条（无孤儿）")
+        return 0
+    col.delete(ids=[str(i) for i in orphans])
+    print("删除孤儿 %d 条（ids=%s）" % (len(orphans), orphans))
     return 0
 
 
@@ -124,7 +159,8 @@ def backfill(batch_report: int = 20) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="记忆向量索引（couple_memory）")
     parser.add_argument("--backfill", action="store_true", help="幂等回填所有无向量的记忆")
-    parser.add_argument("--status", action="store_true", help="只打印进度")
+    parser.add_argument("--prune", action="store_true", help="删除孤儿向量（chroma 有、DB 无）")
+    parser.add_argument("--status", action="store_true", help="只打印进度与孤儿数")
     args = parser.parse_args()
 
     if args.status:
@@ -134,6 +170,12 @@ def main() -> int:
             return backfill()
         except Exception as exc:
             print("回填失败: %s" % exc)
+            return 1
+    if args.prune:
+        try:
+            return prune()
+        except Exception as exc:
+            print("prune 失败: %s" % exc)
             return 1
     parser.print_help()
     return 0

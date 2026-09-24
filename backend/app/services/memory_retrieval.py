@@ -152,6 +152,21 @@ def vectorize_memory_async(memory: Dict[str, Any]) -> None:
             existing = col.get(ids=[mid])
             if existing and existing.get("ids"):
                 return  # 幂等
+            # 与 delete_memory 的竞态：异步 embed 期间行可能已被删——
+            # 落向量前再查一次 DB，行不在则放弃（否则删完又冒出孤儿向量）
+            try:
+                from app.core.database import SessionLocal
+                from app.models.ai import AiMemory as _M
+
+                _db = SessionLocal()
+                try:
+                    if _db.get(_M, int(memory["id"])) is None:
+                        logger.info("[MEM-RET] 行已删除，跳过向量化 id=%s", mid)
+                        return
+                finally:
+                    _db.close()
+            except Exception:
+                pass  # 查库失败不阻断写入（以幂等 get 为准）
             from app.services.embedding import embeddings as emb
 
             vec = emb.embed_documents([text])[0]
@@ -206,11 +221,17 @@ def _finalize(
     return items
 
 
-def _query_scores(col, query_vec: List[float], n: int) -> Dict[int, float]:
-    """memory_id → cosine similarity（1 - distance）。"""
+def _query_scores(col, query_vec: List[float], n: int, relation_id: int) -> Dict[int, float]:
+    """memory_id → cosine similarity（1 - distance）。
+
+    必须带 where relation_id（缺陷一）：couple_memory 是全局单 collection，
+    不过滤时别情侣的相似记忆会占满 n_results 候选位，把本 relation 的命中
+    挤出 → hit_ids 空 → 静默降级，召回质量随机下降。
+    """
     res = col.query(
         query_embeddings=[query_vec],
         n_results=max(n, 1),
+        where={"relation_id": int(relation_id)},
         include=["distances", "metadatas"],
     )
     ids = (res.get("ids") or [[]])[0]
@@ -270,7 +291,7 @@ def retrieve_memory_items(
         return _fallback_recent(db, user_id, relation_id, limit=RECENCY_LIMIT)
 
     try:
-        scores = _query_scores(col, query_vec, max(limit * 3, 15))
+        scores = _query_scores(col, query_vec, max(limit * 3, 15), relation_id)
     except Exception as exc:
         logger.warning("[MEM-RET] 向量检索失败，降级: %s", exc)
         return _fallback_recent(db, user_id, relation_id, limit=RECENCY_LIMIT)
@@ -279,10 +300,14 @@ def retrieve_memory_items(
     if not hit_ids:
         return _fallback_recent(db, user_id, relation_id, limit=RECENCY_LIMIT)
 
+    # 缺陷二：回表必须同时约束 relation——visibility_filter 的 private 支
+    # 只看 user_id，不看 relation；解绑再绑定后旧关系自己的 private 会漏进来。
+    # 与 where 双保险：即使 chroma metadata 与库不一致也不越权。
     rows = (
         db.query(AiMemory)
         .filter(
             AiMemory.id.in_(hit_ids),
+            AiMemory.relation_id == relation_id,
             visibility_filter(user_id, relation_id),
         )
         .all()

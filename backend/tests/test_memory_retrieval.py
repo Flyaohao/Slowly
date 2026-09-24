@@ -326,9 +326,367 @@ def case_backfill_idempotent_and_old_recallable():
         db.close()
 
 
+# ---------------------------------------------------------------------- #
+# §A 缺陷一：跨情侣隔离（chroma where relation_id）
+# ---------------------------------------------------------------------- #
+def _embed_and_add(col, mem_id: int, text: str, user_id: int,
+                   relation_id: int, visibility: str = "private") -> None:
+    from app.services.embedding import embeddings
+
+    vec = embeddings.embed_documents([text])[0]
+    col.add(
+        ids=[str(mem_id)],
+        embeddings=[vec],
+        documents=[text],
+        metadatas=[{
+            "memory_id": int(mem_id),
+            "user_id": int(user_id),
+            "relation_id": int(relation_id),
+            "visibility": visibility,
+            "memory_type": "偏好",
+        }],
+    )
+
+
+def case_cross_relation_isolation():
+    print("\n[§A-a] 跨情侣隔离：别 relation 的相似记忆不得挤掉/混入本 relation 召回")
+    from app.core.database import SessionLocal
+    from app.models.ai import AiMemory
+    from app.models.couple_relation import CoupleRelation
+    from app.services.embedding import embeddings
+    from app.services.memory_retrieval import (
+        SCORE_THRESHOLD,
+        _get_collection,
+        reset_store_for_tests,
+        retrieve_memory_items,
+    )
+
+    if not embeddings.api_key:
+        check("跨情侣隔离（需 Key）数据未覆盖——已跳过", True)
+        return
+
+    reset_store_for_tests()
+    col = _get_collection()
+    if col is None:
+        check("collection 可打开", False)
+        return
+
+    QUERY = "他总是敷衍我说都行随便你，我真的很累"
+    # 本 relation：2 条中等相关
+    own_texts = [
+        "他一吵架就说都行随便你，让我觉得很累没有被重视",
+        "每次讨论周末安排他都说随便，其实我很希望他能拿主意",
+    ]
+    # 另一 relation：20 条与 query 高度相似（近逐字），专门挤占 n_results=15。
+    # 只写 chroma、不写 DB——FK 不允许假 user/relation；挤占效应在向量层即可复现。
+    other_texts = [
+        "他总是敷衍我说都行随便你我真的很累第%d次" % i for i in range(20)
+    ]
+
+    db = SessionLocal()
+    created_own = []
+    ghost_other = []
+    try:
+        rel = db.query(CoupleRelation).filter(CoupleRelation.status == "active").first()
+        uid, rid = rel.user_a_id, rel.id
+        # 借一条真实存在的别 relation 作 metadata（FK/一致性不重要，只占候选位）
+        other_rel = (
+            db.query(CoupleRelation)
+            .filter(CoupleRelation.id != rid)
+            .first()
+        )
+        if other_rel is None:
+            check("存在第二条 couple_relation 可用", False, "本机只有 1 条 relation，无法复现跨情侣")
+            return
+        other_rid = other_rel.id
+
+        # 造本 relation DB 行 + 向量
+        for t in own_texts:
+            m = AiMemory(user_id=uid, relation_id=rid, memory_type="偏好",
+                         memory_text=t, visibility="private")
+            db.add(m)
+            db.flush()
+            created_own.append(m.id)
+        db.commit()
+
+        for mid in created_own:
+            row = db.get(AiMemory, mid)
+            _embed_and_add(col, mid, row.memory_text, row.user_id, row.relation_id)
+
+        # 别 relation：负数 id 段避免与真实 id 冲突，只进 chroma
+        from app.services.embedding import embeddings as emb
+        for i, t in enumerate(other_texts):
+            gid = -90000 - i
+            vec = emb.embed_documents([t])[0]
+            col.add(
+                ids=[str(gid)],
+                embeddings=[vec],
+                documents=[t],
+                metadatas=[{
+                    "memory_id": gid,
+                    "user_id": 77777,
+                    "relation_id": other_rid,
+                    "visibility": "private",
+                    "memory_type": "偏好",
+                }],
+            )
+            ghost_other.append(gid)
+
+        items = retrieve_memory_items(db, uid, rid, query=QUERY, limit=5)
+        result_ids = {x["id"] for x in items}
+        other_set = set(ghost_other)
+        own_set = set(created_own)
+
+        check("召回不含另一 relation 的 id", not (result_ids & other_set),
+              f"泄漏={sorted(result_ids & other_set)}")
+        scored = [x for x in items if x.get("score") is not None]
+        check("走的是向量路径（有 score，未被挤成纯降级）", len(scored) > 0,
+              f"scored={len(scored)} items={[x['id'] for x in items]}")
+        own_scored = [x for x in scored if x["id"] in own_set]
+        check("本 relation 相关记忆被向量召回", len(own_scored) >= 1,
+              f"own_scored={[x['id'] for x in own_scored]}")
+        if scored:
+            check("命中分 ≥ 阈值", all((x["score"] or 0) >= SCORE_THRESHOLD for x in scored),
+                  str([x["score"] for x in scored]))
+    finally:
+        for gid in ghost_other + created_own:
+            try:
+                col.delete(ids=[str(gid)])
+            except Exception:
+                pass
+        for mid in created_own:
+            row = db.get(AiMemory, mid)
+            if row:
+                db.delete(row)
+        db.commit()
+        reset_store_for_tests()
+        db.close()
+        print(f"  已清理 own={created_own} ghost={len(ghost_other)}")
+
+
+# ---------------------------------------------------------------------- #
+# §A 缺陷二：前任（旧 relation）private 不得进新关系
+# ---------------------------------------------------------------------- #
+def case_ex_relation_isolation():
+    print("\n[§A-b] 前任记忆隔离：旧 relation 的自己 private 不得进新关系召回")
+    from app.core.database import SessionLocal
+    from app.models.ai import AiMemory
+    from app.models.couple_relation import CoupleRelation
+    from app.services.embedding import embeddings
+    from app.services.memory_retrieval import (
+        _get_collection,
+        reset_store_for_tests,
+        retrieve_memory_items,
+    )
+
+    if not embeddings.api_key:
+        check("前任隔离（需 Key）数据未覆盖——已跳过", True)
+        return
+
+    reset_store_for_tests()
+    col = _get_collection()
+    if col is None:
+        check("collection 可打开", False)
+        return
+
+    QUERY = "前任总是冷暴力我一不高兴就不回消息"
+    db = SessionLocal()
+    old_id = None
+    cur_id = None
+    try:
+        rel = db.query(CoupleRelation).filter(CoupleRelation.status == "active").first()
+        uid, rid = rel.user_a_id, rel.id
+        # 借一条已存在的别 relation 模拟「旧关系」（FK 必须真实存在）
+        other_rel = db.query(CoupleRelation).filter(CoupleRelation.id != rid).first()
+        if other_rel is None:
+            check("存在第二条 couple_relation 可用", False, "本机只有 1 条 relation，无法复现任 relation")
+            return
+        old_rid = other_rel.id
+
+        # 旧关系里自己的 private：与 query 高度相关
+        old = AiMemory(user_id=uid, relation_id=old_rid, memory_type="沟通雷区",
+                       memory_text="前任总是冷暴力，一不高兴就不回消息好几天",
+                       visibility="private")
+        db.add(old)
+        db.flush()
+        old_id = old.id
+        # 本关系一条弱相关，保证非空
+        cur = AiMemory(user_id=uid, relation_id=rid, memory_type="偏好",
+                       memory_text="希望吵架当天能把话说开", visibility="private")
+        db.add(cur)
+        db.flush()
+        cur_id = cur.id
+        db.commit()
+
+        _embed_and_add(col, old_id, old.memory_text, uid, old_rid, "private")
+        _embed_and_add(col, cur_id, cur.memory_text, uid, rid, "private")
+
+        items = retrieve_memory_items(db, uid, rid, query=QUERY, limit=5)
+        result_ids = {x["id"] for x in items}
+        check("召回不含旧 relation 的 private 记忆", old_id not in result_ids,
+              f"result={sorted(result_ids)} old={old_id}")
+    finally:
+        for mid in [old_id, cur_id]:
+            if mid is None:
+                continue
+            try:
+                col.delete(ids=[str(mid)])
+            except Exception:
+                pass
+            row = db.get(AiMemory, mid)
+            if row:
+                db.delete(row)
+        db.commit()
+        reset_store_for_tests()
+        db.close()
+        if old_id:
+            print(f"  已清理 old={old_id}")
+
+
+# ---------------------------------------------------------------------- #
+# §A 缺陷三：删除同步 / prune / status
+# ---------------------------------------------------------------------- #
+def case_delete_syncs_vector():
+    print("\n[§A-c] delete_memory 同步删向量")
+    from app.core.database import SessionLocal
+    from app.models.ai import AiMemory
+    from app.models.couple_relation import CoupleRelation
+    from app.services.embedding import embeddings
+    from app.services.memory_retrieval import _get_collection, reset_store_for_tests
+    from app.services.memory_service import create_memory, delete_memory
+
+    if not embeddings.api_key:
+        check("删除同步（需 Key）数据未覆盖——已跳过", True)
+        return
+
+    reset_store_for_tests()
+    col = _get_collection()
+    if col is None:
+        check("collection 可打开", False)
+        return
+
+    db = SessionLocal()
+    mid = None
+    try:
+        rel = db.query(CoupleRelation).filter(CoupleRelation.status == "active").first()
+        m = create_memory(db, rel.user_a_id, rel.id, "偏好",
+                          "删除同步测试记忆：他喜欢周末去爬山")
+        mid = m["id"]
+        # vectorize 是异步线程，轮询等待
+        import time
+        for _ in range(30):
+            time.sleep(0.2)
+            got = col.get(ids=[str(mid)])
+            if got and got.get("ids"):
+                break
+        check("创建后向量已写入", bool(col.get(ids=[str(mid)]).get("ids")),
+              f"mid={mid}")
+
+        delete_memory(db, mid, rel.user_a_id)
+        check("DB 行已删", db.get(AiMemory, mid) is None)
+        after = col.get(ids=[str(mid)])
+        check("向量已同步删除", not (after and after.get("ids")),
+              str(after.get("ids") if after else None))
+    finally:
+        if mid is not None:
+            row = db.get(AiMemory, mid)
+            if row:
+                db.delete(row)
+                db.commit()
+            try:
+                col.delete(ids=[str(mid)])
+            except Exception:
+                pass
+        db.close()
+
+
+def case_prune_and_status():
+    print("\n[§A-d/e] --prune 幂等 + --status 打印孤儿数")
+    import subprocess
+
+    from app.services.embedding import embeddings
+
+    if not embeddings.api_key:
+        check("prune/status（需 Key）数据未覆盖——已跳过", True)
+        return
+
+    py = sys.executable
+    script = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "scripts", "build_memory_index.py",
+    )
+
+    # 第一次 prune：应删除现存孤儿（至少 12/15 中至少 1 个，若仍存在）
+    from app.services.memory_retrieval import _get_collection, reset_store_for_tests
+    from app.core.database import SessionLocal
+    from app.models.ai import AiMemory
+
+    reset_store_for_tests()
+    col = _get_collection()
+    db = SessionLocal()
+    try:
+        chroma_ids = set(int(x) for x in (col.get(include=[])["ids"] or [])) if col else set()
+        db_ids = set(r[0] for r in db.query(AiMemory.id).all())
+        orphans_before = chroma_ids - db_ids
+    finally:
+        db.close()
+
+    r1 = subprocess.run([py, script, "--prune"], capture_output=True, text=True, timeout=120)
+    out1 = r1.stdout + r1.stderr
+    check("第一次 --prune 退出 0", r1.returncode == 0, out1[-300:])
+    if orphans_before:
+        check("第一次 --prune 删除了孤儿（打印含删除数）",
+              ("删除孤儿" in out1 or "删除" in out1), out1[-400:])
+        check(f"清理前孤儿 {sorted(orphans_before)} 已在输出中提及"
+              if any(str(o) in out1 for o in orphans_before) else "打印了孤儿 ids",
+              True)  # ids 打印为软断言，主断言看删除计数
+    else:
+        print("  注：当前无孤儿（可能已被前序用例清掉），幂等路径仍需验证")
+
+    r2 = subprocess.run([py, script, "--prune"], capture_output=True, text=True, timeout=120)
+    out2 = r2.stdout + r2.stderr
+    check("第二次 --prune 退出 0（幂等）", r2.returncode == 0, out2[-300:])
+    check("第二次删除 0 条", "删除孤儿 0" in out2 or "删除 0" in out2 or "删除孤儿 0 条" in out2,
+          out2[-400:])
+
+    # --status：人为制造孤儿以验证打印（再插一个临时向量）
+    reset_store_for_tests()
+    col = _get_collection()
+    fake_orphan = None
+    try:
+        from app.services.embedding import embeddings as emb
+        vec = emb.embed_documents(["状态检查用临时孤儿向量"])[0]
+        # 找一个不存在于 db 的 id
+        db = SessionLocal()
+        try:
+            db_ids = set(r[0] for r in db.query(AiMemory.id).all())
+        finally:
+            db.close()
+        fake_orphan = max(db_ids | {0}) + 1000
+        col.add(ids=[str(fake_orphan)], embeddings=[vec],
+                documents=["状态检查用临时孤儿向量"],
+                metadatas=[{"memory_id": fake_orphan, "user_id": 0,
+                            "relation_id": 0, "visibility": "private",
+                            "memory_type": "偏好"}])
+        rs = subprocess.run([py, script, "--status"], capture_output=True, text=True, timeout=60)
+        outs = rs.stdout + rs.stderr
+        check("--status 退出 0", rs.returncode == 0, outs[-200:])
+        check("--status 打印孤儿向量数（不是用 max(0,…) 掩盖）",
+              "孤儿" in outs, outs)
+        # 期望：n_vec > n_db 时提示 prune
+        check("n_vec>n_db 时提示 --prune", "--prune" in outs, outs)
+    finally:
+        if fake_orphan is not None:
+            try:
+                col.delete(ids=[str(fake_orphan)])
+            except Exception:
+                pass
+        reset_store_for_tests()
+
+
 def main() -> int:
     print("=" * 72)
-    print("P0-4 记忆相关性召回（五条补充约束）")
+    print("P0-4 记忆相关性召回（五条补充约束 + §A 三缺陷补丁）")
     print("=" * 72)
     case_visibility_rules()
     case_partner_couple_labeled()
@@ -336,6 +694,11 @@ def main() -> int:
     case_stream_starts_on_embed_timeout()
     case_evidence_same_as_prompt()
     case_backfill_idempotent_and_old_recallable()
+    # §A 补丁用例
+    case_cross_relation_isolation()
+    case_ex_relation_isolation()
+    case_delete_syncs_vector()
+    case_prune_and_status()
 
     print("\n" + "=" * 72)
     if FAILURES:

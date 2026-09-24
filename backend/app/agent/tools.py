@@ -140,10 +140,12 @@ class MemoryQuerySchema(BaseModel):
 
     user_id: int = Field(..., description="用户 ID")
     relation_id: int = Field(..., description="情侣关系 ID，单身模式可传 0")
+    # §A 可选项：无 query 时走近因降级，恰恰是"你之前说过的"最需要相关性的场景
+    query: str = Field("", description="用当前问题提炼的关键词，用于相关性召回")
 
 
 @tool("get_ai_memory", args_schema=MemoryQuerySchema)
-def get_ai_memory(user_id: int, relation_id: int = 0) -> str:
+def get_ai_memory(user_id: int, relation_id: int = 0, query: str = "") -> str:
     """查询此前对话中沉淀下来的用户偏好与关系记忆。
 
     当用户问到"你之前说过的""我们以前聊过的"，或需要延续此前建议时调用。
@@ -155,7 +157,7 @@ def get_ai_memory(user_id: int, relation_id: int = 0) -> str:
 
     db = SessionLocal()
     try:
-        context = get_memory_context(db, user_id, relation_id)
+        context = get_memory_context(db, user_id, relation_id, query=query)
         return context or "暂无沉淀的记忆内容。"
     except Exception as exc:
         logger.warning("[TOOL] get_ai_memory 失败: %s", exc)
