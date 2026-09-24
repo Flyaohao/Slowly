@@ -5,7 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.couple.translator.core.data.model.AiDto
 import com.couple.translator.core.service.AiStreamKeepAlive
+import com.couple.translator.feature.couple.data.model.AnniversaryDto
+import com.couple.translator.feature.couple.data.model.LetterDto
 import com.couple.translator.feature.couple.data.repository.AiRepository
+import com.couple.translator.feature.couple.data.repository.AnniversaryRepository
+import com.couple.translator.feature.couple.data.repository.LetterRepository
 import com.couple.translator.core.network.GenerationStreamEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -19,6 +23,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+/**
+ * P0-8 引用 chip：同一时刻只允许一个，再选即替换。
+ * [body] 是引用正文原文（可能很长），发送时按 §2.3 截断拼进 message。
+ */
+data class QuoteChip(
+    val sourceLabel: String,
+    val body: String,
+    val originId: Long,
+    val originRole: String? = null,
+)
+
+/** 「＋」二级引用选择器的三种来源 */
+enum class QuotePickerType { MESSAGE, LETTER, ANNIVERSARY }
 
 data class AiChatUiState(
     val sessionId: Long? = null,
@@ -54,6 +72,15 @@ data class AiChatUiState(
     val rewriteThinking: String = "",
     /** P0-5：最近一次回答的判断依据（画像/记忆/理论）；新提问时清空 */
     val evidence: AiDto.EvidencePayload? = null,
+    /** P0-8：当前引用 chip（发送/切场景后清空） */
+    val quoteChip: QuoteChip? = null,
+    /** P0-8：信件选择器数据（打开「引用一封信」时加载） */
+    val quoteLetters: List<LetterDto.LetterResponse> = emptyList(),
+    /** P0-8：纪念日选择器数据 */
+    val quoteAnniversaries: List<AnniversaryDto.AnniversaryResponse> = emptyList(),
+    val quotePickerLoading: Boolean = false,
+    /** P0-8：加载失败必须可见，不许静默（项目红线） */
+    val quotePickerError: String = "",
     val error: String = "",
 ) {
     /** 输入框是否应禁用：请求中或流式输出中都禁用，避免同会话并发（含表达改写流式） */
@@ -70,6 +97,9 @@ sealed class AiChatUiEvent {
 @HiltViewModel
 class AiChatViewModel @Inject constructor(
     private val aiRepository: AiRepository,
+    // P0-8：引用一封信 / 附上纪念日 —— 两者均已存在、Hilt 可注入，禁止新建 Repository
+    private val letterRepository: LetterRepository,
+    private val anniversaryRepository: AnniversaryRepository,
     // 流式回答期间挂前台服务保活，退后台不被系统掐断
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
@@ -111,7 +141,8 @@ class AiChatViewModel @Inject constructor(
     val event: SharedFlow<AiChatUiEvent> = _event.asSharedFlow()
 
     fun setSceneKey(sceneKey: String) {
-        _uiState.update { it.copy(sceneKey = sceneKey) }
+        // P0-8：切场景清引用（§2.1 清空时机）
+        _uiState.update { it.copy(sceneKey = sceneKey, quoteChip = null) }
     }
 
     /**
@@ -123,6 +154,122 @@ class AiChatViewModel @Inject constructor(
      */
     fun selectScene(scene: AiScene) {
         setSceneKey(scene.key)
+    }
+
+    // ------------------------------------------------------------------ #
+    // P0-8 引用：chip 状态 + 二级选择器数据加载（复用既有 Repository）
+    // ------------------------------------------------------------------ //
+
+    fun setQuoteChip(chip: QuoteChip) {
+        _uiState.update { it.copy(quoteChip = chip) }
+    }
+
+    fun clearQuoteChip() {
+        _uiState.update { it.copy(quoteChip = null) }
+    }
+
+    /** 打开对应类型的引用选择器前调用：消息走本地 state，信/纪念日拉网。 */
+    fun loadQuotePickerData(type: QuotePickerType) {
+        when (type) {
+            QuotePickerType.MESSAGE -> _uiState.update {
+                it.copy(quotePickerLoading = false, quotePickerError = "")
+            }
+            QuotePickerType.LETTER -> {
+                _uiState.update { it.copy(quotePickerLoading = true, quotePickerError = "") }
+                viewModelScope.launch {
+                    letterRepository.getInbox().fold(
+                        onSuccess = { resp ->
+                            _uiState.update {
+                                it.copy(
+                                    quoteLetters = resp?.items.orEmpty(),
+                                    quotePickerLoading = false,
+                                )
+                            }
+                        },
+                        onFailure = { e ->
+                            // 红线：加载失败不许静默
+                            _uiState.update {
+                                it.copy(
+                                    quotePickerLoading = false,
+                                    quotePickerError = e.message ?: "加载信件失败",
+                                )
+                            }
+                        },
+                    )
+                }
+            }
+            QuotePickerType.ANNIVERSARY -> {
+                _uiState.update { it.copy(quotePickerLoading = true, quotePickerError = "") }
+                viewModelScope.launch {
+                    anniversaryRepository.getAnniversaries().fold(
+                        onSuccess = { resp ->
+                            _uiState.update {
+                                it.copy(
+                                    quoteAnniversaries = resp?.items.orEmpty(),
+                                    quotePickerLoading = false,
+                                )
+                            }
+                        },
+                        onFailure = { e ->
+                            _uiState.update {
+                                it.copy(
+                                    quotePickerLoading = false,
+                                    quotePickerError = e.message ?: "加载纪念日失败",
+                                )
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    companion object {
+        // §2.3 长度红线：后端 ChatRequest.message max_length=2000，超了直接 422
+        const val QUOTE_BODY_MAX = 600
+        const val MESSAGE_SOFT_MAX = 1900
+        const val MESSAGE_HARD_MAX = 2000
+
+        /**
+         * §2.2 拼接 + §2.3 截断。返回 (最终 message, 是否发生截断)。
+         *
+         * 顺序：引用正文先截 600 → 拼接 → 总长 >1900 则压引用正文预算
+         * `1900 - header - 输入` → 仍 >2000 硬截到 2000。绝不发出 >2000 的 message。
+         */
+        fun assembleMessage(userInput: String, quote: QuoteChip?): Pair<String, Boolean> {
+            if (quote == null) return userInput to false
+            var body = quote.body
+            var truncated = false
+            if (body.length > QUOTE_BODY_MAX) {
+                body = body.take(QUOTE_BODY_MAX) + "…"
+                truncated = true
+            }
+            val prefix = "【引用·${quote.sourceLabel}】"
+            val sep = "\n——\n"
+            var msg = prefix + body + sep + userInput
+            if (msg.length > MESSAGE_SOFT_MAX) {
+                // 先把引用正文压到 1900 - 用户输入（再扣 header/sep）
+                val bodyBudget = MESSAGE_SOFT_MAX - prefix.length - sep.length - userInput.length
+                body = if (bodyBudget <= 0) {
+                    ""
+                } else {
+                    val cut = quote.body.take(bodyBudget)
+                    if (quote.body.length > bodyBudget) cut + "…" else cut
+                }
+                truncated = true
+                msg = prefix + body + sep + userInput
+            }
+            if (msg.length > MESSAGE_HARD_MAX) {
+                msg = msg.take(MESSAGE_HARD_MAX)
+                truncated = true
+            }
+            return msg to truncated
+        }
+
+        /** chip 是否会触发截断（供 UI 显示「引用已自动精简」） */
+        fun willTruncate(userInput: String, quote: QuoteChip?): Boolean {
+            return assembleMessage(userInput, quote).second
+        }
     }
 
     fun loadSession(sessionId: Long) {
@@ -272,8 +419,11 @@ class AiChatViewModel @Inject constructor(
      */
     fun sendMessage() {
         val state = _uiState.value
-        val text = state.inputText.trim()
-        if (text.isEmpty() || state.isBusy) return
+        val rawInput = state.inputText.trim()
+        if (rawInput.isEmpty() || state.isBusy) return
+
+        // P0-8 §2：有引用时按规范拼进 message（唯一能进模型的通道）
+        val text = assembleMessage(rawInput, state.quoteChip).first
 
         val userMessage = AiDto.MessageResponse(
             id = System.currentTimeMillis(),
@@ -285,6 +435,8 @@ class AiChatViewModel @Inject constructor(
             it.copy(
                 messages = it.messages + userMessage,
                 inputText = "",
+                // §2.1：发送成功（消息已入列表）后清空引用
+                quoteChip = null,
                 isStreaming = true,
                 streamingContent = "",
                 thinkingContent = "",

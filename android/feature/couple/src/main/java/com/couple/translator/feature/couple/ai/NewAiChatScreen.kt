@@ -25,8 +25,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Card
@@ -73,6 +73,7 @@ import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppSurfaceMuted
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
@@ -90,6 +91,9 @@ fun NewAiChatScreen(
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     var showModeSheet by remember { mutableStateOf(false) }
+    // P0-8：「＋」一级菜单 + 二级引用选择器（null = 关闭）
+    var showPlusSheet by remember { mutableStateOf(false) }
+    var quotePickerType by remember { mutableStateOf<QuotePickerType?>(null) }
 
     // 场景清单统一来自 AiSceneCatalog（远端拉取，collectAsState 保证拉到后会重组）
     val scenes by AiSceneCatalog.scenes.collectAsState()
@@ -194,14 +198,92 @@ fun NewAiChatScreen(
             item { Spacer(modifier = Modifier.height(8.dp)) }
         }
 
+        // P0-8 §2.1：引用 chip 在输入区上方；为空时不渲染任何占位
+        uiState.quoteChip?.let { chip ->
+            QuoteChipRow(
+                chip = chip,
+                truncated = AiChatViewModel.willTruncate(
+                    uiState.inputText.trim(),
+                    chip,
+                ),
+                onRemove = viewModel::clearQuoteChip,
+            )
+        }
+
         AiInputBar(
             value = uiState.inputText,
             onValueChange = viewModel::onInputChange,
             onSend = viewModel::sendMessage,
-            onRewrite = viewModel::rewriteExpression,
             isLoading = uiState.isBusy,
-            onOpenModeSheet = { showModeSheet = true },
-            showRewriteButton = uiState.sceneKey == "expression_rewrite",
+            onOpenPlusMenu = { showPlusSheet = true },
+        )
+    }
+
+    // P0-8「＋」菜单
+    if (showPlusSheet) {
+        AiPlusSheet(
+            showRewriteItem = uiState.sceneKey == "expression_rewrite" &&
+                uiState.inputText.isNotBlank(),
+            onDismiss = { showPlusSheet = false },
+            onSelectMode = {
+                showPlusSheet = false
+                showModeSheet = true
+            },
+            onPickQuote = { type ->
+                showPlusSheet = false
+                quotePickerType = type
+                viewModel.loadQuotePickerData(type)
+            },
+            onRewrite = {
+                showPlusSheet = false
+                viewModel.rewriteExpression()
+            },
+        )
+    }
+
+    // P0-8 二级引用选择
+    quotePickerType?.let { type ->
+        QuotePickerSheet(
+            type = type,
+            messages = uiState.messages,
+            letters = uiState.quoteLetters,
+            anniversaries = uiState.quoteAnniversaries,
+            loading = uiState.quotePickerLoading,
+            error = uiState.quotePickerError,
+            onDismiss = { quotePickerType = null },
+            onPickMessage = { msg ->
+                val label = if (msg.role == "user") "你说过" else "TA 说过"
+                viewModel.setQuoteChip(
+                    QuoteChip(
+                        sourceLabel = label,
+                        body = msg.content,
+                        originId = msg.id,
+                        originRole = msg.role,
+                    )
+                )
+                quotePickerType = null
+            },
+            onPickLetter = { letter ->
+                val title = letter.title ?: "无标题"
+                viewModel.setQuoteChip(
+                    QuoteChip(
+                        sourceLabel = "一封信《$title》",
+                        body = letter.content ?: "",
+                        originId = letter.id,
+                    )
+                )
+                quotePickerType = null
+            },
+            onPickAnniversary = { ann ->
+                viewModel.setQuoteChip(
+                    QuoteChip(
+                        sourceLabel = "纪念日${ann.title}（${ann.anniversaryDate}）",
+                        body = ann.description ?: ann.title,
+                        originId = ann.id,
+                    )
+                )
+                quotePickerType = null
+            },
         )
     }
 
@@ -301,15 +383,68 @@ private fun AiReplyBubble(
     }
 }
 
+/**
+ * P0-8 §2.1 引用 chip：来源标签 + 正文前 30 字 + ×删除。
+ * 触发截断时追加一行「引用已自动精简」（不静默）。
+ */
+@Composable
+private fun QuoteChipRow(
+    chip: QuoteChip,
+    truncated: Boolean,
+    onRemove: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(AppSurfaceMuted)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "引用·${chip.sourceLabel}：${chip.body.take(30)}" +
+                    if (chip.body.length > 30) "…" else "",
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTextSecondary,
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier.size(28.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = "删除引用",
+                    tint = AppTextTertiary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+        if (truncated) {
+            Text(
+                text = "引用已自动精简",
+                style = MaterialTheme.typography.labelSmall,
+                color = AppTextTertiary,
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+            )
+        }
+    }
+}
+
+/** P0-8：输入区收敛为 [输入框] [＋] [发送] —— 模式/改写/引用全收进「＋」 */
 @Composable
 private fun AiInputBar(
     value: String,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
-    onRewrite: () -> Unit = {},
     isLoading: Boolean,
-    onOpenModeSheet: () -> Unit,
-    showRewriteButton: Boolean = false,
+    onOpenPlusMenu: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -335,28 +470,14 @@ private fun AiInputBar(
         Spacer(modifier = Modifier.width(6.dp))
 
         IconButton(
-            onClick = onOpenModeSheet,
+            onClick = onOpenPlusMenu,
             modifier = Modifier.size(38.dp),
         ) {
             Icon(
-                imageVector = Icons.Outlined.AutoAwesome,
-                contentDescription = "模式",
+                imageVector = Icons.Outlined.Add,
+                contentDescription = "更多",
                 tint = AppTextSecondary,
             )
-        }
-
-        if (showRewriteButton && value.isNotBlank()) {
-            IconButton(
-                onClick = onRewrite,
-                enabled = !isLoading,
-                modifier = Modifier.size(38.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Edit,
-                    contentDescription = "改写",
-                    tint = AppAccent,
-                )
-            }
         }
 
         IconButton(
