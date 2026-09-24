@@ -46,7 +46,15 @@ def create_memory(
     db.add(memory)
     db.flush()
     db.commit()
-    return _to_dict(memory)
+    saved = _to_dict(memory)
+    # P0-4：新记忆异步向量化（约束②写入侧）。失败只记日志，不影响落库。
+    try:
+        from app.services.memory_retrieval import vectorize_memory_async
+
+        vectorize_memory_async(saved)
+    except Exception:
+        logger.warning("[MEMORY] 向量化挂钩异常（不影响落库）", exc_info=True)
+    return saved
 
 
 def get_memories(
@@ -79,23 +87,29 @@ def get_couple_memories(db: Session, user_id: int, relation_id: int) -> List[dic
     return [_to_dict(m) for m in memories]
 
 
-def get_memory_context(db: Session, user_id: int, relation_id: int, limit: int = 10) -> str:
-    memories = (
-        db.query(AiMemory)
-        .filter(
-            and_(
-                AiMemory.user_id == user_id,
-                AiMemory.relation_id == relation_id,
-            )
-        )
-        .order_by(AiMemory.created_at.desc())
-        .limit(limit)
-        .all()
+def get_memory_context(
+    db: Session,
+    user_id: int,
+    relation_id: int,
+    limit: int = 10,
+    query: str = "",
+) -> str:
+    """prompt 注入用的记忆片段。
+
+    P0-4 起改走 `memory_retrieval.retrieve_memory_items`：
+      - 传了 query → 向量相关性召回（阈值 0.35），无命中/超时降级近因
+      - 未传 query → 近因降级（agent 工具等无 query 调用方行为不变）
+    可见性：自己 private + 本关系 couple（约束①），不含对方 private。
+    """
+    from app.services.memory_retrieval import (
+        format_memory_context,
+        retrieve_memory_items,
     )
-    if not memories:
-        return ""
-    lines = [f"- [{m.memory_type}] {m.memory_text}" for m in memories]
-    return "## AI 记忆\n" + "\n".join(lines)
+
+    items = retrieve_memory_items(
+        db, user_id, relation_id, query=query or "", limit=max(limit, 10)
+    )
+    return format_memory_context(items)
 
 
 def update_visibility(db: Session, memory_id: int, user_id: int, visibility: str) -> dict:

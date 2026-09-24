@@ -37,7 +37,8 @@ from app.services.safety_service import (
     merge_risk_levels,
 )
 from app.services.rag_service import retrieve_chunks, build_rag_context
-from app.services.memory_service import get_memories, get_memory_context, distill_in_background
+from app.services.memory_service import get_memory_context, distill_in_background
+from app.services.memory_retrieval import retrieve_memory_items
 from app.services.llm_client import llm, LlmError
 from app.services.sse import HEARTBEAT_INTERVAL, stream_with_heartbeat
 
@@ -127,7 +128,13 @@ def _preprocess(
     rag_chunks = retrieve_chunks(db, user_input)
     rag_context = build_rag_context(rag_chunks)
 
-    memory_context = get_memory_context(db, user_id, relation_id)
+    # P0-4：召回一次、两处使用（约束③）——prompt 注入与 evidence 展示
+    # 必须是同一份结果，否则面板显示近因 10 条、prompt 用相关性 5 条
+    # 就造出 P0-5 要消灭的那种分叉。
+    memory_items = retrieve_memory_items(db, user_id, relation_id, query=user_input)
+    from app.services.memory_retrieval import format_memory_context
+
+    memory_context = format_memory_context(memory_items)
 
     prompt_args = dict(
         scene_key=scene_key,
@@ -164,10 +171,8 @@ def _preprocess(
     messages = _append_persona(messages, persona)
     stream_messages = _append_persona(stream_messages, persona)
 
-    # P0-5 判断依据：同一份局部数据的第二出口（零新增 LLM 调用）。
-    # 记忆取与 get_memory_context 相同的近 10 条；理论取本轮 rag_chunks。
-    # 在请求级 db 内拍平成基本类型，流式生成器可安全携带。
-    recent_memories = get_memories(db, user_id, relation_id)[:10]
+    # P0-5 判断依据：与 prompt 同一份 memory_items（约束③——同请求不再
+    # 跑第二次同义查询；面板看到什么，模型就看到什么）。
     evidence = AdvisorContext(
         scene_key=scene_key,
         self_profile_card=user_profile_text if user_profile else "",
@@ -175,11 +180,11 @@ def _preprocess(
         relationship_pattern=rel_block,
         recalled_memories=[
             {
-                "content": m.get("memory_text", ""),
-                "source": m.get("memory_type", ""),
+                "content": m.get("content", ""),
+                "source": m.get("source", ""),
                 "created_at": m.get("created_at"),
             }
-            for m in recent_memories
+            for m in memory_items
         ],
         theory_chunks=[
             {
@@ -1392,7 +1397,7 @@ def prepare_relationship_review(
 
     rag_chunks = retrieve_chunks(db, description)
     rag_context = build_rag_context(rag_chunks)
-    memory_context = get_memory_context(db, user_id, relation_id)
+    memory_context = get_memory_context(db, user_id, relation_id, query=description)
 
     user_input = description if not context else f"{description}\n\n## 补充背景\n{context}"
 
