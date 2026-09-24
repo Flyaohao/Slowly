@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 from app.core.database import SessionLocal
 from app.repositories import (
     ai_repo,
+    avatar_repo,
     profile_repo,
     couple_repo,
     safety_repo,
@@ -13,6 +14,7 @@ from app.repositories import (
 from app.schemas.ai_output import RewriteOutput, ReviewOutput
 from app.services.prompt_builder import (
     build_structured_stream_prompt,
+    build_persona_instruction,
     build_profile_report_prompt,
     build_dual_summary_prompt,
     build_practice_summary_prompt,
@@ -144,6 +146,17 @@ def _preprocess(
     stream_messages = build_chat_messages(
         **prompt_args, mode="stream", system_template=system_template
     )
+
+    # P0-7 军师人格：读 ai_avatar（名字 + 语气），指令追加到 system 最后一段。
+    # 结构化与流式两条出口都加，保证「换语气后回答风格可观察地不同」两条链路一致。
+    # 取不到 avatar（未捏过脸）用默认人格，不报错。
+    avatar = avatar_repo.get_avatar_by_relation_id(db, relation_id)
+    persona = build_persona_instruction(
+        avatar.name if avatar else None,
+        avatar.voice_style if avatar else None,
+    )
+    messages = _append_persona(messages, persona)
+    stream_messages = _append_persona(stream_messages, persona)
 
     ai_repo.create_message(db, session_id, "user", user_input)
     # 留档用压平后的文本，便于直接读「这一轮到底给模型看了什么」
@@ -694,6 +707,22 @@ def _format_profile(profile, scores: Dict[str, float]) -> str:
     from app.services.profile_service import build_profile_card
 
     return build_profile_card(profile.profile_type, scores, profile.confidence)
+
+
+def _append_persona(messages: List[Dict[str, Any]], persona: str) -> List[Dict[str, Any]]:
+    """把人格指令追加到 system 消息末尾，返回新列表（不改原消息）。
+
+    system 是 messages[0]（lc_prompt_builder 的约定）；非 system 消息原样透传。
+    """
+    if not persona:
+        return messages
+    out: List[Dict[str, Any]] = []
+    for m in messages:
+        if m.get("role") == "system":
+            out.append({**m, "content": m["content"] + "\n\n" + persona})
+        else:
+            out.append(m)
+    return out
 
 
 def _build_partner_section(

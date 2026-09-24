@@ -332,6 +332,39 @@ STREAM_INSTRUCTION = """## 输出格式（重要）
 把上述各要点融合成连贯的建议：先共情安抚，再分析对方可能的心态，然后给出可以直接使用的回复话术，最后提醒要避免的表达。
 控制在 300 字以内，段落之间换行分隔，"可以直接说的话"用短横线列出。"""
 
+#: 军师人格：voice_style → 语气指令（ai_avatar.voice_style，客户端 5 选 1 枚举）。
+#: 未知值（含库里历史脏数据）一律回退 gentle，与客户端 toneIndexOf 的回退一致。
+VOICE_STYLE_INSTRUCTIONS = {
+    "gentle": "用温和、包容的语气，多用「我理解」。",
+    "calm": "用理性、克制的语气，少用感叹句，先分析再建议。",
+    "direct": "直说不绕弯，指出问题不回避，但不说教。",
+    "cute": "语气轻快，可以用一点可爱的表达，但不过度。",
+    "mature": "像一位有阅历的长辈，稳重、有分寸。",
+}
+
+#: 无 avatar 记录时的默认人格（模型列默认 name 是「小爱」，但手册规定
+#: 未创建形象时对外口径用「翻译官」——这里跟手册，不读模型默认值）
+DEFAULT_AVATAR_NAME = "翻译官"
+
+
+def build_persona_instruction(
+    name: Optional[str], voice_style: Optional[str]
+) -> str:
+    """组装军师人格指令（P0-7）：名字 + 语气，注入 system 最后一段。
+
+    长度预算 ≤60 字（名字截到 12 字 + 语气指令约 20~25 字）。
+    voice_style 不在 5 选 1 内（None / 空串 / 库里脏数据）→ gentle。
+    与画像卡分开注入：人格是「军师是谁」，不是「用户是谁」。
+    """
+    clean_name = (name or "").strip() or DEFAULT_AVATAR_NAME
+    if len(clean_name) > 12:
+        clean_name = clean_name[:12]
+    style = VOICE_STYLE_INSTRUCTIONS.get(
+        (voice_style or "").strip(),
+        VOICE_STYLE_INSTRUCTIONS["gentle"],
+    )
+    return f"你的名字是「{clean_name}」，用户这样称呼你。{style}"
+
 
 def truncate_at_json_marker(template: str) -> str:
     """把结构化 system 模板裁到「请以 JSON 格式回复」之前。
