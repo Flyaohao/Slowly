@@ -439,12 +439,31 @@ def case_i_close_endpoint():
 
 
 def case_j_archive_idempotent():
-    """收尾补丁 B：归档幂等——已 archived 不改写 segment_reason、不重复蒸馏。"""
-    print("\n[j] 归档幂等：segment_reason 不被覆盖")
+    """收尾补丁 B：归档幂等——已 archived 不改写 segment_reason、不重复蒸馏。
+
+    蒸馏计数口径（P0-10B-2 §2）：
+    - COUPLE_DISABLE_MEMORY_DISTILL=1 下蒸馏函数首行即 return，计数必须靠
+      **替换 app.services.memory_service.distill_session_summary_in_background**
+      （_archive 内是函数内延迟 import，每次调用重取模块属性——不要在
+      ai_service 命名空间打补丁，那里没有该符号）。
+    - j3（close_session）自身带 status!="archived" 守卫，**不能证明守卫 B**；
+      能证明 B 的是 j2 直调 _archive_session_with_summary 的路径
+      （_preprocess 场景分段/超时归档正是走这条）——功劳别记错。
+    """
+    print("\n[j] 归档幂等：segment_reason 不被覆盖 + 蒸馏只触发一次")
     from app.core.database import SessionLocal
     from app.models.couple_relation import CoupleRelation
     from app.repositories import ai_repo
+    from app.services import memory_service
     from app.services.ai_service import _archive_session_with_summary, close_session
+
+    calls = {"n": 0}
+    _orig = memory_service.distill_session_summary_in_background
+
+    def _fake_distill(*a, **kw):
+        calls["n"] += 1
+
+    memory_service.distill_session_summary_in_background = _fake_distill
 
     db = SessionLocal()
     sid = None
@@ -458,29 +477,33 @@ def case_j_archive_idempotent():
         db.commit()
         sid = s.id
 
-        # 1) close 一次 → user_ended
+        # 1) close 一次 → user_ended + 恰好 1 次蒸馏
         close_session(db, uid, sid)
         db.refresh(s)
         check("j1 close 后 status=archived", s.status == "archived", s.status)
         check("j1 segment_reason=user_ended", s.segment_reason == "user_ended",
               str(s.segment_reason))
+        check("j1 蒸馏触发 1 次", calls["n"] == 1, str(calls["n"]))
 
-        # 2) 再用不同 reason 调归档 → 不得覆盖
+        # 2) 直调归档换 reason → 不覆盖原因、不再蒸馏（守卫 B 的作用点）
         _archive_session_with_summary(db, s, "archived", uid, rid)
         db.refresh(s)
         check("j2 重复归档不覆盖原因", s.segment_reason == "user_ended",
               str(s.segment_reason))
+        check("j2 蒸馏仍为 1 次（守卫 B）", calls["n"] == 1, str(calls["n"]))
 
-        # 3) close_session 幂等仍 200（service 内部返回 dict 不抛）
+        # 3) close 幂等；不证明守卫 B（close 自带 status 守卫），只验不重复
         result = close_session(db, uid, sid)
         db.refresh(s)
         check("j3 close 幂等 closed=true", result.get("closed") is True, str(result))
         check("j3 原因仍 user_ended", s.segment_reason == "user_ended",
               str(s.segment_reason))
+        check("j3 蒸馏仍为 1 次", calls["n"] == 1, str(calls["n"]))
     except Exception as exc:
         check("j 不抛未预期异常", False, repr(exc))
         raise
     finally:
+        memory_service.distill_session_summary_in_background = _orig
         if sid is not None:
             from app.models.ai import AiChatMessage, AiChatSession
             from sqlalchemy import delete

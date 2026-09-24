@@ -225,11 +225,17 @@ class AiChatViewModel @Inject constructor(
                         }
                     } else if (info.resumable) {
                         if (activeId == currentId) {
-                            // 同一会话：只刷新标题，绝不覆盖正在展示的消息
+                            // 同一会话：只刷新标题，绝不覆盖正在展示的消息。
+                            // 已确证是活跃会话 → 清 sessionArchived（补丁 A3）
                             _uiState.update {
-                                it.copy(sessionTitle = info.title, resumable = true)
+                                it.copy(
+                                    sessionTitle = info.title,
+                                    resumable = true,
+                                    sessionArchived = false,
+                                )
                             }
                         } else {
+                            // 换成活跃会话（loadSession 换消息）→ 屏幕内容已换，清标记
                             _uiState.update {
                                 it.copy(
                                     sessionId = activeId,
@@ -237,6 +243,7 @@ class AiChatViewModel @Inject constructor(
                                     resumable = true,
                                     staleSessionId = null,
                                     staleSessionTitle = null,
+                                    sessionArchived = false,
                                 )
                             }
                             loadSession(activeId)
