@@ -31,7 +31,6 @@ import com.couple.translator.core.ui.theme.ThemeMode
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
 import com.couple.translator.feature.couple.ai.AiSessionListScreen
-import com.couple.translator.feature.couple.ai.ColdWarScreen
 import com.couple.translator.feature.couple.ai.ReviewScreen
 import com.couple.translator.feature.couple.anniversary.AddAnniversaryScreen
 import com.couple.translator.feature.couple.anniversary.AnniversaryListScreen
@@ -373,15 +372,6 @@ fun NavGraph(
                     }
                 },
                 isCoupleMode = isCoupleMode,
-            )
-        }
-
-        composable(Screen.ColdWar.route) {
-            ColdWarScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToComposeLetter = { content ->
-                    navController.navigate("${Screen.ComposeLetter.route}?draftId=0")
-                },
             )
         }
 
