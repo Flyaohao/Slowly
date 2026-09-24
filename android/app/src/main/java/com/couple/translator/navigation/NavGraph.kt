@@ -321,11 +321,11 @@ fun NavGraph(
         composable(Screen.AiSessionList.route) {
             AiSessionListScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToSession = { sessionId, sceneKey, title ->
+                onNavigateToSession = { sessionId, sceneKey, title, archived ->
                     // P0-10B 改动三：跨导航图传参（列表在根图、军师页在 CoupleShell）。
                     // 此前只 popBackStack，参数收下即丢 → 历史记录点不进去。
-                    // title 一并带给状态条，否则 loadSession 后标题残留上一段会话。
-                    PendingSessionHolder.set(sessionId, sceneKey, title)
+                    // title/archived 一并带给状态条：loadSession 不同步这两个字段。
+                    PendingSessionHolder.set(sessionId, sceneKey, title, archived)
                     navController.popBackStack()
                 },
             )

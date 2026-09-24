@@ -76,7 +76,14 @@ def should_start_new_session(session, scene_key: str, now: datetime) -> Optional
 def _archive_session_with_summary(
     db: Session, session, reason: str, user_id: int, relation_id: int
 ) -> None:
-    """归档旧会话并异步沉淀 session_summary（改动七）。只归档不报错。"""
+    """归档旧会话并异步沉淀 session_summary（改动七）。只归档不报错。
+
+    收尾补丁 B：已 archived 直接返回——不改写 segment_reason（保住
+    user_ended/timeout/scene_switch 的「这段为什么结束」），也不重复蒸馏。
+    守卫放 service 而非 repo：archive_session 保持「归档即写原因」单一职责。
+    """
+    if getattr(session, "status", None) == "archived":
+        return
     try:
         ai_repo.archive_session(db, session.id, reason)
     except Exception:

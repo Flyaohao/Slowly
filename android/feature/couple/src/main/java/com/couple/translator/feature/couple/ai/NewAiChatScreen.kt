@@ -118,9 +118,10 @@ fun NewAiChatScreen(
         if (pending != null) {
             viewModel.setSceneKey(pending.sceneKey)
             viewModel.loadSession(pending.sessionId)
-            // loadSession 只拉消息与 id，不同步标题——不补会残留上一段的
-            //「正在继续 · xxx」（真机实测缺陷）
+            // loadSession 只拉消息与 id，不同步标题/归档态——不补会残留
+            // 上一段的「正在继续 · xxx」或把已结束会话显示成进行中
             viewModel.setSessionTitle(pending.title)
+            viewModel.setSessionArchived(pending.archived)
         } else {
             viewModel.refreshActiveSession()
         }
@@ -151,6 +152,7 @@ fun NewAiChatScreen(
             sceneLabel = AiSceneCatalog.labelOf(uiState.sceneKey),
             staleSessionTitle = uiState.staleSessionTitle,
             hasStale = uiState.staleSessionId != null,
+            sessionArchived = uiState.sessionArchived,
             onNewChat = viewModel::startNewChat,
             onResumeStale = viewModel::resumeStaleSession,
         )
@@ -429,11 +431,13 @@ private fun AiReplyBubble(
 }
 
 /**
- * P0-10B 改动四：会话状态条（AppTopBar 与 LazyColumn 之间，固定高度）。
+ * P0-10B 改动四 + 收尾补丁 A2：会话状态条（固定高度）。
  *
- * - sessionId != null → 「正在继续 · {title ?: 场景名}」+ 右侧「新对话」
- * - sessionId == null → 「新的对话」+ 右侧「新对话」（点了也无害：close 会跳过 null）
- * - staleSessionTitle != null → 改为「上次聊到 {title}」+「继续」
+ * 分支顺序即优先级（勿调）：
+ * 1. hasStale → 「上次聊到 {title}」+「继续」
+ * 2. sessionArchived → 「已结束的对话 · {title}」+「新对话」
+ * 3. sessionId != null → 「正在继续 · {title ?: 场景名}」+「新对话」
+ * 4. else → 「新的对话」+「新对话」
  */
 @Composable
 private fun SessionStatusBar(
@@ -442,6 +446,7 @@ private fun SessionStatusBar(
     sceneLabel: String,
     staleSessionTitle: String?,
     hasStale: Boolean,
+    sessionArchived: Boolean,
     onNewChat: () -> Unit,
     onResumeStale: () -> Unit,
 ) {
@@ -465,6 +470,24 @@ private fun SessionStatusBar(
                 TextButton(onClick = onResumeStale) {
                     Text(
                         text = "继续",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppAccent,
+                    )
+                }
+            }
+
+            sessionArchived && sessionId != null -> {
+                Text(
+                    text = "已结束的对话 · ${sessionTitle ?: sceneLabel}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppTextTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onNewChat) {
+                    Text(
+                        text = "新对话",
                         style = MaterialTheme.typography.labelSmall,
                         color = AppAccent,
                     )

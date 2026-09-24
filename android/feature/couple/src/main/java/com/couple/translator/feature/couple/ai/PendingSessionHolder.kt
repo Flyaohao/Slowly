@@ -22,14 +22,16 @@ data class PendingSession(
     val sessionId: Long,
     val sceneKey: String,
     val title: String?,
+    /** 补丁 A2：该会话是否已归档——状态条显示「已结束的对话」而非「正在继续」 */
+    val archived: Boolean = false,
 )
 
 object PendingSessionHolder {
 
     private val _pending = MutableStateFlow<PendingSession?>(null)
 
-    fun set(sessionId: Long, sceneKey: String, title: String?) {
-        _pending.value = PendingSession(sessionId, sceneKey, title)
+    fun set(sessionId: Long, sceneKey: String, title: String?, archived: Boolean = false) {
+        _pending.value = PendingSession(sessionId, sceneKey, title, archived)
     }
 
     /** 取出并清空；无待消费意图返回 null。 */

@@ -57,7 +57,7 @@ import com.couple.translator.core.ui.theme.AppTextTertiary
 @Composable
 fun AiSessionListScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToSession: (sessionId: Long, sceneKey: String, title: String?) -> Unit,
+    onNavigateToSession: (sessionId: Long, sceneKey: String, title: String?, archived: Boolean) -> Unit,
     viewModel: AiSessionListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -119,7 +119,14 @@ fun AiSessionListScreen(
                                 SessionItem(
                                     session = session,
                                     sceneLabel = sceneLabel,
-                                    onClick = { onNavigateToSession(session.id, session.sceneKey, session.title) },
+                                    onClick = {
+                                        onNavigateToSession(
+                                            session.id,
+                                            session.sceneKey,
+                                            session.title,
+                                            session.status == "archived",
+                                        )
+                                    },
                                     onDelete = { viewModel.deleteSession(session.id) },
                                 )
                             }

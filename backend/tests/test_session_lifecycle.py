@@ -438,9 +438,62 @@ def case_i_close_endpoint():
         db.close()
 
 
+def case_j_archive_idempotent():
+    """收尾补丁 B：归档幂等——已 archived 不改写 segment_reason、不重复蒸馏。"""
+    print("\n[j] 归档幂等：segment_reason 不被覆盖")
+    from app.core.database import SessionLocal
+    from app.models.couple_relation import CoupleRelation
+    from app.repositories import ai_repo
+    from app.services.ai_service import _archive_session_with_summary, close_session
+
+    db = SessionLocal()
+    sid = None
+    try:
+        rel = db.query(CoupleRelation).filter(CoupleRelation.status == "active").first()
+        uid, rid = rel.user_a_id, rel.id
+        s = ai_repo.create_session(
+            db, uid, rid, "private_advisor",
+            title="幂等测试", privacy_level="private",
+        )
+        db.commit()
+        sid = s.id
+
+        # 1) close 一次 → user_ended
+        close_session(db, uid, sid)
+        db.refresh(s)
+        check("j1 close 后 status=archived", s.status == "archived", s.status)
+        check("j1 segment_reason=user_ended", s.segment_reason == "user_ended",
+              str(s.segment_reason))
+
+        # 2) 再用不同 reason 调归档 → 不得覆盖
+        _archive_session_with_summary(db, s, "archived", uid, rid)
+        db.refresh(s)
+        check("j2 重复归档不覆盖原因", s.segment_reason == "user_ended",
+              str(s.segment_reason))
+
+        # 3) close_session 幂等仍 200（service 内部返回 dict 不抛）
+        result = close_session(db, uid, sid)
+        db.refresh(s)
+        check("j3 close 幂等 closed=true", result.get("closed") is True, str(result))
+        check("j3 原因仍 user_ended", s.segment_reason == "user_ended",
+              str(s.segment_reason))
+    except Exception as exc:
+        check("j 不抛未预期异常", False, repr(exc))
+        raise
+    finally:
+        if sid is not None:
+            from app.models.ai import AiChatMessage, AiChatSession
+            from sqlalchemy import delete
+            db.execute(delete(AiChatMessage).where(AiChatMessage.session_id == sid))
+            db.execute(delete(AiChatSession).where(AiChatSession.id == sid))
+            db.commit()
+            print(f"  已清理幂等测试会话 {sid}")
+        db.close()
+
+
 def main() -> int:
     print("=" * 72)
-    print("P0-10A/B 会话生命周期（a–i + 隔离）")
+    print("P0 会话生命周期（a–j + 隔离）")
     print("=" * 72)
 
     c0 = _row_counts()
@@ -453,6 +506,7 @@ def main() -> int:
     case_h_session_summary_unit()
     case_active_endpoint_service()
     case_i_close_endpoint()
+    case_j_archive_idempotent()
 
     c1 = _row_counts()
     print(f"\n收尾 rows session/message/memory = {c1}")

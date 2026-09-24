@@ -91,6 +91,8 @@ data class AiChatUiState(
     val staleSessionTitle: String? = null,
     /** 本次发送发生过分段 → 消息列表尾部插「—— 新的对话 ——」 */
     val segmentNotice: Boolean = false,
+    /** 补丁 A2：当前展示的是已归档会话 → 状态条「已结束的对话 · {title}」 */
+    val sessionArchived: Boolean = false,
     val error: String = "",
 ) {
     /** 输入框是否应禁用：请求中或流式输出中都禁用，避免同会话并发（含表达改写流式） */
@@ -161,6 +163,11 @@ class AiChatViewModel @Inject constructor(
         _uiState.update { it.copy(sessionTitle = title) }
     }
 
+    /** 补丁 A2：标记当前展示的是已归档会话（状态条显示「已结束的对话」）。 */
+    fun setSessionArchived(archived: Boolean) {
+        _uiState.update { it.copy(sessionArchived = archived) }
+    }
+
     /**
      * 切换聊天场景。
      *
@@ -182,6 +189,7 @@ class AiChatViewModel @Inject constructor(
                 segmentNotice = false,
                 staleSessionId = null,
                 staleSessionTitle = null,
+                sessionArchived = false,
                 evidence = null,
                 quoteChip = null,
             )
@@ -269,6 +277,7 @@ class AiChatViewModel @Inject constructor(
                     segmentNotice = false,
                     staleSessionId = null,
                     staleSessionTitle = null,
+                    sessionArchived = false,
                     evidence = null,
                     quoteChip = null,
                     streamingContent = "",
@@ -602,6 +611,12 @@ class AiChatViewModel @Inject constructor(
                     is AiDto.ChatStreamEvent.Meta -> _uiState.update {
                         it.copy(
                             sessionId = ev.sessionId,
+                            // 补丁 A1：拿到新会话即视为可续接的新对话——
+                            // stale 提示必须消失，否则状态条优先级更高的
+                            // 「上次聊到 X」会残留，点「继续」跳进已归档会话
+                            staleSessionId = null,
+                            staleSessionTitle = null,
+                            sessionArchived = false,
                             // 服务端新建了会话（分段）→ 列表尾插分隔行
                             segmentNotice = if (sentSessionId != null && ev.sessionId != sentSessionId) {
                                 true
