@@ -28,6 +28,7 @@ from app.services.prompt_builder import (
     SYSTEM_PROMPTS,
     truncate_at_json_marker,
     with_human_base,
+    with_quote_letter_instruction,
 )
 
 try:
@@ -107,6 +108,8 @@ def build_chat_messages(
     if mode == "stream":
         base = truncate_at_json_marker(base) + "\n\n" + stream_instruction
     base = with_human_base(base)
+    # P-C4：输入引用了信件 → 按来源（TA的信/我的信）区分作答方式，两条出口都经此
+    base = with_quote_letter_instruction(base, user_input)
 
     profile_vars = {
         "user_profile": user_profile,

@@ -12,7 +12,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.FormatQuote
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -33,11 +32,12 @@ import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
 
 /**
- * P0-8「＋」一级菜单。
+ * P-C4「更多 ▾」下拉面板（原 P0-8「＋」一级菜单）。
  *
  * 样式抄 [ModeDrawerSheet]：AppBackground 底、labelMedium 标题、行间 AppBorderLight 分隔。
  * 只做导航/回调，不持业务状态——数据加载在 AiChatViewModel。
  *
+ * 「选择模式」项已移除：场景 chip（输入框下方同行）就是模式入口，不重复造第二个。
  * 「改写这句话」可见性与改写前逐字等价：expression_rewrite 场景且输入非空。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,7 +45,6 @@ import com.couple.translator.core.ui.theme.AppTextTertiary
 fun AiPlusSheet(
     showRewriteItem: Boolean,
     onDismiss: () -> Unit,
-    onSelectMode: () -> Unit,
     onPickQuote: (QuotePickerType) -> Unit,
     onRewrite: () -> Unit,
 ) {
@@ -68,13 +67,6 @@ fun AiPlusSheet(
                 color = AppTextSecondary,
                 modifier = Modifier.padding(bottom = 10.dp),
             )
-
-            PlusItem(
-                icon = Icons.Outlined.AutoAwesome,
-                title = "选择模式",
-                onClick = onSelectMode,
-            )
-            HorizontalDivider(color = AppBorderLight)
 
             PlusItem(
                 icon = Icons.Outlined.FormatQuote,

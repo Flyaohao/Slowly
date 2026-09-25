@@ -77,8 +77,10 @@ data class AiChatUiState(
     val evidence: AiDto.EvidencePayload? = null,
     /** P0-8：当前引用 chip（发送/切场景后清空） */
     val quoteChip: QuoteChip? = null,
-    /** P0-8：信件选择器数据（打开「引用一封信」时加载） */
+    /** P0-8：信件选择器数据（打开「引用一封信」时加载）——TA 寄给我的（收件） */
     val quoteLetters: List<LetterDto.LetterResponse> = emptyList(),
+    /** P-C4：我寄出的信（发件）——引用自己的信与引用 TA 的信作用不同，两源都要能引 */
+    val quoteSentLetters: List<LetterDto.LetterResponse> = emptyList(),
     /** P0-8：纪念日选择器数据 */
     val quoteAnniversaries: List<AnniversaryDto.AnniversaryResponse> = emptyList(),
     val quotePickerLoading: Boolean = false,
@@ -364,25 +366,28 @@ class AiChatViewModel @Inject constructor(
             QuotePickerType.LETTER -> {
                 _uiState.update { it.copy(quotePickerLoading = true, quotePickerError = "") }
                 viewModelScope.launch {
-                    letterRepository.getInbox().fold(
-                        onSuccess = { resp ->
-                            _uiState.update {
-                                it.copy(
-                                    quoteLetters = resp?.items.orEmpty(),
-                                    quotePickerLoading = false,
-                                )
-                            }
-                        },
-                        onFailure = { e ->
-                            // 红线：加载失败不许静默
-                            _uiState.update {
-                                it.copy(
-                                    quotePickerLoading = false,
-                                    quotePickerError = e.message ?: "加载信件失败",
-                                )
-                            }
-                        },
-                    )
+                    // P-C4：两种来源都拉——TA 寄来的（理解 TA）+ 我寄出的（改进表达），
+                    // 作用不同必须都可引用；direction=sent/received 服务端均已排除草稿
+                    val receivedRes = letterRepository.getInbox()
+                    val sentRes = letterRepository.getLetters(direction = "sent")
+                    val failure = receivedRes.exceptionOrNull() ?: sentRes.exceptionOrNull()
+                    if (failure != null) {
+                        // 红线：加载失败不许静默
+                        _uiState.update {
+                            it.copy(
+                                quotePickerLoading = false,
+                                quotePickerError = failure.message ?: "加载信件失败",
+                            )
+                        }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                quoteLetters = receivedRes.getOrNull()?.items.orEmpty(),
+                                quoteSentLetters = sentRes.getOrNull()?.items.orEmpty(),
+                                quotePickerLoading = false,
+                            )
+                        }
+                    }
                 }
             }
             QuotePickerType.ANNIVERSARY -> {

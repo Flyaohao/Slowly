@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.couple.translator.core.data.model.AiDto
+import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppErrorRed
@@ -51,12 +52,14 @@ fun QuotePickerSheet(
     type: QuotePickerType,
     messages: List<AiDto.MessageResponse>,
     letters: List<LetterDto.LetterResponse>,
+    sentLetters: List<LetterDto.LetterResponse> = emptyList(),
     anniversaries: List<AnniversaryDto.AnniversaryResponse>,
     loading: Boolean,
     error: String,
     onDismiss: () -> Unit,
     onPickMessage: (AiDto.MessageResponse) -> Unit,
-    onPickLetter: (LetterDto.LetterResponse) -> Unit,
+    /** P-C4：第二个参数 fromPartner——TA 寄来的 true / 我寄出的 false，来源决定提示词 */
+    onPickLetter: (LetterDto.LetterResponse, Boolean) -> Unit,
     onPickAnniversary: (AnniversaryDto.AnniversaryResponse) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
@@ -72,7 +75,7 @@ fun QuotePickerSheet(
     }
     val emptyText = when (type) {
         QuotePickerType.MESSAGE -> "还没有聊过"
-        QuotePickerType.LETTER -> "还没有收到信"
+        QuotePickerType.LETTER -> "还没有可引用的信"
         QuotePickerType.ANNIVERSARY -> "还没有纪念日"
     }
 
@@ -143,24 +146,24 @@ fun QuotePickerSheet(
                         }
 
                         QuotePickerType.LETTER -> {
-                            if (letters.isEmpty()) {
+                            // P-C4：两个来源分区展示——作用不同（理解 TA / 改进我的表达），
+                            // 选择时就知道在引谁的信，提示词随来源区分
+                            if (letters.isEmpty() && sentLetters.isEmpty()) {
                                 EmptyRow(emptyIcon, emptyText)
                             } else {
-                                letters.forEachIndexed { index, letter ->
-                                    val date = (letter.sendTime ?: letter.createdAt)
-                                        ?.take(10).orEmpty()
-                                    val label = buildString {
-                                        append(letter.title ?: "无标题")
-                                        if (date.isNotEmpty()) {
-                                            append("  ")
-                                            append(date)
-                                        }
-                                    }
-                                    PickerRow(title = label, onClick = { onPickLetter(letter) })
-                                    if (index < letters.lastIndex) {
-                                        HorizontalDivider(color = AppBorderLight)
-                                    }
+                                LetterSection(
+                                    header = "TA 写给你的信",
+                                    letters = letters,
+                                    onPick = { onPickLetter(it, true) },
+                                )
+                                if (letters.isNotEmpty() && sentLetters.isNotEmpty()) {
+                                    HorizontalDivider(color = AppBorderLight)
                                 }
+                                LetterSection(
+                                    header = "你写给 TA 的信",
+                                    letters = sentLetters,
+                                    onPick = { onPickLetter(it, false) },
+                                )
                             }
                         }
 
@@ -180,6 +183,36 @@ fun QuotePickerSheet(
                     }
                 }
             }
+        }
+    }
+}
+
+/** P-C4：信件来源分区块——标题 + 该来源的信列表；空来源整块不渲染。 */
+@Composable
+private fun LetterSection(
+    header: String,
+    letters: List<LetterDto.LetterResponse>,
+    onPick: (LetterDto.LetterResponse) -> Unit,
+) {
+    if (letters.isEmpty()) return
+    Text(
+        text = header,
+        style = MaterialTheme.typography.labelMedium,
+        color = AppAccent,
+        modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
+    )
+    letters.forEachIndexed { index, letter ->
+        val date = (letter.sendTime ?: letter.createdAt)?.take(10).orEmpty()
+        val label = buildString {
+            append(letter.title ?: "无标题")
+            if (date.isNotEmpty()) {
+                append("  ")
+                append(date)
+            }
+        }
+        PickerRow(title = label, onClick = { onPick(letter) })
+        if (index < letters.lastIndex) {
+            HorizontalDivider(color = AppBorderLight)
         }
     }
 }

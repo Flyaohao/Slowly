@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Person
@@ -101,8 +100,8 @@ fun NewAiChatScreen(
     var showModeSheet by remember { mutableStateOf(false) }
     // P-B §1.6：回答深度三选一面板
     var showChatModeSheet by remember { mutableStateOf(false) }
-    // P0-8：「＋」一级菜单 + 二级引用选择器（null = 关闭）
-    var showPlusSheet by remember { mutableStateOf(false) }
+    // P-C4：「更多」下拉面板（原「＋」菜单）+ 二级引用选择器（null = 关闭）
+    var showMoreSheet by remember { mutableStateOf(false) }
     var quotePickerType by remember { mutableStateOf<QuotePickerType?>(null) }
 
     // 场景清单统一来自 AiSceneCatalog（远端拉取，collectAsState 保证拉到后会重组）
@@ -340,31 +339,27 @@ fun NewAiChatScreen(
             onValueChange = viewModel::onInputChange,
             onSend = viewModel::sendMessage,
             isLoading = uiState.isBusy,
-            onOpenPlusMenu = { showPlusSheet = true },
             chatMode = uiState.chatMode,
             onOpenModePanel = { showChatModeSheet = true },
             sceneLabel = currentSceneLabel,
             onOpenScenePanel = { showModeSheet = true },
+            onOpenMorePanel = { showMoreSheet = true },
         )
     }
 
-    // P0-8「＋」菜单
-    if (showPlusSheet) {
+    // P-C4：原「＋」一级菜单 → 输入框下方「更多 ▾」下拉（选择模式项由场景 chip 承担）
+    if (showMoreSheet) {
         AiPlusSheet(
             showRewriteItem = uiState.sceneKey == "expression_rewrite" &&
                 uiState.inputText.isNotBlank(),
-            onDismiss = { showPlusSheet = false },
-            onSelectMode = {
-                showPlusSheet = false
-                showModeSheet = true
-            },
+            onDismiss = { showMoreSheet = false },
             onPickQuote = { type ->
-                showPlusSheet = false
+                showMoreSheet = false
                 quotePickerType = type
                 viewModel.loadQuotePickerData(type)
             },
             onRewrite = {
-                showPlusSheet = false
+                showMoreSheet = false
                 viewModel.rewriteExpression()
             },
         )
@@ -376,6 +371,7 @@ fun NewAiChatScreen(
             type = type,
             messages = uiState.messages,
             letters = uiState.quoteLetters,
+            sentLetters = uiState.quoteSentLetters,
             anniversaries = uiState.quoteAnniversaries,
             loading = uiState.quotePickerLoading,
             error = uiState.quotePickerError,
@@ -392,11 +388,14 @@ fun NewAiChatScreen(
                 )
                 quotePickerType = null
             },
-            onPickLetter = { letter ->
+            // P-C4：来源写进 sourceLabel——它会以【引用·…】进 message 即进提示词，
+            // 两种来源作用不同（理解 TA / 改进我的表达），提示词必须可区分
+            onPickLetter = { letter, fromPartner ->
                 val title = letter.title ?: "无标题"
+                val label = if (fromPartner) "TA写给你的信《$title》" else "你写给TA的信《$title》"
                 viewModel.setQuoteChip(
                     QuoteChip(
-                        sourceLabel = "一封信《$title》",
+                        sourceLabel = label,
                         body = letter.content ?: "",
                         originId = letter.id,
                     )
@@ -776,21 +775,20 @@ private fun formatUsage(value: Int): String {
     return if (k % 1.0 == 0.0) "${k.toInt()}k" else "${k}k"
 }
 
-/** P0-8：输入区收敛为 [输入框] [＋] [发送] —— 模式/改写/引用全收进「＋」
- *  P-B §1.6：输入框下方常驻档位 chip（⚡快速/🧠深度/🎓专家），点开底部三选一。
- *  P-C4：场景 chip（帮我理清…）与档位同行下移到输入框下方——空会话顶部不再占位，
- *  对话中也可随时换场景（点开「选择模式」抽屉，dispatchScene 沿用既有语义）。 */
+/** P-C4：输入区收敛为 [输入框] [发送]；选项全在下方一行 chip：
+ *  [场景 chip]（帮我理清…）[档位 chip]（⚡快速/🧠深度/🎓专家）[更多 ▾]（原「＋」菜单）。
+ *  对话中每一轮都可重选场景/档位/引用来源——不再藏进悬浮「＋」。 */
 @Composable
 private fun AiInputBar(
     value: String,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
     isLoading: Boolean,
-    onOpenPlusMenu: () -> Unit,
     chatMode: String,
     onOpenModePanel: () -> Unit,
     sceneLabel: String,
     onOpenScenePanel: () -> Unit,
+    onOpenMorePanel: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -818,17 +816,6 @@ private fun AiInputBar(
             Spacer(modifier = Modifier.width(6.dp))
 
             IconButton(
-                onClick = onOpenPlusMenu,
-                modifier = Modifier.size(38.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Add,
-                    contentDescription = "更多",
-                    tint = AppTextSecondary,
-                )
-            }
-
-            IconButton(
                 onClick = onSend,
                 enabled = value.isNotBlank() && !isLoading,
                 modifier = Modifier
@@ -846,9 +833,9 @@ private fun AiInputBar(
         }
 
         // P-B §1.6：档位 chip 在输入框下方常驻——档位决定这条消息多快多深，
-        // 发送前必须一眼可见、一点可改；藏进「＋」等于让用户以为没这个能力。
-        // P-C4：场景 chip 与档位同行（原空会话顶部那排 chip 下移），
-        // 对话中也能换场景；两枚 chip 左对齐，右侧留白。
+        // 发送前必须一眼可见、一点可改；藏进悬浮按钮等于让用户以为没这个能力。
+        // P-C4：场景 chip（原空会话顶部那排下移）与「更多」（原「＋」）同排——
+        // 场景/档位/引用来源对话中随时可重选；三枚 chip 左对齐，右侧留白。
         val option = chatModeOptionOf(chatMode)
         Row(
             modifier = Modifier
@@ -862,6 +849,8 @@ private fun AiInputBar(
                 label = "${option.icon} ${option.label}",
                 onClick = onOpenModePanel,
             )
+            Spacer(modifier = Modifier.width(8.dp))
+            InputOptionChip(label = "更多", onClick = onOpenMorePanel)
         }
     }
 }

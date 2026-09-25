@@ -416,6 +416,34 @@ def with_human_base(text: str) -> str:
     return text.rstrip() + "\n\n" + HUMAN_BASE_INSTRUCTION
 
 
+#: 引用信件的来源标记（客户端 `QuoteChip.sourceLabel` 拼进 message 的【引用·…】前缀）。
+#: P-C4：两种来源作用不同——TA 写给用户的信用来「理解 TA」，
+#: 用户写给 TA 的信用来「改进用户自己的表达」，提示词必须按来源区分。
+QUOTE_PREFIX = "【引用·"
+
+QUOTE_LETTER_INSTRUCTION = """## 用户引用了一封信
+用户消息以【引用·…信《标题》】引用了一封信，先看来源再作答：
+- 「TA写给你的信」：站在收信人（用户）视角解读——TA 这封信的情绪、真实需求、言外之意，以及用户怎么回应更合适；
+- 「你写给TA的信」：站在写信人（用户）视角审阅——这封信哪里可能被误读、语气与表达哪里可以改进。"""
+
+
+def has_letter_quote(user_input: str) -> bool:
+    """用户输入是否引用了一封信（客户端来源标签必须含「信《》」）。"""
+    text = user_input or ""
+    return QUOTE_PREFIX in text and "信《" in text
+
+
+def with_quote_letter_instruction(text: str, user_input: str) -> str:
+    """输入引用了信件时把来源区分指令追加到 system 尾部（幂等）。
+
+    与 [with_human_base] 同一追加模式：所有出口一处生效，
+    重复拼接不会让指令出现两遍。
+    """
+    if not has_letter_quote(user_input) or QUOTE_LETTER_INSTRUCTION in text:
+        return text
+    return text.rstrip() + "\n\n" + QUOTE_LETTER_INSTRUCTION
+
+
 #: chat_mode 三档规格（P-B §1.2 差异矩阵，逐项可断言）。
 #: - 字段名必须是 chat_mode；**绝不能叫 mode**——lc_prompt_builder 的 mode 是
 #:   输出通道（structured|stream），撞名会直接错乱。
