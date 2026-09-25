@@ -22,3 +22,5 @@ class DiaryEntry(BigIntPKMixin, TimestampMixin, Base):
     weather: Mapped[Optional[str]] = mapped_column(String(50))
     is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    #: P-C1 §1（v2_7）：关系 id——取到 active relation 才写日记记忆（单身日记不写）
+    relation_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)

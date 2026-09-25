@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import String, Text, Integer, BigInteger, DateTime, ForeignKey, Index, JSON
+from sqlalchemy import String, Text, Integer, BigInteger, DateTime, ForeignKey, Index, JSON, SmallInteger
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional, List
 
@@ -135,6 +135,8 @@ class AiMemory(BigIntPKMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("ix_ai_memory_user_id", "user_id"),
         Index("ix_ai_memory_relation_id", "relation_id"),
+        # P-C1 §1：时间衰减排序（occurred_at 为事件时间，NULL 回退 created_at）
+        Index("ix_ai_memory_relation_occurred", "relation_id", "occurred_at"),
     )
 
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
@@ -144,3 +146,14 @@ class AiMemory(BigIntPKMixin, TimestampMixin, Base):
     memory_type: Mapped[str] = mapped_column(String(30), nullable=False)
     memory_text: Mapped[str] = mapped_column(Text, nullable=False)
     visibility: Mapped[str] = mapped_column(String(20), default="private", nullable=False)
+    # ---- P-C1 §1：事件记忆四列（v2_7）----
+    #: 事件发生时间（非入库时间）；旧数据回填 = created_at
+    occurred_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    #: 来源（letter/diary/dual/anniversary/questionnaire/museum/chat_summary/…）
+    source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    #: 源实体 id（如 diary_entry.id / letter.id）
+    source_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    #: 0 常规 / 1 高价值（dual、anniversary、questionnaire）/ 2 用户标星（P-C3 枚举位）
+    importance: Mapped[int] = mapped_column(
+        SmallInteger, default=0, server_default="0", nullable=False
+    )
