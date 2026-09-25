@@ -182,13 +182,18 @@ def main():
             )
             path = "/probe-" + tag
 
-            @probe.get(path)
-            @ai_limit()
-            def _endpoint(request: Request):
+            def endpoint(request: Request):
                 return {"ok": True}
 
-            # 每个场景用独立 client IP：slowapi 的计数键含来源地址，
-            # 复用同一个 IP 会让上一个场景的计数污染下一个（实测踩到过）。
+            # ⚠️ slowapi 按函数的 __name__ 归组限流规则与计数。多个探针场景若共用
+            # 同一个函数名（例如都叫 _endpoint），规则会互相叠加、计数互相污染 ——
+            # 实测表现为 2/minute 只放行 1 次，看起来像"叠加把配额算重了"。
+            # 生产代码里每条路由的函数名天然唯一，不受影响；测试里必须手动区分。
+            endpoint.__name__ = "probe_endpoint_" + tag
+
+            probe.get(path)(ai_limit()(endpoint))
+
+            # 每个场景再用独立 client IP，避免来源地址维度上的串扰
             tc = TestClient(probe, client=(client_ip, 12345))
             return [tc.get(path).status_code for _ in range(3)]
         finally:
