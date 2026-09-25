@@ -2,7 +2,6 @@ package com.couple.translator.feature.couple.ai
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -69,7 +67,6 @@ import com.couple.translator.core.ui.components.AiStreamingText
 import com.couple.translator.core.ui.components.AiThinkingPanel
 import com.couple.translator.core.ui.components.AiWaitingBubble
 import com.couple.translator.core.ui.components.AppCard
-import com.couple.translator.core.ui.components.AppFilterChip
 import com.couple.translator.core.ui.components.AppMarkdownText
 import com.couple.translator.core.ui.components.AppPageHeader
 import com.couple.translator.core.ui.components.AppTopBar
@@ -110,7 +107,9 @@ fun NewAiChatScreen(
 
     // 场景清单统一来自 AiSceneCatalog（远端拉取，collectAsState 保证拉到后会重组）
     val scenes by AiSceneCatalog.scenes.collectAsState()
-    val quickChips = scenes.filter { it.showInQuickChips }
+    // 场景 chip 文案：口语化 chipLabel，未知 key 回退正式 label
+    val currentSceneLabel = scenes.firstOrNull { it.key == uiState.sceneKey }?.chipLabel
+        ?: AiSceneCatalog.labelOf(uiState.sceneKey)
 
     LaunchedEffect(uiState.messages.size, uiState.streamingContent, uiState.thinkingContent) {
         val extra = if (uiState.streamingContent.isNotEmpty() || uiState.thinkingContent.isNotEmpty()) 1 else 0
@@ -226,13 +225,7 @@ fun NewAiChatScreen(
                         horizontalPadding = 0.dp,
                     )
                 }
-                item {
-                    QuickSceneChips(
-                        scenes = quickChips,
-                        currentScene = uiState.sceneKey,
-                        onSceneSelected = dispatchScene,
-                    )
-                }
+                // 快捷场景 chip 已下移到输入框下方（与深度档位同行），不再在顶部占位
             }
 
             items(uiState.messages) { message ->
@@ -350,6 +343,8 @@ fun NewAiChatScreen(
             onOpenPlusMenu = { showPlusSheet = true },
             chatMode = uiState.chatMode,
             onOpenModePanel = { showChatModeSheet = true },
+            sceneLabel = currentSceneLabel,
+            onOpenScenePanel = { showModeSheet = true },
         )
     }
 
@@ -425,6 +420,7 @@ fun NewAiChatScreen(
         ModeDrawerSheet(
             // 只列出用户可选的场景：信件改写的入口在信件页，不在这里
             scenes = scenes.filter { it.showInDrawer },
+            currentSceneKey = uiState.sceneKey,
             onDismiss = { showModeSheet = false },
             onModeSelected = { scene ->
                 showModeSheet = false
@@ -781,7 +777,9 @@ private fun formatUsage(value: Int): String {
 }
 
 /** P0-8：输入区收敛为 [输入框] [＋] [发送] —— 模式/改写/引用全收进「＋」
- *  P-B §1.6：输入框左下角常驻档位 chip（⚡快速/🧠深度/🎓专家），点开底部三选一。 */
+ *  P-B §1.6：输入框下方常驻档位 chip（⚡快速/🧠深度/🎓专家），点开底部三选一。
+ *  P-C4：场景 chip（帮我理清…）与档位同行下移到输入框下方——空会话顶部不再占位，
+ *  对话中也可随时换场景（点开「选择模式」抽屉，dispatchScene 沿用既有语义）。 */
 @Composable
 private fun AiInputBar(
     value: String,
@@ -791,6 +789,8 @@ private fun AiInputBar(
     onOpenPlusMenu: () -> Unit,
     chatMode: String,
     onOpenModePanel: () -> Unit,
+    sceneLabel: String,
+    onOpenScenePanel: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -845,35 +845,49 @@ private fun AiInputBar(
             }
         }
 
-        // P-B §1.6：档位 chip 在输入框左下角常驻——档位决定这条消息多快多深，
+        // P-B §1.6：档位 chip 在输入框下方常驻——档位决定这条消息多快多深，
         // 发送前必须一眼可见、一点可改；藏进「＋」等于让用户以为没这个能力。
+        // P-C4：场景 chip 与档位同行（原空会话顶部那排 chip 下移），
+        // 对话中也能换场景；两枚 chip 左对齐，右侧留白。
         val option = chatModeOptionOf(chatMode)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(AppSurfaceMuted)
-                    .clickable(onClick = onOpenModePanel)
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "${option.icon} ${option.label}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = AppTextSecondary,
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "▾",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = AppTextTertiary,
-                )
-            }
+            InputOptionChip(label = sceneLabel, onClick = onOpenScenePanel)
+            Spacer(modifier = Modifier.width(8.dp))
+            InputOptionChip(
+                label = "${option.icon} ${option.label}",
+                onClick = onOpenModePanel,
+            )
         }
+    }
+}
+
+/** P-C4：输入框下方的下拉样式 chip（场景 / 深度档位共用）。 */
+@Composable
+private fun InputOptionChip(label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(AppSurfaceMuted)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = AppTextSecondary,
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = "▾",
+            style = MaterialTheme.typography.labelSmall,
+            color = AppTextTertiary,
+        )
     }
 }
 
@@ -1126,31 +1140,6 @@ private fun EvidencePanel(evidence: AiDto.EvidencePayload) {
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun QuickSceneChips(
-    scenes: List<AiScene>,
-    currentScene: String,
-    onSceneSelected: (AiScene) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(bottom = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Spacer(modifier = Modifier.width(4.dp))
-        scenes.forEach { scene ->
-            AppFilterChip(
-                text = scene.chipLabel,
-                selected = currentScene == scene.key,
-                onClick = { onSceneSelected(scene) },
-            )
-        }
-        Spacer(modifier = Modifier.width(4.dp))
     }
 }
 

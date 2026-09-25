@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppTextPrimary
@@ -40,6 +41,7 @@ import com.couple.translator.core.ui.theme.AppTextSecondary
 @Composable
 fun ModeDrawerSheet(
     scenes: List<AiScene>,
+    currentSceneKey: String = "",
     onDismiss: () -> Unit,
     onModeSelected: (AiScene) -> Unit,
 ) {
@@ -66,6 +68,9 @@ fun ModeDrawerSheet(
             scenes.forEachIndexed { index, scene ->
                 ModeItem(
                     scene = scene,
+                    // P-C4：输入框下方的场景 chip 复用本抽屉——标出当前场景，
+                    // 否则对话中重选时不知道现在是哪个
+                    selected = scene.key == currentSceneKey,
                     onClick = { onModeSelected(scene) },
                 )
                 if (index < scenes.lastIndex) {
@@ -79,6 +84,7 @@ fun ModeDrawerSheet(
 @Composable
 private fun ModeItem(
     scene: AiScene,
+    selected: Boolean = false,
     onClick: () -> Unit,
 ) {
     Row(
@@ -100,6 +106,14 @@ private fun ModeItem(
             text = scene.label,
             style = MaterialTheme.typography.bodyLarge,
             color = AppTextPrimary,
+            modifier = Modifier.weight(1f),
         )
+        if (selected) {
+            Text(
+                text = "✓",
+                style = MaterialTheme.typography.bodyLarge,
+                color = AppAccent,
+            )
+        }
     }
 }
