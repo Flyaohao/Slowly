@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -91,6 +92,8 @@ import com.couple.translator.core.ui.theme.AppTextTertiary
 fun NewAiChatScreen(
     onOpenDrawer: () -> Unit,
     onNavigateToSessionList: () -> Unit,
+    // P-C3 §4.3：记忆管理页入口（此前 MemoryScreen 无任何导航接线，是孤儿页面）
+    onNavigateToMemory: () -> Unit,
     onNavigateToMediation: () -> Unit,
     onNavigateToReview: () -> Unit,
     identity: TopBarIdentity = TopBarIdentity(),
@@ -176,6 +179,11 @@ fun NewAiChatScreen(
             onOpenDrawer = onOpenDrawer,
             identity = identity,
             trailing = {
+                AppTopBarAction(
+                    icon = Icons.Outlined.Psychology,
+                    contentDescription = "记忆管理",
+                    onClick = onNavigateToMemory,
+                )
                 AppTopBarAction(
                     icon = Icons.Outlined.History,
                     contentDescription = "历史会话",

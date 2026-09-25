@@ -240,6 +240,9 @@ fun MainScreen(
                             onNavigateToSessionList = {
                                 onNavigateToRoute("ai_session_list")
                             },
+                            onNavigateToMemory = {
+                                onNavigateToRoute("memory")
+                            },
                             onNavigateToMediation = {
                                 onNavigateToRoute("mediation_explanation")
                             },

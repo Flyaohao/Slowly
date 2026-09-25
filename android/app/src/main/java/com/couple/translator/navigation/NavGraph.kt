@@ -31,6 +31,7 @@ import com.couple.translator.core.ui.theme.ThemeMode
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
 import com.couple.translator.feature.couple.ai.AiSessionListScreen
+import com.couple.translator.feature.couple.ai.MemoryScreen
 import com.couple.translator.feature.couple.ai.PendingSessionHolder
 import com.couple.translator.feature.couple.ai.ReviewScreen
 import com.couple.translator.feature.couple.anniversary.AddAnniversaryScreen
@@ -328,6 +329,13 @@ fun NavGraph(
                     PendingSessionHolder.set(sessionId, sceneKey, title, archived)
                     navController.popBackStack()
                 },
+            )
+        }
+
+        // P-C3 §4.3：记忆管理页（此前无任何 destination 接线）
+        composable(Screen.Memory.route) {
+            MemoryScreen(
+                onNavigateBack = { navController.popBackStack() },
             )
         }
 
