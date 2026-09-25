@@ -49,7 +49,9 @@ SCORE_THRESHOLD = 0.35
 #: 单次召回条数（prompt 注入预算）
 DEFAULT_TOP_K = 5
 
-#: 降级用的近因条数（保持改造前行为）
+#: `_fallback_recent` 的默认近因条数。P-B 起 `retrieve_memory_items` 的
+#: 降级路径与向量路径一样显式传调用方的 limit（修复：降级曾无视 limit 固定
+#: 返回 10 条，导致 chat_mode 档位矩阵在降级环境失效、同源断言对不上）。
 RECENCY_LIMIT = 10
 
 #: query embedding 硬超时（秒）。约束④。
@@ -268,37 +270,40 @@ def retrieve_memory_items(
          （**不与近因合并**——约束②：降级≠合并）
       4. 向量无达标命中 / collection 不可用 → 近因降级
 
+    **所有路径（含降级）都按 limit 截断**——prompt 侧与 evidence 侧拿到的
+    条数与顺序因此完全一致（约束③的同源断言依赖这一点）。
+
     可见性在 SQL 层统一套 visibility_filter：向量候选回表再过滤，
     chroma metadata 与库不一致时也不会越权（约束①红线）。
     """
     q = (query or "").strip()
     if not q:
-        return _fallback_recent(db, user_id, relation_id, limit=RECENCY_LIMIT)
+        return _fallback_recent(db, user_id, relation_id, limit=limit)
 
     col = _get_collection()
     if col is None:
-        return _fallback_recent(db, user_id, relation_id, limit=RECENCY_LIMIT)
+        return _fallback_recent(db, user_id, relation_id, limit=limit)
 
     try:
         if col.count() == 0:
-            return _fallback_recent(db, user_id, relation_id, limit=RECENCY_LIMIT)
+            return _fallback_recent(db, user_id, relation_id, limit=limit)
     except Exception as exc:
         logger.warning("[MEM-RET] count 失败，降级: %s", exc)
-        return _fallback_recent(db, user_id, relation_id, limit=RECENCY_LIMIT)
+        return _fallback_recent(db, user_id, relation_id, limit=limit)
 
     query_vec = _embed_query_fast(q, QUERY_EMBED_TIMEOUT)
     if query_vec is None:
-        return _fallback_recent(db, user_id, relation_id, limit=RECENCY_LIMIT)
+        return _fallback_recent(db, user_id, relation_id, limit=limit)
 
     try:
         scores = _query_scores(col, query_vec, max(limit * 3, 15), relation_id)
     except Exception as exc:
         logger.warning("[MEM-RET] 向量检索失败，降级: %s", exc)
-        return _fallback_recent(db, user_id, relation_id, limit=RECENCY_LIMIT)
+        return _fallback_recent(db, user_id, relation_id, limit=limit)
 
     hit_ids = [mid for mid, sc in scores.items() if sc >= SCORE_THRESHOLD]
     if not hit_ids:
-        return _fallback_recent(db, user_id, relation_id, limit=RECENCY_LIMIT)
+        return _fallback_recent(db, user_id, relation_id, limit=limit)
 
     # 缺陷二：回表必须同时约束 relation——visibility_filter 的 private 支
     # 只看 user_id，不看 relation；解绑再绑定后旧关系自己的 private 会漏进来。
@@ -313,7 +318,7 @@ def retrieve_memory_items(
         .all()
     )
     if not rows:
-        return _fallback_recent(db, user_id, relation_id, limit=RECENCY_LIMIT)
+        return _fallback_recent(db, user_id, relation_id, limit=limit)
 
     rows.sort(key=lambda m: scores.get(m.id, 0.0), reverse=True)
     return _finalize(rows[:limit], user_id, scores)
