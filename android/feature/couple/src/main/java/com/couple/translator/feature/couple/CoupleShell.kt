@@ -26,8 +26,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -151,6 +154,11 @@ fun CoupleShell(
     // 情侣模式 Tab
     val tabs = BottomTab.entries.filter { it != BottomTab.SingleHome && it != BottomTab.Diary }
 
+    // 军师沉浸模式：隐藏底部 Tab 栏换取更大对话空间。
+    // 只在军师 Tab 生效（切走自动恢复），入口是输入框下方 chip，随时可显示回来。
+    var hideTabBar by rememberSaveable { mutableStateOf(false) }
+    val isTabBarHidden = hideTabBar && currentRoute == BottomTab.AiChat.route
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -178,26 +186,29 @@ fun CoupleShell(
             containerColor = AppBackground,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
-                BottomTabBar(
-                    currentRoute = currentRoute,
-                    tabs = tabs,
-                    onTabSelected = { tab ->
-                        if (currentRoute != tab.route) {
-                            tabNavController.navigate(tab.route) {
-                                popUpTo(tabNavController.graph.startDestinationId) {
-                                    saveState = true
+                if (!isTabBarHidden) {
+                    BottomTabBar(
+                        currentRoute = currentRoute,
+                        tabs = tabs,
+                        onTabSelected = { tab ->
+                            if (currentRoute != tab.route) {
+                                tabNavController.navigate(tab.route) {
+                                    popUpTo(tabNavController.graph.startDestinationId) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
                             }
-                        }
-                    },
-                )
+                        },
+                    )
+                }
             },
         ) { innerPadding ->
             NavHost(
                 navController = tabNavController,
-                startDestination = BottomTab.Home.route,
+                // 军师设为首页（情侣模式冷启动直接进对话）
+                startDestination = BottomTab.AiChat.route,
                 modifier = Modifier
                     .padding(innerPadding)
                     // 关键：把壳层已占用的 inset（tab 栏高度 + 系统栏）登记为「已消费」。
@@ -309,6 +320,8 @@ fun CoupleShell(
                             onNavigateToRoute("relationship_review")
                         },
                         identity = topBarIdentity,
+                        tabBarVisible = !hideTabBar,
+                        onToggleTabBar = { hideTabBar = !hideTabBar },
                     )
                 }
             }

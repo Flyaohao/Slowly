@@ -2,6 +2,7 @@ package com.couple.translator.feature.couple.ai
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -93,6 +95,9 @@ fun NewAiChatScreen(
     onNavigateToMediation: () -> Unit,
     onNavigateToReview: () -> Unit,
     identity: TopBarIdentity = TopBarIdentity(),
+    /** 沉浸模式：false = 底部 Tab 栏已隐藏（状态由 CoupleShell 持有） */
+    tabBarVisible: Boolean = true,
+    onToggleTabBar: () -> Unit = {},
     viewModel: AiChatViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -344,6 +349,8 @@ fun NewAiChatScreen(
             sceneLabel = currentSceneLabel,
             onOpenScenePanel = { showModeSheet = true },
             onOpenMorePanel = { showMoreSheet = true },
+            tabBarVisible = tabBarVisible,
+            onToggleTabBar = onToggleTabBar,
         )
     }
 
@@ -776,8 +783,8 @@ private fun formatUsage(value: Int): String {
 }
 
 /** P-C4：输入区收敛为 [输入框] [发送]；选项全在下方一行 chip：
- *  [场景 chip]（帮我理清…）[档位 chip]（⚡快速/🧠深度/🎓专家）[更多 ▾]（原「＋」菜单）。
- *  对话中每一轮都可重选场景/档位/引用来源——不再藏进悬浮「＋」。 */
+ *  [场景 chip]（帮我理清…）[档位 chip]（⚡快速/🧠深度/🎓专家）[更多 ▾]（原「＋」菜单）
+ *  [隐藏/显示 Tab 栏]（沉浸模式开关）。对话中每一轮都可重选——不再藏进悬浮「＋」。 */
 @Composable
 private fun AiInputBar(
     value: String,
@@ -789,6 +796,8 @@ private fun AiInputBar(
     sceneLabel: String,
     onOpenScenePanel: () -> Unit,
     onOpenMorePanel: () -> Unit,
+    tabBarVisible: Boolean,
+    onToggleTabBar: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -840,6 +849,7 @@ private fun AiInputBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()) // chip 变多后窄屏不换行、不溢出
                 .padding(top = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -851,13 +861,20 @@ private fun AiInputBar(
             )
             Spacer(modifier = Modifier.width(8.dp))
             InputOptionChip(label = "更多", onClick = onOpenMorePanel)
+            Spacer(modifier = Modifier.width(8.dp))
+            // 沉浸模式开关：隐藏底部 Tab 栏给军师腾空间；开关常驻，随时显示回来
+            InputOptionChip(
+                label = if (tabBarVisible) "隐藏Tab栏" else "显示Tab栏",
+                onClick = onToggleTabBar,
+                showChevron = false,
+            )
         }
     }
 }
 
-/** P-C4：输入框下方的下拉样式 chip（场景 / 深度档位共用）。 */
+/** P-C4：输入框下方的下拉样式 chip（场景 / 深度档位共用）；[showChevron]=false 用于开关类。 */
 @Composable
-private fun InputOptionChip(label: String, onClick: () -> Unit) {
+private fun InputOptionChip(label: String, onClick: () -> Unit, showChevron: Boolean = true) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
@@ -871,12 +888,14 @@ private fun InputOptionChip(label: String, onClick: () -> Unit) {
             style = MaterialTheme.typography.labelMedium,
             color = AppTextSecondary,
         )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = "▾",
-            style = MaterialTheme.typography.labelSmall,
-            color = AppTextTertiary,
-        )
+        if (showChevron) {
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = "▾",
+                style = MaterialTheme.typography.labelSmall,
+                color = AppTextTertiary,
+            )
+        }
     }
 }
 

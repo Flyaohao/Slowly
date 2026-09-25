@@ -5,28 +5,39 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.Message
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.couple.translator.core.data.model.AiDto
+import com.couple.translator.core.ui.components.AppAccentButton
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
@@ -44,8 +55,18 @@ import com.couple.translator.feature.couple.data.model.LetterDto
  *  - 消息：调用方传入最近 20 条倒序列表（本地 state，无网络）
  *  - 信件 / 纪念日：调用方已通过 ViewModel 加载到 UiState
  *
+ * 信件行右侧带预览按钮：点预览在弹层内直接看内容（列表已带 content，不发请求），
+ * 点行本身仍是引用——两个动作互不干扰。
+ *
  * 空态与加载失败都必须给人话（不许空白弹层 / 静默失败）。
  */
+
+/** 信件预览目标：信件 + 来源（决定预览头文案与「引用」时的提示词来源）。 */
+private data class LetterPreviewTarget(
+    val letter: LetterDto.LetterResponse,
+    val fromPartner: Boolean,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuotePickerSheet(
@@ -63,6 +84,8 @@ fun QuotePickerSheet(
     onPickAnniversary: (AnniversaryDto.AnniversaryResponse) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
+    // 非 null = 正在预览某封信（弹层内切换视图，不跳页、不丢列表状态）
+    var previewTarget by remember { mutableStateOf<LetterPreviewTarget?>(null) }
     val title = when (type) {
         QuotePickerType.MESSAGE -> "引用一条消息"
         QuotePickerType.LETTER -> "引用一封信"
@@ -97,7 +120,16 @@ fun QuotePickerSheet(
                 modifier = Modifier.padding(bottom = 10.dp),
             )
 
-            when {
+            val target = previewTarget
+            if (target != null) {
+                LetterPreviewView(
+                    target = target,
+                    onBack = { previewTarget = null },
+                    onQuote = {
+                        onPickLetter(target.letter, target.fromPartner)
+                    },
+                )
+            } else when {
                 // 加载失败：一行错误，绝不静默（项目红线）
                 error.isNotBlank() -> {
                     Text(
@@ -155,6 +187,7 @@ fun QuotePickerSheet(
                                     header = "TA 写给你的信",
                                     letters = letters,
                                     onPick = { onPickLetter(it, true) },
+                                    onPreview = { previewTarget = LetterPreviewTarget(it, true) },
                                 )
                                 if (letters.isNotEmpty() && sentLetters.isNotEmpty()) {
                                     HorizontalDivider(color = AppBorderLight)
@@ -163,6 +196,7 @@ fun QuotePickerSheet(
                                     header = "你写给 TA 的信",
                                     letters = sentLetters,
                                     onPick = { onPickLetter(it, false) },
+                                    onPreview = { previewTarget = LetterPreviewTarget(it, false) },
                                 )
                             }
                         }
@@ -193,6 +227,7 @@ private fun LetterSection(
     header: String,
     letters: List<LetterDto.LetterResponse>,
     onPick: (LetterDto.LetterResponse) -> Unit,
+    onPreview: (LetterDto.LetterResponse) -> Unit,
 ) {
     if (letters.isEmpty()) return
     Text(
@@ -210,11 +245,108 @@ private fun LetterSection(
                 append(date)
             }
         }
-        PickerRow(title = label, onClick = { onPick(letter) })
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // 点行 = 引用（原行为不变）
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = AppTextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = { onPick(letter) })
+                    .padding(vertical = 14.dp),
+            )
+            // 右侧预览按钮 = 只看内容，不引用；独立可点区，不触发行点击
+            IconButton(
+                onClick = { onPreview(letter) },
+                modifier = Modifier.size(40.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Visibility,
+                    contentDescription = "预览信件",
+                    tint = AppTextTertiary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
         if (index < letters.lastIndex) {
             HorizontalDivider(color = AppBorderLight)
         }
     }
+}
+
+/** 信件预览视图：弹层内换页，标题 + 来源 + 日期 + 可滚动正文 + 「引用这封信」。 */
+@Composable
+private fun LetterPreviewView(
+    target: LetterPreviewTarget,
+    onBack: () -> Unit,
+    onQuote: () -> Unit,
+) {
+    val letter = target.letter
+    val date = (letter.sendTime ?: letter.createdAt)?.take(10).orEmpty()
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(bottom = 4.dp),
+    ) {
+        IconButton(onClick = onBack, modifier = Modifier.size(36.dp)) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "返回信件列表",
+                tint = AppTextSecondary,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = "信件预览",
+            style = MaterialTheme.typography.labelMedium,
+            color = AppTextSecondary,
+        )
+    }
+
+    Text(
+        text = letter.title ?: "无标题",
+        style = MaterialTheme.typography.titleMedium,
+        color = AppTextPrimary,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+    )
+    Text(
+        text = buildString {
+            if (target.fromPartner) append("TA 写给你的信") else append("你写给 TA 的信")
+            if (date.isNotEmpty()) {
+                append("  ")
+                append(date)
+            }
+        },
+        style = MaterialTheme.typography.labelMedium,
+        color = AppTextTertiary,
+        modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
+    )
+
+    HorizontalDivider(color = AppBorderLight)
+    // 长信限高滚动，避免弹层被正文撑满屏
+    Text(
+        text = letter.content?.takeIf { it.isNotBlank() } ?: "（这封信还没有内容）",
+        style = MaterialTheme.typography.bodyMedium,
+        color = AppTextSecondary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 420.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(vertical = 12.dp),
+    )
+    AppAccentButton(
+        text = "引用这封信",
+        onClick = onQuote,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable
