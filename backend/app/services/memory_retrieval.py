@@ -65,8 +65,9 @@ _collection_lock = threading.Lock()
 def _get_collection():
     """懒加载 couple_memory collection；失败返回 None，上层降级。"""
     global _collection, _collection_loaded
-    if _collection_loaded:
-        return _collection
+    # 快路径也必须进锁：锁外读会撞上「_collection_loaded 已置 True、
+    # _collection 仍为 None」的加载中间态——向量线程拿到 None 后静默放弃，
+    # 该记忆永久缺向量（P-C1 C10 首轮失败与孤儿向量的根因）。
     with _collection_lock:
         if _collection_loaded:
             return _collection
@@ -172,17 +173,25 @@ def vectorize_memory_async(memory: Dict[str, Any]) -> None:
             from app.services.embedding import embeddings as emb
 
             vec = emb.embed_documents([text])[0]
+            metadata = {
+                "memory_id": int(memory["id"]),
+                "user_id": int(memory.get("user_id") or 0),
+                "relation_id": int(memory.get("relation_id") or 0),
+                "visibility": memory.get("visibility") or "private",
+                "memory_type": memory.get("memory_type") or "",
+                # P-C1 §3.4：事件三键——occurred_at 用 ISO 字符串；
+                # Chroma metadata 不接受 None，缺失键一律不写
+                "importance": int(memory.get("importance") or 0),
+            }
+            if memory.get("source"):
+                metadata["source"] = memory["source"]
+            if memory.get("occurred_at"):
+                metadata["occurred_at"] = memory["occurred_at"]
             col.add(
                 ids=[mid],
                 embeddings=[vec],
                 documents=[text],
-                metadatas=[{
-                    "memory_id": int(memory["id"]),
-                    "user_id": int(memory.get("user_id") or 0),
-                    "relation_id": int(memory.get("relation_id") or 0),
-                    "visibility": memory.get("visibility") or "private",
-                    "memory_type": memory.get("memory_type") or "",
-                }],
+                metadatas=[metadata],
             )
             logger.info("[MEM-RET] 已向量化 memory_id=%s", mid)
         except Exception as exc:
@@ -194,13 +203,21 @@ def vectorize_memory_async(memory: Dict[str, Any]) -> None:
 def _fallback_recent(
     db: Session, user_id: int, relation_id: int, limit: int = RECENCY_LIMIT
 ) -> List[Dict[str, Any]]:
-    """降级：可见性过滤后的最近 N 条。"""
+    """降级：可见性过滤后的最近 N 条——按**事件时间**排（不变量④）。
+
+    P-C1 §7.3：排序列 = occurred_at DESC，NULL 回退 created_at（coalesce）。
+    """
+    from sqlalchemy import func
+
     rows = (
         db.query(AiMemory)
         .filter(
             and_(AiMemory.relation_id == relation_id, visibility_filter(user_id, relation_id))
         )
-        .order_by(AiMemory.created_at.desc())
+        .order_by(
+            func.coalesce(AiMemory.occurred_at, AiMemory.created_at).desc(),
+            AiMemory.id.desc(),
+        )
         .limit(limit)
         .all()
     )
@@ -215,7 +232,13 @@ def _finalize(
         items.append({
             "id": m.id,
             "content": m.memory_text,
-            "source": m.memory_type or "",
+            # P-C1 §7.1：source 升级为**真实来源列**（letter/diary/…）；
+            # 原 memory_type 别名语义挪到 memory_type 键（旧键不删、语义不丢）
+            "source": m.source or "",
+            "memory_type": m.memory_type or "",
+            # 只加不删：三新键，_finalize 与降级出口共用本函数
+            "occurred_at": m.occurred_at.isoformat() if m.occurred_at else None,
+            "importance": m.importance or 0,
             "created_at": m.created_at.isoformat() if m.created_at else None,
             "from_partner": m.user_id != viewer_user_id,
             "score": scores.get(m.id),
@@ -325,13 +348,25 @@ def retrieve_memory_items(
 
 
 def format_memory_context(items: List[Dict[str, Any]]) -> str:
-    """召回结果 → prompt 片段。伴侣记忆标「TA 曾说过…」（约束①）。"""
+    """召回结果 → prompt 片段。伴侣记忆标「TA 曾说过…」（约束①）。
+
+    P-C1 §7.2：每条加「（{source}·{日期}）」前缀——让模型知道这是什么、
+    什么时候的事。日期取 occurred_at，无则 created_at，格式 YYYY-MM-DD。
+    """
     if not items:
         return ""
     lines = []
     for m in items:
         prefix = "TA 曾说过：" if m.get("from_partner") else ""
+        label = m.get("memory_type") or m.get("source") or "记忆"
+        tag = ""
+        src = m.get("source") or ""
+        date = (m.get("occurred_at") or m.get("created_at") or "")[:10]
+        if src and date:
+            tag = "（%s·%s）" % (src, date)
+        elif date:
+            tag = "（%s）" % date
         lines.append(
-            "- [%s] %s%s" % (m.get("source") or "记忆", prefix, m.get("content") or "")
+            "- [%s] %s%s%s" % (label, tag, prefix, m.get("content") or "")
         )
     return "## AI 记忆\n" + "\n".join(lines)

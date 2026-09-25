@@ -45,6 +45,18 @@ def create_diary(
             mood=req.mood,
             weather=req.weather,
         )
+        # P-C1 §5.1：有 active relation 才写日记记忆（单身日记不写）。
+        # 失败只记日志——记忆是锦上添花，不影响日记主链路。
+        try:
+            from app.services.memory_events import write_diary_memory
+
+            write_diary_memory(db, current_user.id, entry)
+        except Exception:
+            import logging
+
+            logging.getLogger("couple.diary").exception(
+                "[DIARY] 记忆写入失败 id=%s", getattr(entry, "id", None)
+            )
         return ApiResponse(data=_to_diary_response(entry).model_dump())
     except Exception:
         db.rollback()

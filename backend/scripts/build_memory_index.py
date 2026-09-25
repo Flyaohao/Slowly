@@ -106,7 +106,8 @@ def backfill(batch_report: int = 20) -> int:
     try:
         rows = (
             db.query(AiMemory.id, AiMemory.memory_text, AiMemory.user_id,
-                      AiMemory.relation_id, AiMemory.visibility, AiMemory.memory_type)
+                      AiMemory.relation_id, AiMemory.visibility, AiMemory.memory_type,
+                      AiMemory.occurred_at, AiMemory.source, AiMemory.importance)
             .order_by(AiMemory.id)
             .all()
         )
@@ -114,6 +115,22 @@ def backfill(batch_report: int = 20) -> int:
         db.close()
 
     print("扫描 ai_memory %d 行，collection=%s dir=%s" % (len(rows), MEMORY_COLLECTION, CHROMA_DIR))
+
+    def _metadata(row) -> dict:
+        """P-C1 §6：向量 metadata 含新 3 键；None 不写（Chroma 不接受）。"""
+        meta = {
+            "memory_id": int(row.id),
+            "user_id": int(row.user_id),
+            "relation_id": int(row.relation_id),
+            "visibility": row.visibility or "private",
+            "memory_type": row.memory_type or "",
+            "importance": int(row.importance or 0),
+        }
+        if row.source:
+            meta["source"] = row.source
+        if row.occurred_at:
+            meta["occurred_at"] = row.occurred_at.isoformat()
+        return meta
 
     added = skipped = failed = 0
     for i, row in enumerate(rows, 1):
@@ -125,6 +142,9 @@ def backfill(batch_report: int = 20) -> int:
         try:
             existing = col.get(ids=[mid])
             if existing and existing.get("ids"):
+                # 存量向量：不同步 embedding 文本（检索口径不变），
+                # 只把新 metadata 三键补写上（幂等，重复执行同一结果）
+                col.update(ids=[mid], metadatas=[_metadata(row)])
                 skipped += 1
                 continue
             vec = embeddings.embed_documents([text])[0]
@@ -132,13 +152,7 @@ def backfill(batch_report: int = 20) -> int:
                 ids=[mid],
                 embeddings=[vec],
                 documents=[text],
-                metadatas=[{
-                    "memory_id": int(row.id),
-                    "user_id": int(row.user_id),
-                    "relation_id": int(row.relation_id),
-                    "visibility": row.visibility or "private",
-                    "memory_type": row.memory_type or "",
-                }],
+                metadatas=[_metadata(row)],
             )
             added += 1
         except Exception as exc:

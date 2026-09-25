@@ -25,6 +25,12 @@ distill_llm = LlmClient(model=AI_MEMORY_MODEL, fallbacks=[])
 MEMORY_TYPES = ("偏好", "关系事实", "沟通雷区", "核心诉求")
 _DEFAULT_MEMORY_TYPE = "关系事实"
 
+#: P-C1 §2：直写路径专用 memory_type 登记。
+#: ⚠️ 这两个**不进 MEMORY_TYPES**——那是 AI 萃取输出的白名单
+#: （memory_service 落库校验处越界会回退「关系事实」，加进去模型会乱标）。
+EVENT_MEMORY_TYPE = "事件"              # 事件行（§4 无条件先写）
+SESSION_SUMMARY_MEMORY_TYPE = "session_summary"  # 会话归档摘要（已在写，补登记）
+
 #: 太短的输入没有可沉淀的信息，直接跳过，省一次模型调用
 _MIN_INPUT_LEN = 6
 
@@ -36,16 +42,34 @@ def create_memory(
     memory_type: str,
     memory_text: str,
     visibility: str = "private",
+    *,
+    occurred_at: Optional[datetime] = None,
+    source: Optional[str] = None,
+    source_id: Optional[int] = None,
+    importance: int = 0,
 ) -> dict:
+    """落库一条记忆。P-C1 §3：事件四要素透传（全部可选，旧调用逐字节不变）。
+
+    ``occurred_at`` 为空时存 ``created_at``（只在为空时回填，不覆盖已有值）。
+    """
     memory = AiMemory(
         user_id=user_id,
         relation_id=relation_id,
         memory_type=memory_type,
         memory_text=memory_text,
         visibility=visibility,
+        occurred_at=occurred_at,
+        source=source,
+        source_id=source_id,
+        importance=importance,
     )
     db.add(memory)
     db.flush()
+    if memory.occurred_at is None:
+        # 回填 = created_at（server default，flush 后按需回读）
+        if memory.created_at is None:
+            db.refresh(memory, ["created_at"])
+        memory.occurred_at = memory.created_at
     db.commit()
     saved = _to_dict(memory)
     # P0-4：新记忆异步向量化（约束②写入侧）。失败只记日志，不影响落库。
@@ -164,6 +188,11 @@ def _to_dict(memory: AiMemory) -> dict:
         "memory_text": memory.memory_text,
         "visibility": memory.visibility,
         "created_at": memory.created_at.isoformat() if memory.created_at else None,
+        # P-C1 §3.5：事件四要素（缺键调用方 .get() 拿不到）
+        "occurred_at": memory.occurred_at.isoformat() if memory.occurred_at else None,
+        "source": memory.source,
+        "source_id": memory.source_id,
+        "importance": memory.importance or 0,
     }
 
 
@@ -209,11 +238,18 @@ def save_structured_memory(
     relation_id: int,
     memory_text: str,
     memory_type: Optional[str] = None,
+    *,
+    occurred_at: Optional[datetime] = None,
+    source: Optional[str] = None,
+    source_id: Optional[int] = None,
+    importance: int = 0,
 ) -> Optional[dict]:
     """不经 AI、直接构造好的记忆落库。复用 `_is_duplicate_memory` 去重。
 
     供纪念日（名称+日期）、量表（关系模式）这类**确定性文本**使用——
     内容没有歧义，不值得花一次模型调用；但去重与异常吞掉的纪律与 AI 路径一致。
+
+    P-C1 §3：事件四要素透传（可选 kwargs，默认 None → 旧调用逐字节不变）。
     """
     text = (memory_text or "").strip()
     if not text:
@@ -222,7 +258,11 @@ def save_structured_memory(
     try:
         if _is_duplicate_memory(db, user_id, relation_id, text):
             return None
-        saved = create_memory(db, user_id, relation_id, mtype, text)
+        saved = create_memory(
+            db, user_id, relation_id, mtype, text,
+            occurred_at=occurred_at, source=source,
+            source_id=source_id, importance=importance,
+        )
         logger.info("[MEMORY] 结构化落库 user=%s type=%s", user_id, mtype)
         return saved
     except Exception:
@@ -268,6 +308,11 @@ def distill_and_save(
     assistant_text: str,
     focus: str = "",
     context: str = "",
+    *,
+    occurred_at: Optional[datetime] = None,
+    source: Optional[str] = None,
+    source_id: Optional[int] = None,
+    importance: int = 0,
 ) -> Optional[dict]:
     """从一轮对话/一个事件里抽取一条长期记忆并落库。返回新记忆，未写库则返回 None。
 
@@ -275,6 +320,8 @@ def distill_and_save(
     因为那时请求级会话已经销毁）。
 
     `focus` / `context` 为可选（P0-3 改动四）：为空时行为与旧版逐字节一致。
+    P-C1 §3：事件四要素透传（可选 kwargs，默认 None → 旧调用逐字节不变；
+    1200 字截断与 max_tokens=300 不动）。
     """
     text = (user_input or "").strip()
     if len(text) < _MIN_INPUT_LEN:
@@ -317,7 +364,11 @@ def distill_and_save(
     try:
         if _is_duplicate_memory(db, user_id, relation_id, memory_text):
             return None
-        saved = create_memory(db, user_id, relation_id, memory_type, memory_text)
+        saved = create_memory(
+            db, user_id, relation_id, memory_type, memory_text,
+            occurred_at=occurred_at, source=source,
+            source_id=source_id, importance=importance,
+        )
         logger.info("[MEMORY] 已沉淀记忆 user=%s type=%s", user_id, memory_type)
         return saved
     except Exception:
@@ -379,10 +430,11 @@ def distill_session_summary_in_background(
 ) -> None:
     """P0-10A 改动七：会话归档后蒸馏 ≤120 字叙事摘要写入 ai_memory。
 
-    - memory_type="session_summary"、visibility="private"（合法枚举仅 private/couple）
+    - memory_type=SESSION_SUMMARY_MEMORY_TYPE（P-C1 §2 登记）、visibility="private"
     - relation_id 必传（NOT NULL）
-    - **不做 embedding**（P0-4 --backfill 负责；本路径直插 AiMemory，不走
-      create_memory 的向量化挂钩）
+    - P-C1 §5.2：**改走 create_memory** —— 补 source='chat_summary' + occurred_at，
+      并接上向量化挂钩（P0-4 时代直插绕过 → 四级漏斗第一级是断的，本路径此前
+      从不进向量库）
     - 复用 distill_llm（qwen-turbo）与 distill_in_background 同款开关/线程纪律
     - 默认不设开关 → 线上行为不变
     """
@@ -426,21 +478,24 @@ def distill_session_summary_in_background(
                 return
             if len(summary) > 120:
                 summary = summary[:119] + "…"
-            # 直插：绕过 create_memory 的 vectorize 挂钩（约束：本路径不做 embedding）
-            # 也不做字面去重——session_summary 每段会话一条，天然不重复
-            row = AiMemory(
-                user_id=user_id,
-                relation_id=relation_id,
-                memory_type="session_summary",
-                memory_text=summary,
+            # P-C1 §5.2：改走 create_memory（source/occurred_at 落库 + 向量化挂钩）。
+            # 不做字面去重——session_summary 每段会话一条，天然不重复
+            saved = create_memory(
+                db,
+                user_id,
+                relation_id,
+                SESSION_SUMMARY_MEMORY_TYPE,
+                summary,
                 visibility="private",
+                source="chat_summary",
+                source_id=session_id,
+                importance=0,
             )
-            db.add(row)
-            db.commit()
             logger.info(
-                "[MEMORY] 会话摘要已沉淀 session=%s len=%d",
+                "[MEMORY] 会话摘要已沉淀 session=%s len=%d id=%s",
                 session_id,
                 len(summary),
+                saved.get("id"),
             )
         except Exception:
             logger.exception(
