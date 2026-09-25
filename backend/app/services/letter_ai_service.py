@@ -117,7 +117,7 @@ def understand_letter(db: Session, user_id: int, letter_id: int) -> dict:
     if sender_profile:
         dims = profile_repo.get_dimension_scores(db, sender_profile.id)
         sender_scores = {d.dimension_key: d.score for d in dims}
-    sender_profile_text = _format_profile(sender_profile, sender_scores)
+    sender_profile_text = _format_profile(sender_profile, sender_scores, db, letter.sender_id)
 
     prompt = LETTER_UNDERSTAND_PROMPT.format(
         sender_profile=sender_profile_text,
@@ -156,7 +156,7 @@ def _sender_profile_text(db: Session, sender_id: int) -> str:
     if profile:
         dims = profile_repo.get_dimension_scores(db, profile.id)
         scores = {d.dimension_key: d.score for d in dims}
-    return _format_profile(profile, scores)
+    return _format_profile(profile, scores, db, sender_id)
 
 
 def prepare_understand_letter(
@@ -240,7 +240,7 @@ def rewrite_letter(
     if partner_profile:
         dims = profile_repo.get_dimension_scores(db, partner_profile.id)
         partner_scores = {d.dimension_key: d.score for d in dims}
-    partner_profile_text = _format_profile(partner_profile, partner_scores)
+    partner_profile_text = _format_profile(partner_profile, partner_scores, db, partner_id)
 
     prompt = LETTER_REWRITE_PROMPT.format(
         partner_profile=partner_profile_text,
@@ -278,7 +278,7 @@ def generate_reply(db: Session, user_id: int, letter_id: int) -> dict:
     if sender_profile:
         dims = profile_repo.get_dimension_scores(db, sender_profile.id)
         sender_scores = {d.dimension_key: d.score for d in dims}
-    sender_profile_text = _format_profile(sender_profile, sender_scores)
+    sender_profile_text = _format_profile(sender_profile, sender_scores, db, letter.sender_id)
 
     prompt = LETTER_REPLY_PROMPT.format(
         sender_profile=sender_profile_text,
@@ -317,7 +317,7 @@ def prepare_rewrite_letter(
     if partner_profile:
         dims = profile_repo.get_dimension_scores(db, partner_profile.id)
         partner_scores = {d.dimension_key: d.score for d in dims}
-    partner_profile_text = _format_profile(partner_profile, partner_scores)
+    partner_profile_text = _format_profile(partner_profile, partner_scores, db, partner_id)
 
     base_prompt = LETTER_REWRITE_PROMPT.format(
         partner_profile=partner_profile_text,

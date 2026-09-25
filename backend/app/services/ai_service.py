@@ -211,12 +211,12 @@ def _preprocess(
     # P-C2 §2：历史**不再在此内联截断**——条数（budget_h）与字符总额
     # 统一交给 context_budget.fit_budget（全链路唯一裁剪层）。
 
-    user_profile_text = _format_profile(user_profile, user_scores)
+    user_profile_text = _format_profile(user_profile, user_scores, db, user_id)
     # 伴侣段：有画像用「TA 的画像」卡，双方都有时再拼「你们的关系」；
     # 对方未完成问卷 → 整段留空（不输出占位，避免模型把占位当事实）。
     # 拆成两块是为了 evidence 展示（P0-5）能分开渲染；prompt 仍拼成一段。
     partner_card, rel_block = _build_partner_parts(
-        user_profile, user_scores, partner_profile, partner_scores
+        user_profile, user_scores, partner_profile, partner_scores, db, partner_id
     )
     partner_profile_text = (
         f"{partner_card}\n\n{rel_block}" if rel_block else partner_card
@@ -391,7 +391,10 @@ def _preprocess(
     # 跑第二次同义查询；面板看到什么，模型就看到什么）。
     evidence = AdvisorContext(
         scene_key=scene_key,
-        self_profile_card=user_profile_text if user_profile else "",
+        # 无问卷但有星座/MBTI 时也展示（那是真实资料）；纯占位「未完成问卷」不进面板
+        self_profile_card=(
+            "" if user_profile_text == "未完成问卷" else user_profile_text
+        ),
         partner_profile_card=partner_card,
         relationship_pattern=rel_block,
         recalled_memories=[
@@ -875,7 +878,7 @@ def rewrite_expression(
         dims = profile_repo.get_dimension_scores(db, partner_profile.id)
         partner_scores = {d.dimension_key: d.score for d in dims}
 
-    partner_profile_text = _format_profile(partner_profile, partner_scores)
+    partner_profile_text = _format_profile(partner_profile, partner_scores, db, partner_id)
 
     prompt = f"""你是一位专业的沟通顾问。请将以下原始表达改写为5种不同风格的版本。
 
@@ -1186,18 +1189,51 @@ def _get_partner_id(db: Session, relation_id: int, user_id: int) -> Optional[int
     return relation.user_b_id if relation.user_a_id == user_id else relation.user_a_id
 
 
-def _format_profile(profile, scores: Dict[str, float]) -> str:
-    """画像注入的唯一出口（用户侧）。签名不变，调用方无感。
+def _format_profile(
+    profile,
+    scores: Dict[str, float],
+    db: Optional[Session] = None,
+    person_id: Optional[int] = None,
+) -> str:
+    """画像注入的唯一出口（用户侧）。
 
     由 profile_service.build_profile_card 产出中文语义卡（维度名 +
     行为化解读 + 沟通宜忌），替换原先「英文 key=分数」的参数表——
     模型不再需要自己翻译 attachment_anxiety=72 是什么意思。
-    """
-    if not profile:
-        return "未完成问卷"
-    from app.services.profile_service import build_profile_card
 
-    return build_profile_card(profile.profile_type, scores, profile.confidence)
+    `db` / `person_id` 用于顺带注入星座·星盘 + MBTI 性格辅助块
+    （astrology_service）：画像卡是问卷结论，辅助块是补充了解渠道，
+    两者并列给模型，块尾自带参考权重口径。不传也能用（老调用方兼容）。
+    """
+    block = _personality_block(db, person_id)
+    if not profile:
+        base = "未完成问卷"
+    else:
+        from app.services.profile_service import build_profile_card
+
+        base = build_profile_card(profile.profile_type, scores, profile.confidence)
+    if not block:
+        return base
+    return f"{base}\n{block}" if base == "未完成问卷" else f"{base}\n\n{block}"
+
+
+def _personality_block(db: Optional[Session], person_id: Optional[int]) -> str:
+    """星座/星盘/MBTI 辅助块（取不到资料时返回空串，不抛错、不塞占位）。"""
+    if db is None or person_id is None:
+        return ""
+    try:
+        from app.repositories import user_repo
+        from app.services.astrology_service import build_personality_block
+
+        basic = user_repo.get_profile_by_user_id(db, person_id)
+        if basic is None:
+            return ""
+        return build_personality_block(
+            basic.birthday, basic.birth_hour, basic.mbti, basic.birth_place
+        )
+    except Exception:
+        logger.warning("[PROFILE] 性格辅助块拼装失败（不影响画像注入）", exc_info=True)
+        return ""
 
 
 def _append_persona(messages: List[Dict[str, Any]], persona: str) -> List[Dict[str, Any]]:
@@ -1221,15 +1257,20 @@ def _build_partner_parts(
     user_scores: Dict[str, float],
     partner_profile,
     partner_scores: Dict[str, float],
+    db: Optional[Session] = None,
+    partner_id: Optional[int] = None,
 ) -> Tuple[str, str]:
     """拆出伴侣段的两块：(TA 画像卡, 关系模式块)。
 
-    对方无画像 → ("", "")：不输出占位（P0-2）。
+    对方无问卷画像 → ("", "")：不输出占位（P0-2）；但对方有星座/MBTI 时仍出
+    性格辅助块——那是真实资料不是占位，军师判断 TA 时同样用得上。
     己方无画像 → 只出 TA 卡、关系块为空（关系需要双方分数）。
     供 prompt 拼装（`_build_partner_section`）与 evidence 展示共用同一判定。
     """
+    personality = _personality_block(db, partner_id)
+
     if not partner_profile:
-        return "", ""
+        return (personality, "") if personality else ("", "")
 
     from app.services.profile_service import (
         build_profile_card,
@@ -1242,6 +1283,8 @@ def _build_partner_parts(
         partner_profile.confidence,
         title="TA 的画像",
     )
+    if personality:
+        partner_card = f"{partner_card}\n\n{personality}"
     if not user_profile:
         return partner_card, ""
     pattern_name, pattern_desc = derive_relationship_pattern(
@@ -1256,6 +1299,8 @@ def _build_partner_section(
     user_scores: Dict[str, float],
     partner_profile,
     partner_scores: Dict[str, float],
+    db: Optional[Session] = None,
+    partner_id: Optional[int] = None,
 ) -> str:
     """伴侣画像段 + 关系模式段（P0-2），prompt 拼装入口。
 
@@ -1267,7 +1312,7 @@ def _build_partner_section(
     `_preprocess` 与测试共用本函数，保证验收打的是真实拼装路径。
     """
     partner_card, rel_block = _build_partner_parts(
-        user_profile, user_scores, partner_profile, partner_scores
+        user_profile, user_scores, partner_profile, partner_scores, db, partner_id
     )
     if not partner_card:
         return ""
@@ -1468,7 +1513,7 @@ def prepare_rewrite_expression(
     if partner_profile:
         dims = profile_repo.get_dimension_scores(db, partner_profile.id)
         partner_scores = {d.dimension_key: d.score for d in dims}
-    partner_profile_text = _format_profile(partner_profile, partner_scores)
+    partner_profile_text = _format_profile(partner_profile, partner_scores, db, partner_id)
 
     base_prompt = f"""你是一位专业的沟通顾问。请将以下原始表达改写为5种不同风格的版本。
 
@@ -1831,8 +1876,10 @@ def prepare_relationship_review(
     if couple_prof:
         conflict_pattern = couple_prof.conflict_pattern
 
-    user_profile_text = _format_profile(user_profile, user_scores)
-    partner_profile_text = _format_profile(partner_profile, partner_scores)
+    user_profile_text = _format_profile(user_profile, user_scores, db, user_id)
+    partner_profile_text = _format_profile(
+        partner_profile, partner_scores, db, partner_id
+    )
 
     rag_chunks = retrieve_chunks(db, description)
     rag_context = build_rag_context(rag_chunks)

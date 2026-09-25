@@ -1,6 +1,8 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import date
+
+from app.services.astrology_service import MBTI_TYPES
 
 
 class UserProfileResponse(BaseModel):
@@ -10,6 +12,9 @@ class UserProfileResponse(BaseModel):
     avatar_url: Optional[str] = None
     gender: Optional[str] = None
     birthday: Optional[date] = None
+    birth_hour: Optional[int] = None
+    mbti: Optional[str] = None
+    birth_place: Optional[str] = None
     city: Optional[str] = None
     signature: Optional[str] = None
     love_anniversary: Optional[date] = None
@@ -20,9 +25,34 @@ class UserProfileUpdateRequest(BaseModel):
     nickname: Optional[str] = Field(None, max_length=50)
     gender: Optional[str] = Field(None, max_length=20)
     birthday: Optional[date] = None
+    birth_hour: Optional[int] = Field(None, ge=0, le=23)
+    mbti: Optional[str] = Field(None, max_length=8)
+    birth_place: Optional[str] = Field(None, max_length=50)
     city: Optional[str] = Field(None, max_length=50)
     signature: Optional[str] = Field(None, max_length=200)
     love_anniversary: Optional[date] = None
+
+    @field_validator("mbti")
+    @classmethod
+    def _validate_mbti(cls, value: Optional[str]) -> Optional[str]:
+        """空串/None 都当未填（去掉空白后归一为 None，走既有「None 不覆盖」写库语义）。"""
+        if value is None:
+            return None
+        normalized = value.strip().upper()
+        if not normalized:
+            return None
+        if normalized not in MBTI_TYPES:
+            raise ValueError("mbti 必须是 16 型之一（如 INTJ）")
+        return normalized
+
+    @field_validator("birth_place")
+    @classmethod
+    def _validate_birth_place(cls, value: Optional[str]) -> Optional[str]:
+        """去首尾空白；空串归一为 None（同 mbti 语义，None 不覆盖已存值）。"""
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
 
 
 class NotificationPrefResponse(BaseModel):

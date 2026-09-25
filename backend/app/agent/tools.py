@@ -42,11 +42,28 @@ def get_relation_profile(user_id: int, include_partner: bool = True) -> str:
     当用户询问"我是什么类型""我们为什么总是这样吵"时也应调用。
     """
     from app.repositories import couple_repo, profile_repo
+    from app.services.astrology_service import build_personality_block
+
+    def personality_of(uid: int) -> str:
+        """星座·星盘 + MBTI 辅助块；没填就返回空串（不塞占位）。"""
+        from app.repositories import user_repo
+
+        basic = user_repo.get_profile_by_user_id(db, uid)
+        if basic is None:
+            return ""
+        return build_personality_block(
+            basic.birthday, basic.birth_hour, basic.mbti, basic.birth_place
+        )
 
     db = SessionLocal()
     try:
         profile = profile_repo.get_latest_profile(db, user_id)
+        personality = personality_of(user_id)
         if not profile:
+            if personality:
+                return (
+                    "该用户尚未完成关系画像问卷，只有以下性格辅助信息：\n" + personality
+                )
             return "该用户尚未完成关系画像问卷，没有可用的画像数据。"
 
         dims = profile_repo.get_dimension_scores(db, profile.id)
@@ -64,6 +81,8 @@ def get_relation_profile(user_id: int, include_partner: bool = True) -> str:
             % (type_names.get(profile.profile_type, profile.profile_type), profile.confidence),
             "维度分数: %s" % dim_text,
         ]
+        if personality:
+            lines.append(personality)
 
         if include_partner:
             relation = couple_repo.get_active_relation_by_user(db, user_id)
@@ -83,6 +102,14 @@ def get_relation_profile(user_id: int, include_partner: bool = True) -> str:
                         )
                     )
                     lines.append("伴侣维度分数: %s" % p_text)
+
+                p_personality = personality_of(partner_id)
+                if p_personality:
+                    lines.append(
+                        p_personality.replace(
+                            "【性格辅助信息】", "【伴侣性格辅助信息】", 1
+                        )
+                    )
 
                 couple_profile = profile_repo.get_latest_couple_profile(db, relation.id)
                 if couple_profile:

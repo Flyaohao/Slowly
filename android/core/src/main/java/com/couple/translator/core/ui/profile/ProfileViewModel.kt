@@ -19,6 +19,12 @@ data class ProfileUiState(
     val nickname: String = "",
     val gender: String = "",
     val birthday: String = "",
+    /** 出生时辰 0-23，null = 未填（不拿正午当默认值去编一个上升星座） */
+    val birthHour: Int? = null,
+    /** MBTI 16 型代号，"" = 未填 */
+    val mbti: String = "",
+    /** 出生地（如 "杭州"），"" = 未填；命中城市表才用于上升精算 */
+    val birthPlace: String = "",
     val city: String = "",
     val signature: String = "",
     val avatarUrl: String = "",
@@ -58,6 +64,9 @@ class ProfileViewModel @Inject constructor(
                             nickname = user.nickname ?: "",
                             gender = user.gender ?: "",
                             birthday = user.birthday ?: "",
+                            birthHour = user.birthHour,
+                            mbti = user.mbti ?: "",
+                            birthPlace = user.birthPlace ?: "",
                             city = user.city ?: "",
                             signature = user.signature ?: "",
                             avatarUrl = user.avatarUrl ?: "",
@@ -84,6 +93,9 @@ class ProfileViewModel @Inject constructor(
                             nickname = user.nickname ?: "",
                             gender = user.gender ?: "",
                             birthday = user.birthday ?: "",
+                            birthHour = user.birthHour,
+                            mbti = user.mbti ?: "",
+                            birthPlace = user.birthPlace ?: "",
                             city = user.city ?: "",
                             signature = user.signature ?: "",
                             avatarUrl = user.avatarUrl ?: "",
@@ -112,6 +124,18 @@ class ProfileViewModel @Inject constructor(
         _uiState.update { it.copy(birthday = value) }
     }
 
+    fun onBirthHourChange(value: Int?) {
+        _uiState.update { it.copy(birthHour = value) }
+    }
+
+    fun onMbtiChange(value: String) {
+        _uiState.update { it.copy(mbti = value) }
+    }
+
+    fun onBirthPlaceChange(value: String) {
+        _uiState.update { it.copy(birthPlace = value) }
+    }
+
     fun onCityChange(value: String) {
         _uiState.update { it.copy(city = value) }
     }
@@ -136,6 +160,9 @@ class ProfileViewModel @Inject constructor(
                 nickname = state.nickname.ifBlank { null },
                 gender = state.gender.ifBlank { null },
                 birthday = state.birthday.ifBlank { null },
+                birthHour = state.birthHour,
+                mbti = state.mbti.ifBlank { null },
+                birthPlace = state.birthPlace.ifBlank { null },
                 city = state.city.ifBlank { null },
                 signature = state.signature.ifBlank { null },
             )

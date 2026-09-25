@@ -362,14 +362,21 @@ def build_profile_keywords(
     partner_profile_type: Optional[str] = None,
     event_limit: int = 3,
 ) -> List[str]:
-    """画像关键词三源（P-C2 §3）：冲突模式 + 依恋类型名 + 近期重要事件标题词。
+    """画像关键词四源（P-C2 §3）：冲突模式 + 依恋类型名 + 近期重要事件标题词
+    + 性格辅助（星座 / MBTI / 出生地）。
 
     - 冲突模式：couple_prof.conflict_pattern（取不到跳过，**不塞占位**）；
     - 依恋类型名：PROFILE_TYPE_LABELS[profile_type]（用户 + 伴侣，重复跳过）；
     - 近期重要事件：relation 内 importance>=1 按事件时间取最新 event_limit 条，
       标题词 = memory_text 前 12 字（成为 query 短语，权重 2）。
+    - 性格辅助：user_profile 的星座、MBTI 与出生地（没填就跳过，同「不塞占位」）——
+      让「TA 是天蝎座 / INTJ / 杭州人」这类记忆也能被画像驱动 query 召回；
+      出生地用城市表命中的规范短名（"杭州"），命中不了就跳过。
     事件查询同样套 visibility_filter + relation_id 双保险（红线④）。
     """
+    from app.repositories import user_repo
+    from app.services.astrology_service import get_zodiac
+    from app.services.birthplace_service import lookup_birth_place
     from app.services.profile_service import PROFILE_TYPE_LABELS
 
     keywords: List[str] = []
@@ -379,6 +386,18 @@ def build_profile_keywords(
         label = PROFILE_TYPE_LABELS.get(ptype or "")
         if label and label not in keywords:
             keywords.append(label)
+
+    basic = user_repo.get_profile_by_user_id(db, user_id)
+    if basic is not None:
+        zodiac = get_zodiac(basic.birthday)
+        if zodiac:
+            keywords.append(f"{zodiac}座")
+        mbti = (basic.mbti or "").strip().upper()
+        if mbti and mbti not in keywords:
+            keywords.append(mbti)
+        place = lookup_birth_place(basic.birth_place)
+        if place is not None and place.name not in keywords:
+            keywords.append(place.name)
 
     rows = (
         db.query(AiMemory)

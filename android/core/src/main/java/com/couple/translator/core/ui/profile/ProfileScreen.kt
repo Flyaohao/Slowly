@@ -65,6 +65,17 @@ private val yearOptions = (1950..2010).toList().reversed()
 private val monthOptions = (1..12).toList()
 private val dayOptions = (1..31).toList()
 
+/** 出生时辰 0-23（服务端只认小时；星盘上升位由它推算） */
+private val hourOptions = (0..23).toList()
+
+/** MBTI 16 型：代号 to 中文别称。代号进库，别称只做展示 */
+private val mbtiOptions = listOf(
+    "INTJ" to "建筑师", "INTP" to "逻辑学家", "ENTJ" to "指挥官", "ENTP" to "辩论家",
+    "INFJ" to "提倡者", "INFP" to "调停者", "ENFJ" to "主人公", "ENFP" to "竞选者",
+    "ISTJ" to "物流师", "ISFJ" to "守卫者", "ESTJ" to "总经理", "ESFJ" to "执政官",
+    "ISTP" to "鉴赏家", "ISFP" to "探险家", "ESTP" to "企业家", "ESFP" to "表演者",
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
@@ -165,6 +176,32 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                BirthHourDropdown(
+                    selected = uiState.birthHour,
+                    onSelect = viewModel::onBirthHourChange,
+                    enabled = uiState.isEditing,
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                TextInputField(
+                    value = uiState.birthPlace,
+                    onValueChange = viewModel::onBirthPlaceChange,
+                    label = "出生地",
+                    placeholder = "如：杭州（和时辰一起推星盘，可不填）",
+                    enabled = uiState.isEditing,
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                MbtiDropdown(
+                    selected = uiState.mbti,
+                    onSelect = viewModel::onMbtiChange,
+                    enabled = uiState.isEditing,
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
                 TextInputField(
                     value = uiState.signature,
                     onValueChange = viewModel::onSignatureChange,
@@ -227,6 +264,96 @@ private fun GenderDropdown(
                 DropdownMenuItem(
                     text = { Text(option) },
                     onClick = { onSelect(option); expanded = false },
+                )
+            }
+        }
+    }
+}
+
+/** 出生时辰下拉（0-23 时）。未填就是未填——不默认正午，上升星座宁可不出 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BirthHourDropdown(
+    selected: Int?,
+    onSelect: (Int?) -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val displayText = selected?.let { "%02d:00".format(it) } ?: "选择出生时辰"
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { if (enabled) expanded = it },
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        OutlinedTextField(
+            value = displayText,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("出生时辰") },
+            supportingText = { Text("精确到小时，用来推星盘；不填也能保存") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            enabled = enabled,
+            modifier = Modifier.menuAnchor().fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = AppAccent,
+                unfocusedBorderColor = AppBorderLight,
+                focusedLabelColor = AppAccent,
+                cursorColor = AppTextPrimary,
+            ),
+            shape = MaterialTheme.shapes.medium,
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            hourOptions.forEach { hour ->
+                DropdownMenuItem(
+                    text = { Text("%02d:00".format(hour)) },
+                    onClick = { onSelect(hour); expanded = false },
+                )
+            }
+        }
+    }
+}
+
+/** MBTI 十六型下拉。库里存代号（INTJ），菜单里带中文别称方便认 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MbtiDropdown(
+    selected: String,
+    onSelect: (String) -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val displayText = if (selected.isBlank()) "选择 MBTI 类型" else selected
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { if (enabled) expanded = it },
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        OutlinedTextField(
+            value = displayText,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("MBTI") },
+            supportingText = { Text("16 型自选；与问卷画像并列供军师参考") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            enabled = enabled,
+            modifier = Modifier.menuAnchor().fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = AppAccent,
+                unfocusedBorderColor = AppBorderLight,
+                focusedLabelColor = AppAccent,
+                cursorColor = AppTextPrimary,
+            ),
+            shape = MaterialTheme.shapes.medium,
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            mbtiOptions.forEach { (code, name) ->
+                DropdownMenuItem(
+                    text = { Text("$code · $name") },
+                    onClick = { onSelect(code); expanded = false },
                 )
             }
         }

@@ -13,6 +13,12 @@ object UserDto {
         @Json(name = "avatar_url") val avatarUrl: String? = null,
         @Json(name = "gender") val gender: String? = null,
         @Json(name = "birthday") val birthday: String? = null,
+        /** 出生时辰 0-23（小时）。与 birthday 一起推简易星盘；null = 未填 */
+        @Json(name = "birth_hour") val birthHour: Int? = null,
+        /** MBTI 16 型（如 INTJ），用户自选；null/空 = 未填 */
+        @Json(name = "mbti") val mbti: String? = null,
+        /** 出生地（如 "杭州"），用于星盘上升精算；null/空 = 未填 */
+        @Json(name = "birth_place") val birthPlace: String? = null,
         @Json(name = "city") val city: String? = null,
         @Json(name = "signature") val signature: String? = null,
         @Json(name = "love_anniversary") val loveAnniversary: String? = null,
@@ -42,6 +48,9 @@ object UserDto {
         @Json(name = "nickname") val nickname: String? = null,
         @Json(name = "gender") val gender: String? = null,
         @Json(name = "birthday") val birthday: String? = null,
+        @Json(name = "birth_hour") val birthHour: Int? = null,
+        @Json(name = "mbti") val mbti: String? = null,
+        @Json(name = "birth_place") val birthPlace: String? = null,
         @Json(name = "city") val city: String? = null,
         @Json(name = "signature") val signature: String? = null,
     )
