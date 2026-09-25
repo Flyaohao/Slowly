@@ -68,6 +68,12 @@ services:
       # 允许跨站访问的来源，逗号分隔。默认空 = 不允许任何跨站来源。
       # App 走 Retrofit 不受 CORS 约束（那是浏览器机制），留空不影响客户端
       CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # 军师 AI 记忆系统 v3.2 feature flags（契约附录 §6.2）。
+      # 全 0 = 行为与 v1 完全一致；白名单转发，.env 设了不列这里不生效
+      MEMORY_ASSERTION_DUAL_WRITE: ${MEMORY_ASSERTION_DUAL_WRITE:-0}
+      MEMORY_ASSERTION_READ_V3: ${MEMORY_ASSERTION_READ_V3:-0}
+      MEMORY_ASSERTION_REQUIRE_COMPLETE: ${MEMORY_ASSERTION_REQUIRE_COMPLETE:-0}
+      MEMORY_ASSERTION_INDEX_WORKER: ${MEMORY_ASSERTION_INDEX_WORKER:-0}
     extra_hosts:
       # 让容器内的 host.docker.internal 指向宿主机，
       # 这样 DB_URL 可以直接连宿主机上原有的 MySQL

@@ -62,6 +62,11 @@ NO_CLIENT_HOME_OK: Dict[str, str] = {
     "should_remember": "内部场景 memory_distill 的闸门字段，不对客户端暴露",
     "memory_type": "同上",
     "memory_text": "同上",
+    # v3.2 §2/§1：蒸馏输出的谓词与身份提示——同样只进服务端管线
+    "predicate": "内部场景 memory_distill 的谓词 enum，v3.2 落库用，不下发客户端",
+    "object_hint": "同上（object_key 词典提示，服务端归一）",
+    "subject_role": "同上（主体提示，服务端身份分配用）",
+    "epistemic_hint": "同上（认识论提示，铁则优先，不下发客户端）",
 }
 
 #: 客户端声明但不由场景模型产出的字段（由别的链路写入），附来源。

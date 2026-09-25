@@ -49,6 +49,21 @@ AI_RATE_LIMIT: str = os.getenv("AI_RATE_LIMIT", "20/hour")
 #: 这条按 IP 记总量，把它们兜住。默认 120/hour，正常用户碰不到。
 AI_IP_RATE_LIMIT: str = os.getenv("AI_IP_RATE_LIMIT", "120/hour")
 
+# ---- 军师 AI 记忆系统 v3.2（实现契约附录 §6.2 feature flags）----
+#: 四个开关全部为 0 时，行为必须与 v1 完全一致（附录 §7.4 平价门禁）。
+#: ⚠️ compose 的 environment 是白名单转发，新变量必须写进 docker-compose.yml 才会进容器。
+#: 双写：同一条 ai_memory 行同时写 legacy 列与 v3.2 断言列；chat 蒸馏改走
+#: memory_pipeline_task（T1-T4），非 chat 源仍走旧流程并在 create_memory 内联推导。
+MEMORY_ASSERTION_DUAL_WRITE: bool = os.getenv("MEMORY_ASSERTION_DUAL_WRITE", "0") == "1"
+#: v3 读取路径开关。阶段 A 只做管道（写入侧不读它），读路径切换属 §8 ④-⑤ 灰度项；
+#: 阶段 B/C 完成 shadow 验证前不得置 1。
+MEMORY_ASSERTION_READ_V3: bool = os.getenv("MEMORY_ASSERTION_READ_V3", "0") == "1"
+#: 置 1 后 pipeline T4 遇到 v3 字段不完整的候选 → 重试/failed，禁止降级写 legacy_pending。
+MEMORY_ASSERTION_REQUIRE_COMPLETE: bool = os.getenv("MEMORY_ASSERTION_REQUIRE_COMPLETE", "0") == "1"
+#: 进程内索引 Worker（T5 generation CAS）。仅 DUAL_WRITE=1 时有活可干；
+#: DUAL_WRITE=0 时新行不会写 pending_upsert，worker 空转（文档化 no-op 组合）。
+MEMORY_ASSERTION_INDEX_WORKER: bool = os.getenv("MEMORY_ASSERTION_INDEX_WORKER", "0") == "1"
+
 # ---- 接口文档与跨域 ----
 #: /docs、/redoc、/openapi.json 的保护口令（HTTP Basic）。
 #: openapi.json 会给出全部接口的参数与结构，等同一份攻击说明书，因此不对外敞开。

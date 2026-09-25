@@ -317,6 +317,29 @@ class MemoryDistillOutput(BaseModel):
         description="用一句话陈述该信息，20-40 字，第三人称，不要包含姓名、联系方式等隐私信息",
     )
 
+    # ---- v3.2 §2 谓词注册表 / §1 身份提示（全部带默认，旧构造逐字节兼容）----
+    predicate: Literal[
+        "preference", "behavior", "goal", "constraint",
+        "trait", "event", "pattern", "state", "other",
+    ] = Field(
+        "other",
+        description="封闭谓词 enum（与 memory_registry.PREDICATES 同值）；"
+                    "LLM 只能从中选，不得自由生成 key",
+    )
+    object_hint: str = Field(
+        "",
+        description="object_key 词典的中文提示词（如「辣」「回复速度」）；"
+                    "服务端归一，未命中落 other+registry_miss",
+    )
+    subject_role: Literal["self", "partner", "relationship", "event"] = Field(
+        "self", description="陈述主体：我/伴侣/关系/事件"
+    )
+    epistemic_hint: str = Field(
+        "unknown",
+        description="认识论提示（仅参考——reported≠attributed 时强制 attributed_report，"
+                    "hint 永不覆盖身份铁则）",
+    )
+
 
 #: 场景 → 输出模型。未登记的 scene_key 统一回退到 TranslateOutput。
 SCENE_OUTPUT_MODELS: Dict[str, Any] = {

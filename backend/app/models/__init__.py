@@ -26,6 +26,10 @@ from app.models.ai import (
     AiKnowledgeDoc,
     AiKnowledgeChunk,
     AiMemory,
+    MemoryPipelineTask,
+    MemoryAssertionEdge,
+    MemoryAssertionEvidence,
+    MemoryAssertionUserState,
 )
 from app.models.ai_generation import AiGeneration
 from app.models.letter import Letter
@@ -66,6 +70,10 @@ __all__ = [
     "AiKnowledgeDoc",
     "AiKnowledgeChunk",
     "AiMemory",
+    "MemoryPipelineTask",
+    "MemoryAssertionEdge",
+    "MemoryAssertionEvidence",
+    "MemoryAssertionUserState",
     "AiGeneration",
     "Letter",
     "DualPerspectiveEvent",
