@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>慢慢说 · 把没说出口的，慢慢说出来</title>
+<meta name="description" content="慢慢说是一款面向情侣的关系沟通 App。先为你们建立 11 维情感画像，再帮你说出那句没说出口的话。">
+<!-- 不被搜索引擎收录/缓存：降低被爬虫与批量扫描器发现、镜像的概率。
+     注意这挡的是自动化程序，不是人——页面本身是公开内容，防不住有人查看或另存。 -->
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#FFFBFB" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161215" media="(prefers-color-scheme: dark)">
+<script>
+/* 防止被第三方站点用 iframe 嵌入（点击劫持 / 页面盗用）。
+   彻底的方案是响应头下发 CSP frame-ancestors 'none'，这里只是页面级兜底。 */
+if (window.top !== window.self) {
+  try { window.top.location = window.self.location; }
+  catch (e) { document.documentElement.style.display = 'none'; }
+}
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  --bg:#FFFBFB; --surface:#FFFFFF; --surface-2:#FDF4F6;
+  --ink:#241F21; --ink-2:#4A4246; --muted:#7A7075;
+  --line:rgba(36,31,33,.10); --line-2:rgba(36,31,33,.06);
+  --rose:#D4537E; --rose-deep:#993556; --rose-soft:#FBEAF0;
+  --coral:#D85A30; --amber:#BA7517;
+  --shadow:0 26px 60px -34px rgba(153,53,86,.45);
+  --radius:20px; --radius-lg:28px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#161215; --surface:#1F191D; --surface-2:#251D23;
+    --ink:#F5EFF1; --ink-2:#D5CBCF; --muted:#A2989D;
+    --line:rgba(245,239,241,.12); --line-2:rgba(245,239,241,.07);
+    --rose:#ED93B1; --rose-deep:#F4C0D1; --rose-soft:#3A2230;
+    --coral:#F0997B; --amber:#EF9F27;
+    --shadow:0 26px 60px -34px rgba(0,0,0,.75);
+  }
+}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+  font-size:16px;line-height:1.75;letter-spacing:.01em;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;
+}
+img{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.015em;line-height:1.24}
+p{margin:0}
+.wrap{width:min(1120px,100% - 2.5rem);margin-inline:auto}
+.eyebrow{
+  display:inline-flex;align-items:center;gap:.5rem;
+  font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--rose);font-weight:600;
+}
+.eyebrow::before{content:"";width:22px;height:1px;background:var(--rose);opacity:.6}
+section{position:relative}
+
+/* ── 顶部滚动进度 ───────────────────────────────── */
+.progress{
+  position:fixed;top:0;left:0;height:2px;width:100%;z-index:60;
+  background:var(--rose);transform:scaleX(0);transform-origin:0 50%;
+  will-change:transform;
+}
+
+/* ── 导航 ───────────────────────────────────────── */
+.nav{
+  position:sticky;top:0;z-index:50;
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  background:var(--bg);
+  background:color-mix(in srgb,var(--bg) 82%,transparent);
+  border-bottom:1px solid transparent;transition:border-color .3s;
+}
+.nav.scrolled{border-bottom-color:var(--line)}
+.nav-in{display:flex;align-items:center;justify-content:space-between;gap:1rem;height:62px}
+.brand{display:flex;align-items:center;gap:.55rem;font-weight:600;font-size:1rem}
+.brand-mark{
+  width:26px;height:26px;border-radius:9px;background:var(--rose);
+  display:grid;place-items:center;flex:none;
+}
+.brand-mark svg{width:14px;height:14px}
+.nav-links{display:none;gap:1.75rem;font-size:.9rem;color:var(--muted)}
+.nav-links a{transition:color .2s}
+.nav-links a:hover{color:var(--rose)}
+@media (min-width:820px){.nav-links{display:flex}}
+.nav-btn{
+  padding:.5rem 1.05rem;border-radius:999px;font-size:.85rem;font-weight:500;
+  background:var(--rose-soft);color:var(--rose-deep);white-space:nowrap;
+  transition:background .2s,color .2s;
+}
+.nav-btn:hover{background:var(--rose);color:#fff}
+
+/* ── 通用按钮 ───────────────────────────────────── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:.6rem;
+  padding:1.02rem 1.9rem;border-radius:999px;border:0;
+  font-size:1rem;font-weight:600;font-family:inherit;cursor:pointer;
+  background:var(--rose);color:#fff;
+  box-shadow:0 14px 34px -14px rgba(212,83,126,.65);
+  transition:transform .22s cubic-bezier(.2,.7,.3,1),box-shadow .22s,background .2s;
+}
+.btn:hover{transform:translateY(-2px);box-shadow:0 20px 44px -16px rgba(212,83,126,.72)}
+.btn:active{transform:translateY(0)}
+.btn svg{width:19px;height:19px;flex:none}
+.btn-note{font-size:.8rem;color:var(--muted);margin-top:.85rem}
+
+/* ── 滚动进入动画 ───────────────────────────────── */
+[data-reveal]{
+  opacity:0;transform:translateY(26px);
+  transition:opacity .8s cubic-bezier(.2,.7,.3,1),transform .8s cubic-bezier(.2,.7,.3,1);
+  transition-delay:var(--d,0s);
+}
+[data-reveal].in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  [data-reveal]{opacity:1;transform:none;transition:none}
+  .phone,.pulse{animation:none!important}
+  .hero h1 .line i{transform:none;animation:none}
+  .bar i{transition:none;width:var(--w)}
+}
+
+/* ── Hero ───────────────────────────────────────── */
+.hero{padding:clamp(2.5rem,7vw,5.5rem) 0 clamp(3.5rem,8vw,6rem)}
+.hero-grid{display:grid;grid-template-columns:1fr;gap:clamp(2.5rem,6vw,4.5rem);align-items:center}
+@media (min-width:900px){.hero-grid{grid-template-columns:1.06fr .94fr}}
+.hero h1{font-size:clamp(2.05rem,5.8vw,3.85rem);margin:1.1rem 0 0}
+.hero h1 .line{display:block;overflow:hidden;padding-bottom:.08em}
+.hero h1 .line i{
+  display:block;font-style:normal;transform:translateY(112%);
+  animation:rise .95s cubic-bezier(.16,.84,.28,1) forwards;
+}
+@keyframes rise{to{transform:translateY(0)}}
+.hero-sub{margin-top:1.35rem;font-size:clamp(1rem,2.1vw,1.12rem);color:var(--ink-2);max-width:33em}
+.hero-sub b{color:var(--rose-deep);font-weight:600}
+.hero-actions{margin-top:2.1rem;display:flex;flex-wrap:wrap;align-items:center;gap:1.5rem}
+.qr{display:flex;align-items:center;gap:.85rem}
+.qr img{width:112px;height:112px;border-radius:14px;border:1px solid var(--line);background:#fff;padding:6px}
+.qr-txt{font-size:.78rem;color:var(--muted);line-height:1.5}
+.stats-row{
+  display:grid;grid-template-columns:repeat(2,1fr);gap:1px;margin-top:clamp(2.5rem,5vw,3.5rem);
+  background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+}
+@media (min-width:640px){.stats-row{grid-template-columns:repeat(4,1fr)}}
+.stat{background:var(--surface);padding:1.15rem 1.1rem}
+.stat-n{font-size:clamp(1.35rem,3.2vw,1.75rem);font-weight:600;color:var(--rose);letter-spacing:-.02em}
+.stat-l{font-size:.78rem;color:var(--muted);margin-top:.15rem}
+
+/* ── 手机示意（纯 CSS，不依赖截图） ──────────────── */
+.phone-wrap{display:flex;justify-content:center;perspective:1200px}
+.phone{
+  width:min(300px,80vw);border-radius:34px;padding:14px 13px 16px;
+  background:var(--surface);border:1px solid var(--line);
+  box-shadow:var(--shadow);
+  animation:float 7s ease-in-out infinite;
+}
+@keyframes float{0%,100%{transform:translateY(0) rotate(-.4deg)}50%{transform:translateY(-13px) rotate(.4deg)}}
+.phone-bar{width:74px;height:5px;border-radius:99px;background:var(--line);margin:0 auto 14px}
+.phone-cap{font-size:.68rem;letter-spacing:.1em;color:var(--muted);text-align:center;margin-bottom:11px}
+.bubble{
+  border-radius:15px;padding:.72rem .9rem;font-size:.83rem;line-height:1.62;margin-bottom:.65rem;
+}
+.bubble.in{background:var(--surface-2);border:1px solid var(--line-2);color:var(--ink-2);border-top-left-radius:5px}
+.bubble.out{background:var(--rose);color:#fff;border-top-right-radius:5px;margin-left:1.6rem}
+.bubble-tag{display:block;font-size:.66rem;letter-spacing:.08em;opacity:.72;margin-bottom:.3rem}
+.bubble.out .bubble-tag{opacity:.85}
+.phone-foot{
+  margin-top:.55rem;padding-top:.75rem;border-top:1px dashed var(--line);
+  font-size:.7rem;color:var(--muted);display:flex;align-items:center;gap:.4rem;
+}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--rose);flex:none}
+
+/* ── 区块通用 ───────────────────────────────────── */
+.sec{padding:clamp(3.6rem,9vw,7rem) 0}
+.sec-head{max-width:44rem;margin-bottom:clamp(2.2rem,5vw,3.4rem)}
+.sec-head h2{font-size:clamp(1.62rem,4vw,2.5rem);margin-top:.9rem}
+.sec-head p{margin-top:1rem;color:var(--muted);font-size:1rem}
+.band{background:var(--surface-2);border-block:1px solid var(--line-2)}
+
+/* ── 故事：滚动切换 ─────────────────────────────── */
+.story-grid{display:grid;grid-template-columns:1fr;gap:2.5rem}
+@media (min-width:900px){.story-grid{grid-template-columns:1fr 1fr;gap:4.5rem;align-items:start}}
+.story-visual{display:none}
+@media (min-width:900px){
+  .story-visual{
+    display:block;position:sticky;top:calc(50vh - 165px);align-self:start;
+    height:330px;
+  }
+}
+.stage{
+  position:absolute;inset:0;opacity:0;transform:translateY(18px) scale(.97);
+  transition:opacity .5s cubic-bezier(.2,.7,.3,1),transform .5s cubic-bezier(.2,.7,.3,1);
+  pointer-events:none;
+}
+.stage.on{opacity:1;transform:none}
+.card-vis{
+  height:100%;border-radius:var(--radius-lg);background:var(--surface);
+  border:1px solid var(--line);box-shadow:var(--shadow);
+  padding:1.85rem;display:flex;flex-direction:column;justify-content:center;gap:.7rem;
+}
+.card-vis .k{font-size:.72rem;letter-spacing:.14em;color:var(--rose);font-weight:600}
+.card-vis .v{font-size:1.42rem;font-weight:600;line-height:1.4}
+.card-vis .s{font-size:.86rem;color:var(--muted);line-height:1.65}
+.bars{display:flex;flex-direction:column;gap:.48rem;margin-top:.7rem}
+.bar{height:7px;border-radius:99px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:99px;background:var(--rose);width:0;transition:width .9s cubic-bezier(.2,.7,.3,1)}
+.stage.on .bar i{width:var(--w)}
+.steps{display:flex;flex-direction:column;gap:0}
+@media (min-width:900px){.steps .step{min-height:62vh;display:flex;flex-direction:column;justify-content:center}}
+.step{padding-block:1.6rem;border-left:2px solid var(--line);padding-left:1.5rem;transition:border-color .4s}
+.step.on{border-left-color:var(--rose)}
+.step-n{
+  display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;
+  background:var(--surface);border:1px solid var(--line);color:var(--muted);
+  font-size:.8rem;font-weight:600;transition:background .4s,color .4s,border-color .4s;
+}
+.step.on .step-n{background:var(--rose);border-color:var(--rose);color:#fff}
+.step h3{font-size:clamp(1.15rem,2.6vw,1.5rem);margin:.75rem 0 .6rem;color:var(--muted);transition:color .4s}
+.step.on h3{color:var(--ink)}
+.step p{font-size:.94rem;color:var(--muted);max-width:30em}
+.step.on p{color:var(--ink-2)}
+.punch{
+  margin-top:clamp(2.5rem,6vw,4rem);padding:clamp(1.6rem,4vw,2.6rem);
+  border-radius:var(--radius-lg);background:var(--surface);border:1px solid var(--line);
+  border-left:3px solid var(--rose);
+}
+.punch p:first-child{font-size:clamp(1.05rem,2.6vw,1.42rem);font-weight:600;line-height:1.6}
+.punch p:last-child{margin-top:.9rem;color:var(--muted);font-size:.92rem}
+
+/* ── 功能卡 ─────────────────────────────────────── */
+.cards{display:grid;grid-template-columns:1fr;gap:1rem}
+@media (min-width:700px){.cards{grid-template-columns:repeat(2,1fr)}}
+@media (min-width:1040px){.cards{grid-template-columns:repeat(4,1fr)}}
+.card{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:1.55rem 1.4rem;transition:transform .3s cubic-bezier(.2,.7,.3,1),box-shadow .3s,border-color .3s;
+}
+.card:hover{transform:translateY(-4px);box-shadow:var(--shadow);border-color:var(--rose)}
+.card-ico{
+  width:38px;height:38px;border-radius:11px;background:var(--rose-soft);
+  display:grid;place-items:center;margin-bottom:1.05rem;
+}
+.card-ico svg{width:19px;height:19px;stroke:var(--rose-deep);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.card h3{font-size:1.06rem;margin-bottom:.55rem}
+.card p{font-size:.88rem;color:var(--muted);line-height:1.72}
+
+/* ── 场景 ───────────────────────────────────────── */
+.scenes{display:flex;gap:.9rem;overflow-x:auto;scroll-snap-type:x mandatory;padding:.5rem .15rem 1.3rem;margin-inline:-.15rem}
+.scenes::-webkit-scrollbar{height:5px}
+.scenes::-webkit-scrollbar-thumb{background:var(--line);border-radius:9px}
+.scene{
+  flex:0 0 min(255px,74vw);scroll-snap-align:start;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:1.3rem 1.25rem;display:flex;flex-direction:column;gap:.65rem;
+}
+.scene-k{font-size:.7rem;letter-spacing:.12em;color:var(--rose);font-weight:600}
+.scene h3{font-size:1.02rem}
+.scene p{font-size:.83rem;color:var(--muted);line-height:1.68}
+.scene-t{
+  margin-top:auto;padding-top:.55rem;border-top:1px solid var(--line-2);
+  font-size:.72rem;color:var(--muted);
+}
+.scene-hint{font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:.45rem}
+@media (min-width:900px){
+  .scene-hint{display:none}
+  .scenes{display:flex;flex-wrap:wrap;overflow:visible;justify-content:center;gap:1rem;padding-bottom:.2rem;margin-inline:0}
+  .scene{flex:0 1 calc((100% - 3rem)/4);min-width:0}
+}
+
+/* ── 技术 ───────────────────────────────────────── */
+.tech-grid{display:grid;grid-template-columns:1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+@media (min-width:760px){.tech-grid{grid-template-columns:repeat(2,1fr)}}
+.tech-item{background:var(--surface);padding:1.3rem 1.35rem}
+.tech-item dt{font-size:.74rem;letter-spacing:.1em;color:var(--muted);margin-bottom:.5rem}
+.tech-item dd{margin:0;font-size:.9rem;line-height:1.7;color:var(--ink-2)}
+.tech-item dd b{color:var(--ink);font-weight:600}
+
+/* ── 下载 / 安装 ────────────────────────────────── */
+.dl{
+  border-radius:var(--radius-lg);border:1px solid var(--line);
+  background:var(--surface);padding:clamp(1.8rem,5vw,3.4rem);
+  box-shadow:var(--shadow);text-align:center;
+}
+.dl h2{font-size:clamp(1.55rem,4vw,2.3rem)}
+.dl > p{margin-top:.9rem;color:var(--muted)}
+.dl-actions{margin-top:2rem;display:flex;flex-direction:column;align-items:center;gap:1.4rem}
+.pulse{animation:pulse 2.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 14px 34px -14px rgba(212,83,126,.65)}50%{box-shadow:0 14px 40px -8px rgba(212,83,126,.85)}}
+.steps-3{
+  margin-top:2.4rem;display:grid;grid-template-columns:1fr;gap:1.1rem;text-align:left;
+  padding-top:2rem;border-top:1px solid var(--line);
+}
+@media (min-width:720px){.steps-3{grid-template-columns:repeat(3,1fr);gap:1.6rem}}
+.steps-3 div{display:flex;gap:.75rem;align-items:flex-start}
+.steps-3 span{
+  flex:none;width:24px;height:24px;border-radius:50%;background:var(--rose-soft);
+  color:var(--rose-deep);display:grid;place-items:center;font-size:.76rem;font-weight:600;
+}
+.steps-3 p{font-size:.87rem;color:var(--ink-2);line-height:1.62}
+.steps-3 em{display:block;font-style:normal;font-size:.76rem;color:var(--muted);margin-top:.15rem}
+
+/* ── 页脚 ───────────────────────────────────────── */
+footer{border-top:1px solid var(--line);padding:2.6rem 0 3.4rem;margin-top:clamp(2.5rem,6vw,4rem)}
+.foot{display:flex;flex-direction:column;gap:1rem;font-size:.82rem;color:var(--muted)}
+@media (min-width:760px){.foot{flex-direction:row;align-items:center;justify-content:space-between}}
+.foot-warn{
+  font-size:.78rem;color:var(--muted);background:var(--surface-2);
+  border:1px solid var(--line-2);border-radius:12px;padding:.75rem 1rem;line-height:1.65;
+}
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-7.5-4.6-9.3-9.1C1.2 8.3 3.4 5 6.7 5c1.9 0 3.5 1 4.3 2.4C11.8 6 13.4 5 15.3 5c3.3 0 5.5 3.3 4 6.9C17.5 16.4 12 21 12 21z" fill="#fff"/></svg>
+      </span>
+      慢慢说
+    </a>
+    <div class="nav-links">
+      <a href="#why">它和陪聊不一样</a>
+      <a href="#what">能帮你什么</a>
+      <a href="#scenes">沟通场景</a>
+      <a href="#tech">它怎么做的</a>
+    </div>
+    <a class="nav-btn" href="#download">下载安装</a>
+  </div>
+</nav>
+
+<!-- ══ HERO ══════════════════════════════════════ -->
+<section class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow" data-reveal>慢慢说 · Say It Slowly</span>
+      <h1>
+        <span class="line"><i style="animation-delay:.05s">把没说出口的，</i></span>
+        <span class="line"><i style="animation-delay:.19s">慢慢说出来。</i></span>
+      </h1>
+      <p class="hero-sub" data-reveal style="--d:.42s">
+        它不替你们谈恋爱。<br>
+        只在你<b>不知道怎么开口</b>的时候，先替你们想清楚——
+        TA 那句话到底是什么意思，你到底该怎么说。
+      </p>
+      <div class="hero-actions" data-reveal style="--d:.56s">
+        <a class="btn" href="#download">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v12m0 0l-4.2-4.2M12 15l4.2-4.2M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+          </svg>
+          下载安装包（安卓）
+        </a>
+        <div class="qr">
+          <img src="__QR_DATA_URI__" alt="扫码下载慢慢说" width="112" height="112">
+          <span class="qr-txt">手机扫码<br>直接下载安装</span>
+        </div>
+      </div>
+      <p class="btn-note" data-reveal style="--d:.68s">Android <span data-apk-min>8.0</span> 及以上 · <span data-apk-size>约 13 MB</span> · 免费试用</p>
+
+      <div class="stats-row" data-reveal style="--d:.8s">
+        <div class="stat"><div class="stat-n" data-count="11">0</div><div class="stat-l">维情感画像</div></div>
+        <div class="stat"><div class="stat-n" data-count="7">0</div><div class="stat-l">个沟通场景</div></div>
+        <div class="stat"><div class="stat-n" data-count="3">0</div><div class="stat-l">套心理学量表</div></div>
+        <div class="stat"><div class="stat-n" data-count="100" data-suffix="+">0</div><div class="stat-l">个后端接口</div></div>
+      </div>
+    </div>
+
+    <div class="phone-wrap" data-reveal style="--d:.5s">
+      <div class="phone">
+        <div class="phone-bar"></div>
+        <div class="phone-cap">听懂 TA</div>
+        <div class="bubble in">
+          <span class="bubble-tag">TA 说</span>
+          我想静静，你别烦我。
+        </div>
+        <div class="bubble out">
+          <span class="bubble-tag">它帮你听懂</span>
+          这句话不是推开你。TA 现在情绪过载了，需要一段独处来缓过来——先退一步，比追问更有用。
+        </div>
+        <div class="phone-foot"><span class="dot"></span>结合你们的画像分析</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 差异：为什么不是陪聊 ══════════════════════ -->
+<section class="sec band" id="why">
+  <div class="wrap">
+    <div class="sec-head" data-reveal>
+      <span class="eyebrow">它和 AI 陪聊不一样</span>
+      <h2>每一次开口之前，<br>它先认识你们。</h2>
+      <p>通用 AI 给你的是零上下文的漂亮话。它给你的是——基于你们两个人真实性格推断出来的那句话。</p>
+    </div>
+
+    <div class="story-grid">
+      <div class="story-visual" aria-hidden="true">
+        <div class="stage on" data-stage="0">
+          <div class="card-vis">
+            <div class="k">第 1 步</div>
+            <div class="v">做一份关系问卷</div>
+            <div class="s">题目不是随手编的，来自三个成熟心理学量表</div>
+            <div class="bars">
+              <div class="bar"><i style="--w:82%"></i></div>
+              <div class="bar"><i style="--w:64%"></i></div>
+              <div class="bar"><i style="--w:91%"></i></div>
+            </div>
+          </div>
+        </div>
+        <div class="stage" data-stage="1">
+          <div class="card-vis">
+            <div class="k">第 2 步</div>
+            <div class="v">生成 11 维情感画像</div>
+            <div class="s">沟通方式、冲突应对、亲密需求……并判定依恋类型</div>
+            <div class="bars">
+              <div class="bar"><i style="--w:74%"></i></div>
+              <div class="bar"><i style="--w:93%"></i></div>
+              <div class="bar"><i style="--w:56%"></i></div>
+              <div class="bar"><i style="--w:81%"></i></div>
+            </div>
+          </div>
+        </div>
+        <div class="stage" data-stage="2">
+          <div class="card-vis">
+            <div class="k">第 3 步</div>
+            <div class="v">看见两个人的冲突循环</div>
+            <div class="s">一个人越追问，另一个人越退缩——这不是谁的错，是模式</div>
+            <div class="bars">
+              <div class="bar"><i style="--w:88%"></i></div>
+              <div class="bar"><i style="--w:47%"></i></div>
+            </div>
+          </div>
+        </div>
+        <div class="stage" data-stage="3">
+          <div class="card-vis">
+            <div class="k">第 4 步</div>
+            <div class="v">然后才开口</div>
+            <div class="s">画像、冲突循环、历史对话、理论库检索——一起决定它说什么</div>
+            <div class="bars">
+              <div class="bar"><i style="--w:96%"></i></div>
+              <div class="bar"><i style="--w:89%"></i></div>
+              <div class="bar"><i style="--w:92%"></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="steps" id="steps">
+        <div class="step" data-step="0">
+          <span class="step-n">1</span>
+          <h3>先做一份关系问卷</h3>
+          <p>十几道题，题目取自 ECR-R 依恋量表、追逃模式研究和 Gottman 的冲突理论——不是随手编的心理测试。</p>
+        </div>
+        <div class="step" data-step="1">
+          <span class="step-n">2</span>
+          <h3>生成 11 维情感画像</h3>
+          <p>沟通方式、冲突应对、亲密需求、边界感……并且判定你和 TA 分别属于哪种依恋类型。</p>
+        </div>
+        <div class="step" data-step="2">
+          <span class="step-n">3</span>
+          <h3>看见两个人的冲突循环</h3>
+          <p>一个人越追问，另一个人越退缩。看清这个循环，比争论"到底谁错了"有用得多。</p>
+        </div>
+        <div class="step" data-step="3">
+          <span class="step-n">4</span>
+          <h3>然后，它才开口</h3>
+          <p>你和 TA 的画像、你们的冲突模式、最近的对话、相关的关系理论——都会在回答之前被加载进去。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="punch" data-reveal>
+      <p>"我想静静"这四个字，在焦虑型的人耳里是拒绝，从回避型的人嘴里说出来却是求救。</p>
+      <p>同样的输入，它的回答会不一样——因为它在回答你们，而不是回答一句话。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 功能 ══════════════════════════════════════ -->
+<section class="sec" id="what">
+  <div class="wrap">
+    <div class="sec-head" data-reveal>
+      <span class="eyebrow">它能帮你做什么</span>
+      <h2>不谈人生道理，<br>只解决眼前这一句。</h2>
+      <p>四件事，覆盖从"看不懂对方"到"不知道怎么开口"的全过程。</p>
+    </div>
+    <div class="cards">
+      <article class="card" data-reveal>
+        <div class="card-ico">
+          <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/><circle cx="19" cy="12" r="2.4"/></svg>
+        </div>
+        <h3>听懂 TA</h3>
+        <p>把一句气话拆开，告诉你背后真正的诉求。原话越难听，越不要美化——美化了就不是分析，是自我安慰。</p>
+      </article>
+      <article class="card" data-reveal style="--d:.08s">
+        <div class="card-ico">
+          <svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 01-9 8.4L4 21l1.2-4.1A8.4 8.4 0 1121 11.5z"/><path d="M9 11h6M9 8h6M9 14h3"/></svg>
+        </div>
+        <h3>帮我表达</h3>
+        <p>你真正想说的那句保留，只换一种对方接得住的说法。不会把你改成一个不像你的人。</p>
+      </article>
+      <article class="card" data-reveal style="--d:.16s">
+        <div class="card-ico">
+          <svg viewBox="0 0 24 24"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/><circle cx="12" cy="12" r="3.6"/></svg>
+        </div>
+        <h3>冷静一下</h3>
+        <p>冷战时给你几条破冰思路，外加可以直接复制发出去的开场白。台阶递过去，面子还在。</p>
+      </article>
+      <article class="card" data-reveal style="--d:.24s">
+        <div class="card-ico">
+          <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 016.5 3H19v18H6.5A2.5 2.5 0 014 18.5z"/><path d="M8 7h7M8 11h7"/></svg>
+        </div>
+        <h3>记住你们</h3>
+        <p>信件、纪念日、双视角记录沉淀成共同记忆。下一次它更懂你们，靠的不是算法变强，是你们留下的东西。</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 场景 ═══════════════════════════════════════ -->
+<section class="sec band" id="scenes">
+  <div class="wrap">
+    <div class="sec-head" data-reveal>
+      <span class="eyebrow">七个沟通场景</span>
+      <h2>选对场景，<br>比把话写长更重要。</h2>
+      <p>每个场景的回答结构和侧重点都不一样。同一个问题，用错入口就会得到一段正确的废话。</p>
+    </div>
+    <div class="scenes">
+      <article class="scene" data-reveal>
+        <div class="scene-k">SCENE 01</div>
+        <h3>日常 · 私人军师</h3>
+        <p>心里堵得慌，有些话不想跟任何人说，包括伴侣。先安抚情绪，再给建议。</p>
+        <div class="scene-t">这个场景里说的话，伴侣看不到</div>
+      </article>
+      <article class="scene" data-reveal style="--d:.06s">
+        <div class="scene-k">SCENE 02</div>
+        <h3>听懂 TA</h3>
+        <p>把对方那句很冲的话一字不改地丢进去，分析它背后真正的诉求。</p>
+        <div class="scene-t">越原汁原味，分析越准</div>
+      </article>
+      <article class="scene" data-reveal style="--d:.12s">
+        <div class="scene-k">SCENE 03</div>
+        <h3>帮我表达</h3>
+        <p>想说的话太冲太硬，改写成更柔和、对方更容易接住的版本。</p>
+        <div class="scene-t">保留核心诉求，只改表达</div>
+      </article>
+      <article class="scene" data-reveal style="--d:.18s">
+        <div class="scene-k">SCENE 04</div>
+        <h3>冷静一下</h3>
+        <p>吵完架谁都不肯先开口。给你破冰思路和能直接用的话。</p>
+        <div class="scene-t">专治冷战僵局</div>
+      </article>
+      <article class="scene" data-reveal style="--d:.24s">
+        <div class="scene-k">SCENE 05</div>
+        <h3>双人调解</h3>
+        <p>两个人都参与的完整流程：各自陈述、生成方案、双方确认。有中间人主持的对话。</p>
+        <div class="scene-t">有状态工作流，非聊天</div>
+      </article>
+      <article class="scene" data-reveal style="--d:.3s">
+        <div class="scene-k">SCENE 06</div>
+        <h3>信件解读</h3>
+        <p>收到一段看不懂的长文字，逐句拆解它真正想说什么。</p>
+        <div class="scene-t">也可在信箱内直接调用</div>
+      </article>
+      <article class="scene" data-reveal style="--d:.36s">
+        <div class="scene-k">SCENE 07</div>
+        <h3>信件改写</h3>
+        <p>按指定风格重写一封信，道歉或表白都行，核心诉求保留。</p>
+        <div class="scene-t">需在写信时使用</div>
+      </article>
+    </div>
+    <p class="scene-hint" data-reveal>← 左右滑动查看全部场景</p>
+  </div>
+</section>
+
+<!-- ══ 技术 ══════════════════════════════════════ -->
+<section class="sec" id="tech">
+  <div class="wrap">
+    <div class="sec-head" data-reveal>
+      <span class="eyebrow">它是怎么做出来的</span>
+      <h2>一个真实跑在云上的<br>全栈 AI 项目。</h2>
+      <p>从安卓客户端到后端大模型链路，全部自己搭、自己部署。以下是它的技术底子。</p>
+    </div>
+    <dl class="tech-grid" data-reveal>
+      <div class="tech-item">
+        <dt>安卓客户端</dt>
+        <dd>Kotlin + Jetpack Compose + Material 3，Hilt 依赖注入，四模块架构</dd>
+      </div>
+      <div class="tech-item">
+        <dt>后端服务</dt>
+        <dd>Python 3.13 + FastAPI + SQLAlchemy 2.0 + MySQL，42 张表，迁移全部幂等</dd>
+      </div>
+      <div class="tech-item">
+        <dt>大模型链路</dt>
+        <dd>推理模型主用，配四级降级链；画像驱动 prompt、理论库 RAG 检索、结构化输出</dd>
+      </div>
+      <div class="tech-item">
+        <dt>流式交互</dt>
+        <dd>SSE 双通道——思考与正文分开推送，首个可见反馈从 24.67 秒压到 <b>0.84 秒</b></dd>
+      </div>
+      <div class="tech-item">
+        <dt>记忆机制</dt>
+        <dd>自动沉淀关系记忆，四道闸门过滤：是否值得记、类别收口、去重、失败静默降级</dd>
+      </div>
+      <div class="tech-item">
+        <dt>部署</dt>
+        <dd>Docker Compose 容器化，已部署到云服务器真实运行</dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<!-- ══ 下载 ══════════════════════════════════════ -->
+<section class="sec" id="download">
+  <div class="wrap">
+    <div class="dl" data-reveal>
+      <span class="eyebrow" style="justify-content:center">开始使用</span>
+      <h2 style="margin-top:1rem">装上它，<br>先做那份问卷。</h2>
+      <p>问卷填得越认真，它说话就越像在说你们。</p>
+      <div class="dl-actions">
+        <a class="btn pulse" href="__APK_URL__" download data-apk-link>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v12m0 0l-4.2-4.2M12 15l4.2-4.2M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+          </svg>
+          下载安装包（安卓）
+        </a>
+        <p style="font-size:.8rem;color:var(--muted);margin:0">
+          当前版本 <b data-apk-ver style="color:var(--ink);font-weight:600">v1.0.0</b><span data-apk-filesize></span>
+        </p>
+        <div style="display:flex;align-items:center;gap:.85rem">
+          <img src="__QR_DATA_URI__" alt="扫码下载慢慢说" width="132" height="132" style="width:132px;height:132px;border-radius:14px;border:1px solid var(--line);background:#fff;padding:6px">
+          <span style="font-size:.8rem;color:var(--muted);text-align:left">手机扫码<br>直接下载安装</span>
+        </div>
+      </div>
+      <div class="steps-3">
+        <div><span>1</span><p>点击上面的按钮<em>下载安装包</em></p></div>
+        <div><span>2</span><p>如果提示"未知来源"<em>选择允许安装即可</em></p></div>
+        <div><span>3</span><p>打开 App 完成问卷<em>再开始用军师</em></p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <div style="font-weight:600;color:var(--ink);margin-bottom:.3rem">慢慢说 · Say It Slowly</div>
+      <div>把没说出口的，慢慢说出来。</div>
+      <div style="margin-top:.6rem;font-size:.74rem;line-height:1.6">© 2026 慢慢说。页面结构、文案与图标为个人原创，未经许可请勿转载或用于商业用途。</div>
+    </div>
+    <div class="foot-warn">
+      个人作品，未备案、未商用。当前使用 HTTP 明文传输，<br>
+      请不要在 App 内填写身份证号、银行卡等敏感信息。
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* 顶部滚动进度 */
+  var bar = document.getElementById('progress');
+  var nav = document.getElementById('nav');
+  function onScroll(){
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    var p = h > 0 ? Math.min(window.scrollY / h, 1) : 0;
+    bar.style.transform = 'scaleX(' + p + ')';
+    nav.classList.toggle('scrolled', window.scrollY > 8);
+  }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+
+  if (reduce) {
+    document.querySelectorAll('[data-reveal]').forEach(function(el){ el.classList.add('in'); });
+    document.querySelectorAll('.step').forEach(function(el){ el.classList.add('on'); });
+    var st0 = document.querySelector('.stage[data-stage="0"]');
+    if (st0) st0.classList.add('on');
+    document.querySelectorAll('[data-count]').forEach(function(el){
+      el.textContent = el.dataset.count + (el.dataset.suffix || '');
+    });
+    return;
+  }
+
+  /* 滚动进入 */
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    });
+  }, {threshold:0.14, rootMargin:'0px 0px -40px 0px'});
+  document.querySelectorAll('[data-reveal]').forEach(function(el){ io.observe(el); });
+
+  /* 数字滚动 */
+  var counted = new WeakSet();
+  var cio = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (!e.isIntersecting || counted.has(e.target)) return;
+      counted.add(e.target);
+      var el = e.target, target = parseInt(el.dataset.count, 10), suffix = el.dataset.suffix || '';
+      var t0 = null, dur = 1100;
+      function tick(ts){
+        if (t0 === null) t0 = ts;
+        var k = Math.min((ts - t0) / dur, 1);
+        var ease = 1 - Math.pow(1 - k, 3);
+        el.textContent = Math.round(target * ease) + (k === 1 ? suffix : '');
+        if (k < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    });
+  }, {threshold:0.5});
+  document.querySelectorAll('[data-count]').forEach(function(el){ cio.observe(el); });
+
+  /* 故事段：滚动切换 */
+  var steps = Array.prototype.slice.call(document.querySelectorAll('.step'));
+  var stages = Array.prototype.slice.call(document.querySelectorAll('.stage'));
+  if (steps.length && stages.length) {
+    var sio = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if (!e.isIntersecting) return;
+        var i = parseInt(e.target.dataset.step, 10);
+        steps.forEach(function(s, k){ s.classList.toggle('on', k === i); });
+        stages.forEach(function(s, k){ s.classList.toggle('on', k === i); });
+      });
+    }, {threshold:0.55});
+    steps.forEach(function(s){ sio.observe(s); });
+  }
+})();
+</script>
+<script>
+/* 版本清单：页面上的下载地址、版本号、文件大小都由同源的 manifest.json 一处驱动。
+   升级安装包时只需替换服务器上的 manifest.json，二维码与页面结构全程不用动。
+   请求失败（例如本地直接双击打开 html）则保持 HTML 里写死的兜底地址，按钮依然可用。 */
+(function(){
+  function sizeText(b){ return b ? (b / 1048576).toFixed(1) + ' MB' : ''; }
+  fetch('manifest.json', {cache:'no-store'})
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(m){
+      if (!m || !m.url) return;
+      document.querySelectorAll('[data-apk-link]').forEach(function(a){
+        a.href = m.url;
+        if (m.fileName) a.setAttribute('download', m.fileName);
+      });
+      document.querySelectorAll('[data-apk-ver]').forEach(function(e){
+        e.textContent = 'v' + m.version;
+      });
+      document.querySelectorAll('[data-apk-size]').forEach(function(e){
+        var s = sizeText(m.sizeBytes);
+        if (s) e.textContent = '约 ' + s;
+      });
+      document.querySelectorAll('[data-apk-filesize]').forEach(function(e){
+        var s = sizeText(m.sizeBytes);
+        e.textContent = s ? ' · 约 ' + s : '';
+      });
+      document.querySelectorAll('[data-apk-min]').forEach(function(e){
+        e.textContent = m.minAndroid || e.textContent;
+      });
+    })
+    .catch(function(){});
+})();
+</script>
+</body>
+</html>
