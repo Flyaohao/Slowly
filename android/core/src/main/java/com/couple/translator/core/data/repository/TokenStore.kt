@@ -29,6 +29,7 @@ class TokenStore @Inject constructor(
 ) {
     private val tokenKey = stringPreferencesKey(Constants.TOKEN_KEY)
     private val refreshTokenKey = stringPreferencesKey(Constants.REFRESH_TOKEN_KEY)
+    private val lastModeKey = stringPreferencesKey(Constants.LAST_MODE_KEY)
 
     suspend fun saveTokens(accessToken: String, refreshToken: String) {
         context.dataStore.edit { prefs ->
@@ -49,10 +50,24 @@ class TokenStore @Inject constructor(
         }.first()
     }
 
+    /**
+     * 上次成功获取的模式（couple / unbinding / single）。
+     * 随会话走：登录写入、登出清除——避免换账号后短暂显示上一个人的模式。
+     * 用途只有一个：/couples/me 刷新失败时不当场退回单身模式。
+     */
+    suspend fun saveLastMode(mode: String) {
+        context.dataStore.edit { prefs -> prefs[lastModeKey] = mode }
+    }
+
+    suspend fun getLastMode(): String? {
+        return context.dataStore.data.map { prefs -> prefs[lastModeKey] }.first()
+    }
+
     suspend fun clearTokens() {
         context.dataStore.edit { prefs ->
             prefs.remove(tokenKey)
             prefs.remove(refreshTokenKey)
+            prefs.remove(lastModeKey)
         }
     }
 

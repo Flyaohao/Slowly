@@ -27,6 +27,9 @@ class AuthRepository @Inject constructor(
             val response = apiService.login(AuthDto.LoginRequest(email, password))
             if (response.isSuccess && response.data != null) {
                 tokenStore.saveTokens(response.data.accessToken, response.data.refreshToken)
+                // 登录响应自带 mode（couple/single）——立刻落本地缓存。
+                // 这样登录后哪怕 /couples/me 首刷就失败，界面也不会错进单身模式。
+                tokenStore.saveLastMode(response.data.mode)
                 Result.success(response.data)
             } else {
                 Result.failure(Exception(response.message))

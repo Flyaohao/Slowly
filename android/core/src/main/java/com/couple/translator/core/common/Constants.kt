@@ -15,5 +15,7 @@ object Constants {
     const val NOTIFICATION_ASKED_KEY = "notification_permission_asked"
     /** 上次弹过「用量 80% 提示」的 sessionId（P-C3 §3.4：每段会话各一次） */
     const val USAGE_HINT_SESSION_KEY = "usage_hint_session_id"
+    /** 上次成功获取的模式 couple/unbinding/single——情侣状态刷新失败时的本地兜底 */
+    const val LAST_MODE_KEY = "last_app_mode"
     const val PASSWORD_MIN_LENGTH = 8
 }
