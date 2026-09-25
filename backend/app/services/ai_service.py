@@ -18,6 +18,7 @@ from app.schemas.ai_output import RewriteOutput, ReviewOutput
 from app.schemas.advisor_context import AdvisorContext
 from app.services.prompt_builder import (
     DEFAULT_AVATAR_NAME,
+    build_prompt,
     build_structured_stream_prompt,
     build_persona_instruction,
     build_profile_report_prompt,

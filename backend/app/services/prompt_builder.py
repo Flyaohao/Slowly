@@ -337,12 +337,23 @@ SESSION_SUMMARY_PROMPT = """把下面这段对话压缩成**不超过120字**的
 #: 流式变体直接在此处截断，把结构化字段说明替换成自然语言要求。
 _JSON_MARKER = "请以 JSON 格式回复"
 
-#: 流式变体追加的自然语言输出要求（与结构化字段说明互斥）
-STREAM_INSTRUCTION = """## 输出格式（重要）
+#: Markdown 滥用约束（§6.3）。三档模式与 L0 基线不在本轮，这里只收口径。
+MARKDOWN_OUTPUT_RULES = """Markdown 使用规范（务必遵守）：
+- 小标题一律用四级标题 `#### `，禁止使用 `#` / `##` / `###`（App 里不需要一级标题）
+- 列举一律用 `- `，字段名与代码用反引号包裹
+- 只给关键词加粗，禁止整段整句加粗"""
+
+#: 流式变体追加的自然语言输出要求（与结构化字段说明互斥）。
+#: 末尾追加 MARKDOWN_OUTPUT_RULES（常量拼接，不复制字面量——避免两处口径漂移）。
+STREAM_INSTRUCTION = (
+    """## 输出格式（重要）
 请直接用简体中文、以 Markdown 分段的形式回复用户，像面对面咨询那样自然表达。
 不要输出 JSON、不要输出字段名、不要提及"结构化输出"。
 把上述各要点融合成连贯的建议：先共情安抚，再分析对方可能的心态，然后给出可以直接使用的回复话术，最后提醒要避免的表达。
 控制在 300 字以内，段落之间换行分隔，"可以直接说的话"用短横线列出。"""
+    + "\n\n"
+    + MARKDOWN_OUTPUT_RULES
+)
 
 #: 军师人格：voice_style → 语气指令（ai_avatar.voice_style，客户端 5 选 1 枚举）。
 #: 未知值（含库里历史脏数据）一律回退 gentle，与客户端 toneIndexOf 的回退一致。
@@ -557,12 +568,13 @@ def build_structured_stream_prompt(
         "输出分为两段，第一段在前、第二段在后。\n\n"
         "第一段：用简体中文把分析讲清楚，Markdown 分段，%s，控制在 %d 字以内。"
         "这一段是用户直接读到的内容，因此**不要**出现「JSON」「字段」「结构化」"
-        "「Schema」这类字眼，也不要输出代码块。\n\n"
+        "「Schema」这类字眼，也不要输出代码块。\n"
+        "%s\n"
         "第二段：另起一行，先原样输出分隔符 %s，紧接着输出一个 JSON 对象。"
         "该对象必须严格符合下面的 Schema，字段一个都不能少。"
         "它由程序解析、用户看不到，所以**不要**用 ``` 代码块包裹：\n%s\n\n"
         "除这两段之外，不要输出任何多余内容（不要开场白、不要总结）。"
-        % (content_instruction, max_content_chars, STRUCTURED_MARKER, schema)
+        % (content_instruction, max_content_chars, MARKDOWN_OUTPUT_RULES + "\n", STRUCTURED_MARKER, schema)
     )
     return head + tail
 
