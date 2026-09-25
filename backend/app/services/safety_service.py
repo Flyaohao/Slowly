@@ -88,6 +88,19 @@ def _keyword_check(text: str) -> str:
     return _keyword_check_detail(text)[0]
 
 
+def _mask_whitelisted(text_lower: str) -> str:
+    """P-C2 §1.1：把白名单短语（如「冷暴力」）遮蔽成等长空格。
+
+    只作用于 **strong 扫描**——否则「冷暴力」的子串「暴力」会命中
+    abuse_risk.strong。weak 扫描保持原文（「冷暴力」在 heated_conflict.weak，
+    那是它该去的地方）。遮蔽不改变词表、阈值与判定顺序。
+    """
+    for phrase in getattr(_builtin_words, "WHITELIST", ()):
+        if phrase and phrase in text_lower:
+            text_lower = text_lower.replace(phrase, " " * len(phrase))
+    return text_lower
+
+
 def _keyword_check_detail(text: str) -> Tuple[str, List[str]]:
     """基于强弱信号分级的风险判定，返回（命中的最高风险等级, 命中词列表）。
 
@@ -95,6 +108,7 @@ def _keyword_check_detail(text: str) -> Tuple[str, List[str]]:
     反而会把记录撑得很长。
     """
     text_lower = (text or "").lower()
+    strong_text = _mask_whitelisted(text_lower)
     highest_risk = "normal"
     highest_idx = 0
     highest_hits: List[str] = []
@@ -102,7 +116,7 @@ def _keyword_check_detail(text: str) -> Tuple[str, List[str]]:
     for level, groups in SAFETY_KEYWORDS.items():
         idx = RISK_LEVEL_ORDER.index(level)
 
-        hits = [kw for kw in groups.get("strong", []) if kw in text_lower]
+        hits = [kw for kw in groups.get("strong", []) if kw in strong_text]
         weak_hits = [kw for kw in groups.get("weak", []) if kw in text_lower]
         strong_hit = bool(hits)
         if not strong_hit and len(weak_hits) >= WEAK_SIGNAL_THRESHOLD:

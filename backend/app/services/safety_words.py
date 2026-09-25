@@ -12,6 +12,14 @@ safety_service 会优先尝试从 backend/data/safety_words.json 读取覆盖版
 3. 避免单字/超短词（如「割」「血」），误报远大于漏报的收益。
 """
 
+#: 白名单前置（P-C2 §1.1）：这些是**冲突描述用语**，本身不是风险词，
+#: 但含高危子串（「冷暴力」⊂「暴力」）会被 strong 的子串匹配误判成
+#: abuse_risk → 客户端盖风险卡「我没办法帮你生成这类内容」压在正常回答上。
+#: 处理方式：strong 扫描前把这些短语遮蔽掉（weak 扫描仍用原文——
+#: 「冷暴力」本身就在 heated_conflict.weak，共现 >=2 才触发，语义不丢）。
+#: 只加白名单，不动判定逻辑、不动阈值、不删词。
+WHITELIST = ("冷暴力",)
+
 WORDS = {
     "heated_conflict": {
         "strong": [
