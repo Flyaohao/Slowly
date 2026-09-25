@@ -100,8 +100,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
             "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         )
-        # 不暴露技术栈（uvicorn 默认会回 server 头）。
+        # 不暴露技术栈。
         # ⚠️ MutableHeaders 没有 pop()，必须用 del + 存在性判断，否则每个请求都会 500。
+        # ⚠️ 光在这里删不干净：uvicorn 会在**协议层**补回 server 头，应用层删了它也照加。
+        #    线上必须同时以 `--no-server-header` 启动（见 backend/docker-entrypoint.sh）。
+        #    本地 TestClient 不经过 uvicorn，测不出这个差异 —— 别只看单测就以为生效了。
         if "server" in resp.headers:
             del resp.headers["server"]
         return resp

@@ -13,9 +13,11 @@ echo
 echo "############ 3. 等待就绪（迁移/种子/向量库）############"
 READY=0
 for i in $(seq 1 36); do
-    CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:8000/openapi.json 2>/dev/null)
-    if [ "$CODE" = "200" ]; then
-        echo "第 ${i} 次探测：HTTP 200 —— 应用已就绪"
+    # /docs 与 /openapi.json 在安全加固后需 Basic 认证，匿名访问返回 401 ——
+    # 那同样说明进程已起来。所以不能只认 200：加固一上线，只认 200 的判据会误判超时。
+    CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:8000/docs 2>/dev/null)
+    if [ "$CODE" = "401" ] || [ "$CODE" = "200" ]; then
+        echo "第 ${i} 次探测：HTTP ${CODE} —— 应用已就绪"
         READY=1
         break
     fi

@@ -46,7 +46,10 @@ RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 8000
 
+# /docs 在安全加固后需要 Basic 认证，匿名访问返回 401。
+# ⚠️ 不能再用 `curl -f`：它把 401 当失败，健康检查会持续报错、容器变 unhealthy。
+# 这里只判断「服务是否在响应」，同时接受 200（未加固）与 401（已加固、进程活着）。
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8000/docs > /dev/null || exit 1
+    CMD curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/docs | grep -qE '^(200|401)$'
 
 ENTRYPOINT ["./docker-entrypoint.sh"]

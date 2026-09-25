@@ -35,4 +35,6 @@ else
 fi
 
 echo "[entrypoint] 启动 uvicorn"
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+# --no-server-header：uvicorn 默认回 `server: uvicorn`，这个头在**协议层**写入，
+# ASGI 中间件删不掉（应用层删了它还会再加回来），只能从这里关。
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-server-header
