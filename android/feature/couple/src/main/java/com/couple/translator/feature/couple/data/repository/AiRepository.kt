@@ -371,7 +371,7 @@ class AiRepository @Inject constructor(
                 "meta" -> {
                     val p = metaAdapter.fromJson(json)
                     if (p == null) AiDto.ChatStreamEvent.Failure(50000, "meta 帧解析失败")
-                    else AiDto.ChatStreamEvent.Meta(p.sessionId, p.sceneKey, p.ragHit)
+                    else AiDto.ChatStreamEvent.Meta(p.sessionId, p.sceneKey, p.ragHit, p.tokenTotal)
                 }
 
                 "delta" -> {
@@ -402,6 +402,7 @@ class AiRepository @Inject constructor(
                         riskLevel = p.riskLevel,
                         blocked = p.blocked,
                         content = p.content,
+                        tokenTotal = p.tokenTotal,
                     )
                 }
 

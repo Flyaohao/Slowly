@@ -536,6 +536,8 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
             "session_id": prepared["session_id"],
             "scene_key": prepared["scene_key"],
             "rag_hit": prepared.get("rag_hit", 0),
+            # P-C3 §3.2：用量进度的刷新点之一（进页面/ meta / done，不逐帧）
+            "token_total": _read_session_token(prepared["session_id"]),
         },
     }
 
@@ -611,7 +613,7 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
     if output_risk != "normal":
         structured["safety_notice"] = get_safety_response(output_risk)
 
-    message_id = _persist_streamed_message(
+    message_id, token_after = _persist_streamed_message(
         session_id=prepared["session_id"],
         content=full_text,
         structured=structured,
@@ -638,8 +640,33 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
             "blocked": False,
             "content": full_text,
             "finish_reason": "stop",
+            # P-C3 §3.2：落库后的最新用量（token_total 只有服务端落库后才有意义）
+            "token_total": token_after,
         },
     }
+
+
+def _read_session_token(session_id: Optional[int]) -> int:
+    """读当前会话 token_total（P-C3 §3.2：meta 帧用量）。
+
+    自开独立会话：流式生成器跑在响应体阶段，请求级 db 已销毁，
+    prepared["session"] 是 Detached 且 commit 后属性过期，不能直接读。
+    任何异常回 0——用量展示不值得让流失败。
+    """
+    if session_id is None:
+        return 0
+    try:
+        db = SessionLocal()
+        try:
+            from app.models.ai import AiChatSession as _Sess
+
+            sess = db.query(_Sess).filter(_Sess.id == session_id).first()
+            return int(getattr(sess, "token_total", 0) or 0) if sess else 0
+        finally:
+            db.close()
+    except Exception:
+        logger.warning("[AI] 读取 session token_total 失败 session=%s", session_id, exc_info=True)
+        return 0
 
 
 #: 落库的思考过程上限（字符）。推理模型的思考常为正文字数的 5~10 倍，
@@ -668,11 +695,12 @@ def _persist_streamed_message(
     scene_key: str = "unknown",
     user_input: str = "",
     chat_mode: Optional[str] = None,
-) -> int:
+) -> Tuple[int, int]:
     """流式结束后落库。
 
     用独立会话，且把异常吞掉只记日志：内容此刻已经推给用户了，
-    落库失败不应该反过来影响这次回答的观感。返回 0 表示落库失败。
+    落库失败不应该反过来影响这次回答的观感。返回 (0, 0) 表示落库失败。
+    P-C3 §3.2：同时回传落库后的 session.token_total（done 帧用量刷新点）。
     """
     db = SessionLocal()
     try:
@@ -690,6 +718,7 @@ def _persist_streamed_message(
         from app.models.ai import AiChatSession as _Sess
 
         sess = db.query(_Sess).filter(_Sess.id == session_id).first()
+        token_after = int(getattr(sess, "token_total", 0) or 0) if sess else 0
         if sess is not None and (sess.message_count or 0) <= 2:
             scene = ai_repo.get_scene_by_key(db, scene_key)
             _schedule_session_title(
@@ -705,11 +734,11 @@ def _persist_streamed_message(
             distill_in_background(
                 user_id, relation_id, scene_key, user_input, content
             )
-        return msg.id
+        return msg.id, token_after
     except Exception:
         db.rollback()
         logger.exception("[AI] 流式消息落库失败 session=%s", session_id)
-        return 0
+        return 0, 0
     finally:
         db.close()
 
@@ -826,12 +855,17 @@ def get_active_session_info(
     """
     session = ai_repo.get_active_session(db, user_id, relation_id, scene_key)
     if session is None:
+        # P-C3 §3.1：无 active 会话时新键也必须在（客户端 Moshi 默认值兜底，
+        # 但进度条/分段原因逻辑要拿到 budget 才能算比例）。
         return {
             "session_id": None,
             "title": None,
             "message_count": 0,
             "last_message_at": None,
             "resumable": False,
+            "token_total": 0,
+            "budget": SESSION_BUDGET_TOKENS,
+            "archive_reason": None,
         }
     reason = should_start_new_session(session, scene_key, datetime.now())
     # get_active_session 已按 scene_key + status=active 过滤，
@@ -844,6 +878,10 @@ def get_active_session_info(
             session.last_message_at.isoformat() if session.last_message_at else None
         ),
         "resumable": reason is None,
+        # P-C3 §3.1：上下文用量可见化三键（只加不删，向后兼容）
+        "token_total": session.token_total or 0,
+        "budget": SESSION_BUDGET_TOKENS,
+        "archive_reason": reason,
     }
 
 

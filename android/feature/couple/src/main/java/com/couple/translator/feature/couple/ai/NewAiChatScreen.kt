@@ -35,6 +35,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -191,6 +192,9 @@ fun NewAiChatScreen(
             staleSessionTitle = uiState.staleSessionTitle,
             hasStale = uiState.staleSessionId != null,
             sessionArchived = uiState.sessionArchived,
+            // P-C3 §3.3：「新对话」按钮左侧的用量小字（无会话不显示）
+            usageText = uiState.sessionId
+                ?.let { "⌾ ${formatUsage(uiState.tokenTotal)}/${formatUsage(uiState.budget)}" },
             onNewChat = viewModel::startNewChat,
             onResumeStale = viewModel::resumeStaleSession,
         )
@@ -269,10 +273,19 @@ fun NewAiChatScreen(
             }
 
             // P0-10B：本次发生分段 → 轻量分隔，不弹窗不打断
+            // P-C3 §3.5：分隔行带上分段原因（timeout/budget 来自 archive_reason，
+            // user_ended/scene_switch 由客户端写入；无归因回退「新的对话」）
             if (uiState.segmentNotice) {
+                val reasonText = when (uiState.segmentReason) {
+                    "timeout" -> "上次聊到一半，已经是几小时前了"
+                    "budget" -> "上一段聊得比较长，我把它收好了"
+                    "user_ended" -> "你开了新的一段"
+                    "scene_switch" -> "换了个场景，重新开始"
+                    else -> "新的对话"
+                }
                 item {
                     Text(
-                        text = "—— 新的对话 ——",
+                        text = "—— $reasonText ——",
                         style = MaterialTheme.typography.labelSmall,
                         color = AppTextTertiary,
                         modifier = Modifier
@@ -295,6 +308,29 @@ fun NewAiChatScreen(
                     chip,
                 ),
                 onRemove = viewModel::clearQuoteChip,
+            )
+        }
+
+        // P-C3 §3.4：80% 一次性提示（每段会话各一次，可关）
+        if (uiState.usageHintVisible) {
+            UsageHintRow(
+                budget = uiState.budget,
+                onDismiss = viewModel::dismissUsageHint,
+            )
+        }
+
+        // P-C3 §3.2：上下文用量进度条——sessionId == null 不显示；
+        // 刷新点只有 进页面 / meta / done（不在逐帧的 Delta 里读，避免重组风暴）
+        if (uiState.sessionId != null && uiState.budget > 0) {
+            val usageProgress = (uiState.tokenTotal.toFloat() / uiState.budget)
+                .coerceIn(0f, 1f)
+            LinearProgressIndicator(
+                progress = { usageProgress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp),
+                color = if (usageProgress > 0.8f) AppAccent else AppTextTertiary,
+                trackColor = AppSurfaceMuted,
             )
         }
 
@@ -517,6 +553,9 @@ private fun AiReplyBubble(
  * 2. sessionArchived → 「已结束的对话 · {title}」+「新对话」
  * 3. sessionId != null → 「正在继续 · {title ?: 场景名}」+「新对话」
  * 4. else → 「新的对话」+「新对话」
+ *
+ * P-C3 §3.3：[usageText]（如 `⌾ 3.2k/6k`）渲染在按钮**左边**；
+ * 分支 1 是 stale 提示位（原因展示不能塞进它，历史坑），刻意不放。
  */
 @Composable
 private fun SessionStatusBar(
@@ -526,6 +565,7 @@ private fun SessionStatusBar(
     staleSessionTitle: String?,
     hasStale: Boolean,
     sessionArchived: Boolean,
+    usageText: String?,
     onNewChat: () -> Unit,
     onResumeStale: () -> Unit,
 ) {
@@ -564,6 +604,14 @@ private fun SessionStatusBar(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                usageText?.let { usage ->
+                    Text(
+                        text = usage,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppTextTertiary,
+                        modifier = Modifier.padding(end = 4.dp),
+                    )
+                }
                 TextButton(onClick = onNewChat) {
                     Text(
                         text = "新对话",
@@ -582,6 +630,14 @@ private fun SessionStatusBar(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                usageText?.let { usage ->
+                    Text(
+                        text = usage,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppTextTertiary,
+                        modifier = Modifier.padding(end = 4.dp),
+                    )
+                }
                 TextButton(onClick = onNewChat) {
                     Text(
                         text = "新对话",
@@ -598,6 +654,14 @@ private fun SessionStatusBar(
                     color = AppTextTertiary,
                     modifier = Modifier.weight(1f),
                 )
+                usageText?.let { usage ->
+                    Text(
+                        text = usage,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppTextTertiary,
+                        modifier = Modifier.padding(end = 4.dp),
+                    )
+                }
                 TextButton(onClick = onNewChat) {
                     Text(
                         text = "新对话",
@@ -662,6 +726,50 @@ private fun QuoteChipRow(
             )
         }
     }
+}
+
+/**
+ * P-C3 §3.4：上下文用量达 80% 的一次性提示行。
+ *
+ * 「每段会话各一次」的判定在 ViewModel（UsageHintStore），
+ * 这里只负责展示与关闭。
+ */
+@Composable
+private fun UsageHintRow(
+    budget: Int,
+    onDismiss: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "聊到 $budget 我会自动把这段收好，你随时能在历史里回看",
+            style = MaterialTheme.typography.labelSmall,
+            color = AppTextSecondary,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+            Icon(
+                imageVector = Icons.Outlined.Close,
+                contentDescription = "关闭提示",
+                tint = AppTextTertiary,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
+/**
+ * P-C3 §3.3：用量数字格式化——`3200 → 3.2k`、`6000 → 6k`、`800 → 800`。
+ * ≥1000 保留一位小数且去掉 `.0k` 的尾巴，<1000 直接显示整数。
+ */
+private fun formatUsage(value: Int): String {
+    if (value < 1000) return value.toString()
+    val k = Math.round(value / 1000.0 * 10) / 10.0
+    return if (k % 1.0 == 0.0) "${k.toInt()}k" else "${k}k"
 }
 
 /** P0-8：输入区收敛为 [输入框] [＋] [发送] —— 模式/改写/引用全收进「＋」

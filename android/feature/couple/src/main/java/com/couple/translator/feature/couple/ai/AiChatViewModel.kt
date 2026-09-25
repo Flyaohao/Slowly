@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.couple.translator.core.data.model.AiDto
+import com.couple.translator.core.data.repository.UsageHintStore
 import com.couple.translator.core.service.AiStreamKeepAlive
 import com.couple.translator.feature.couple.data.model.AnniversaryDto
 import com.couple.translator.feature.couple.data.model.LetterDto
@@ -95,6 +96,15 @@ data class AiChatUiState(
     val segmentNotice: Boolean = false,
     /** 补丁 A2：当前展示的是已归档会话 → 状态条「已结束的对话 · {title}」 */
     val sessionArchived: Boolean = false,
+    // ---- P-C3 §3：上下文用量可见化 ----
+    /** 当前会话已用 token（服务端口径：token_count 优先，否则字符数近似） */
+    val tokenTotal: Int = 0,
+    /** 预算上限，由 sessions/active 下发（客户端不硬编码 6000） */
+    val budget: Int = 6000,
+    /** 分段原因 timeout/budget/user_ended/scene_switch；null → 分隔行显示「新的对话」 */
+    val segmentReason: String? = null,
+    /** 80% 一次性提示（每段会话各一次，落库于 UsageHintStore） */
+    val usageHintVisible: Boolean = false,
     val error: String = "",
 ) {
     /** 输入框是否应禁用：请求中或流式输出中都禁用，避免同会话并发（含表达改写流式） */
@@ -114,6 +124,8 @@ class AiChatViewModel @Inject constructor(
     // P0-8：引用一封信 / 附上纪念日 —— 两者均已存在、Hilt 可注入，禁止新建 Repository
     private val letterRepository: LetterRepository,
     private val anniversaryRepository: AnniversaryRepository,
+    // P-C3 §3.4：80% 提示的「每段会话各一次」标记（复用全局 DataStore）
+    private val usageHintStore: UsageHintStore,
     // 流式回答期间挂前台服务保活，退后台不被系统掐断
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
@@ -194,6 +206,8 @@ class AiChatViewModel @Inject constructor(
                 sessionArchived = false,
                 evidence = null,
                 quoteChip = null,
+                // P-C3 §3.5：换场景后下一次分段的归因
+                segmentReason = "scene_switch",
             )
         }
         refreshActiveSession()
@@ -220,10 +234,17 @@ class AiChatViewModel @Inject constructor(
                 onSuccess = { info ->
                     // 跨模块 data class 属性不能 smart cast，先落到局部 val
                     val activeId = info.sessionId
+                    // P-C3 §3.1：预算/用量以服务端下发为准（进页面是刷新点之一）
                     if (activeId == null) {
                         // 该 scope 无 active：保持本地现状（新会话）
                         _uiState.update {
-                            it.copy(resumable = false, staleSessionId = null, staleSessionTitle = null)
+                            it.copy(
+                                resumable = false,
+                                staleSessionId = null,
+                                staleSessionTitle = null,
+                                tokenTotal = 0,
+                                budget = info.budget,
+                            )
                         }
                     } else if (info.resumable) {
                         if (activeId == currentId) {
@@ -234,6 +255,8 @@ class AiChatViewModel @Inject constructor(
                                     sessionTitle = info.title,
                                     resumable = true,
                                     sessionArchived = false,
+                                    tokenTotal = info.tokenTotal,
+                                    budget = info.budget,
                                 )
                             }
                         } else {
@@ -246,17 +269,24 @@ class AiChatViewModel @Inject constructor(
                                     staleSessionId = null,
                                     staleSessionTitle = null,
                                     sessionArchived = false,
+                                    tokenTotal = info.tokenTotal,
+                                    budget = info.budget,
                                 )
                             }
                             loadSession(activeId)
                         }
+                        maybeShowUsageHint()
                     } else {
-                        // 不可续接（timeout/budget）：只记「最近一段」，等用户点继续
+                        // 不可续接（timeout/budget）：只记「最近一段」，等用户点继续。
+                        // P-C3 §3.5：分段原因就取这次 active 的 archive_reason
                         _uiState.update {
                             it.copy(
                                 resumable = false,
                                 staleSessionId = activeId,
                                 staleSessionTitle = info.title,
+                                tokenTotal = info.tokenTotal,
+                                budget = info.budget,
+                                segmentReason = info.archiveReason ?: it.segmentReason,
                             )
                         }
                     }
@@ -292,6 +322,8 @@ class AiChatViewModel @Inject constructor(
                     streamingContent = "",
                     thinkingContent = "",
                     isStreaming = false,
+                    // P-C3 §3.5：手动开新段的归因（分隔行文案）
+                    segmentReason = "user_ended",
                 )
             }
         }
@@ -605,6 +637,9 @@ class AiChatViewModel @Inject constructor(
                 evidence = null,
                 // 新一次发送：上一轮的分段分隔行随新消息上下文重置（Meta 若再分段会重新置 true）
                 segmentNotice = false,
+                // P-C3 §3.5：上一轮归因已随分隔行展示过 → 消费掉，
+                // 防止后来无关的分段复用旧文案；还没展示过的（首句未分段）保留
+                segmentReason = if (it.segmentNotice) null else it.segmentReason,
                 error = "",
             )
         }
@@ -623,24 +658,35 @@ class AiChatViewModel @Inject constructor(
 
             aiRepository.chatStream(request).collect { ev ->
                 when (ev) {
-                    is AiDto.ChatStreamEvent.Meta -> _uiState.update {
-                        it.copy(
-                            sessionId = ev.sessionId,
-                            // 补丁 A1：拿到新会话即视为可续接的新对话——
-                            // stale 提示必须消失，否则状态条优先级更高的
-                            // 「上次聊到 X」会残留，点「继续」跳进已归档会话
-                            staleSessionId = null,
-                            staleSessionTitle = null,
-                            sessionArchived = false,
-                            // 服务端新建了会话（分段）→ 列表尾插分隔行
-                            segmentNotice = if (sentSessionId != null && ev.sessionId != sentSessionId) {
-                                true
-                            } else {
-                                it.segmentNotice
-                            },
-                            // 首轮：标题用用户输入前 12 字兜底（不轮询抢服务端异步标题）
-                            sessionTitle = it.sessionTitle ?: rawInput.take(12),
-                        )
+                    is AiDto.ChatStreamEvent.Meta -> {
+                        _uiState.update {
+                            it.copy(
+                                sessionId = ev.sessionId,
+                                // 补丁 A1：拿到新会话即视为可续接的新对话——
+                                // stale 提示必须消失，否则状态条优先级更高的
+                                // 「上次聊到 X」会残留，点「继续」跳进已归档会话
+                                staleSessionId = null,
+                                staleSessionTitle = null,
+                                sessionArchived = false,
+                                // 服务端新建了会话（分段）→ 列表尾插分隔行。
+                                // P-C3 §3.5：sentSessionId == null 且有归因
+                                // （user_ended / scene_switch / stale 直接发言）也算分段，
+                                // 否则这三类原因永远没机会展示；无归因的首句不插行
+                                segmentNotice = if (
+                                    (sentSessionId != null && ev.sessionId != sentSessionId) ||
+                                    (sentSessionId == null && it.segmentReason != null)
+                                ) {
+                                    true
+                                } else {
+                                    it.segmentNotice
+                                },
+                                // 首轮：标题用用户输入前 12 字兜底（不轮询抢服务端异步标题）
+                                sessionTitle = it.sessionTitle ?: rawInput.take(12),
+                                // P-C3 §3.2：meta 是刷新点之一（不逐帧）
+                                tokenTotal = ev.tokenTotal,
+                            )
+                        }
+                        maybeShowUsageHint()
                     }
 
                     // 思考增量：只喂给「深度思考」面板，不拼进正文
@@ -702,8 +748,40 @@ class AiChatViewModel @Inject constructor(
                 messages = it.messages + assistantMessage,
                 streamingContent = "",
                 isStreaming = false,
+                // P-C3 §3.2：done 是落库后的权威值；0 = 服务端未带（如 blocked），
+                // 不覆盖 meta 刚给的数
+                tokenTotal = if (ev.tokenTotal > 0) ev.tokenTotal else it.tokenTotal,
             )
         }
+        maybeShowUsageHint()
+    }
+
+    // ------------------------------------------------------------------ #
+    // P-C3 §3.4：上下文用量 80% 一次性提示
+    // ------------------------------------------------------------------ //
+
+    /**
+     * 用量过 80% 时弹一次提示——语义是「**每段会话各一次**」，
+     * 用 [UsageHintStore] 记最近提示过的 sessionId，换新段（id 不同）才会再弹。
+     * 不在场（无 sessionId / budget<=0）或已提示过则静默。
+     */
+    private fun maybeShowUsageHint() {
+        val state = _uiState.value
+        val sessionId = state.sessionId ?: return
+        val budget = state.budget
+        if (budget <= 0) return
+        if (state.tokenTotal < budget * 0.8) return
+        if (state.usageHintVisible) return
+        viewModelScope.launch {
+            if (usageHintStore.isHinted(sessionId)) return@launch
+            usageHintStore.markHinted(sessionId)
+            _uiState.update { it.copy(usageHintVisible = true) }
+        }
+    }
+
+    /** 用户关掉 80% 提示（已 markHinted，本段不再弹）。 */
+    fun dismissUsageHint() {
+        _uiState.update { it.copy(usageHintVisible = false) }
     }
 
     private fun keepPartialThenFail(message: String) {

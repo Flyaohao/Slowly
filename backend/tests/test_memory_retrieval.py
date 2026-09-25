@@ -229,7 +229,8 @@ def case_stream_starts_on_embed_timeout():
     orig_hb = ai_service._stream_with_heartbeat
     orig_persist = ai_service._persist_streamed_message
     ai_service._stream_with_heartbeat = _fake_hb
-    ai_service._persist_streamed_message = lambda **k: 1
+    # P-C3 §3.2 起 persist 契约为 (message_id, token_after)，裸 int 会在解包处 TypeError
+    ai_service._persist_streamed_message = lambda **k: (1, 0)
 
     db = SessionLocal()
     try:

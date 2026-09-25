@@ -242,6 +242,10 @@ object AiDto {
         @Json(name = "message_count") val messageCount: Int = 0,
         @Json(name = "last_message_at") val lastMessageAt: String? = null,
         @Json(name = "resumable") val resumable: Boolean = false,
+        // P-C3 §3.1：上下文用量三键（服务端 SESSION_BUDGET_TOKENS 下发，客户端不硬编码 6000）
+        @Json(name = "token_total") val tokenTotal: Int = 0,
+        @Json(name = "budget") val budget: Int = 6000,
+        @Json(name = "archive_reason") val archiveReason: String? = null,
     )
 
     /** P0-10B：POST /sessions/{id}/close 的 data */
@@ -284,6 +288,8 @@ object AiDto {
         @Json(name = "session_id") val sessionId: Long,
         @Json(name = "scene_key") val sceneKey: String,
         @Json(name = "rag_hit") val ragHit: Int = 0,
+        // P-C3 §3.2：用量刷新点（meta/done/进页面，不逐帧）
+        @Json(name = "token_total") val tokenTotal: Int = 0,
     )
 
     @JsonClass(generateAdapter = true)
@@ -312,6 +318,8 @@ object AiDto {
         @Json(name = "risk_level") val riskLevel: String? = null,
         @Json(name = "blocked") val blocked: Boolean = false,
         @Json(name = "content") val content: String = "",
+        // P-C3 §3.2：落库后的最新用量（0 = 服务端未带/落库失败，客户端不覆盖）
+        @Json(name = "token_total") val tokenTotal: Int = 0,
     )
 
     @JsonClass(generateAdapter = true)
@@ -322,7 +330,12 @@ object AiDto {
 
     /** 客户端侧事件抽象：UI 只消费它，不关心 wire format */
     sealed interface ChatStreamEvent {
-        data class Meta(val sessionId: Long, val sceneKey: String, val ragHit: Int) : ChatStreamEvent
+        data class Meta(
+            val sessionId: Long,
+            val sceneKey: String,
+            val ragHit: Int,
+            val tokenTotal: Int = 0,
+        ) : ChatStreamEvent
         data class Delta(val content: String) : ChatStreamEvent
 
         /** 思考过程增量，喂给「深度思考」面板；不参与正文拼接 */
@@ -337,6 +350,8 @@ object AiDto {
             val riskLevel: String?,
             val blocked: Boolean,
             val content: String,
+            /** P-C3 §3.2：落库后最新用量；0 表示服务端未带，不覆盖现值 */
+            val tokenTotal: Int = 0,
         ) : ChatStreamEvent
 
         data class Failure(val code: Int, val message: String) : ChatStreamEvent

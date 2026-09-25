@@ -46,7 +46,9 @@ def _run_stream(prepared: dict, chunks=None, thinking=None):
             yield (llm.KIND_CONTENT, c)
 
     def _fake_persist(**kwargs):
-        return 42
+        # P-C3 §3.2 起契约为 (message_id, token_after)；返回裸 int 会在
+        # stream_chat_events 的解包处 TypeError
+        return (42, 0)
 
     orig_hb = ai_service._stream_with_heartbeat
     orig_persist = ai_service._persist_streamed_message
