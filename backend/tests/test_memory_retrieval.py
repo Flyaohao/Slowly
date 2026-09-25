@@ -733,6 +733,129 @@ def case_prune_and_status():
         reset_store_for_tests()
 
 
+# ---------------------------------------------------------------------- #
+# P-C2 §3：画像驱动 query（既有断言一条不删，本用例纯追加）
+# ---------------------------------------------------------------------- #
+def case_profile_driven_query():
+    """画像关键词参与后，无关 query 也能召回画像相关事件（DoD#4）。"""
+    print("\n[P-C2 §3] 画像驱动 query：无关输入 + 画像关键词 → 召回重要事件")
+    import logging
+
+    from app.core.database import SessionLocal
+    from app.models.ai import AiMemory
+    from app.models.couple_relation import CoupleRelation
+    from app.services.memory_retrieval import (
+        KEYWORD_MIN_SCORE,
+        _keyword_scores,
+        build_profile_keywords,
+        build_profile_query,
+        retrieve_memory_items,
+    )
+
+    RAW = "今天天气真好啊"  # 与事件完全无关的本轮输入
+    EVENT_TEXT = "第一次带他回老家见父母那天妈妈包了饺子"
+
+    db = SessionLocal()
+    created_id = None
+    try:
+        rel = (
+            db.query(CoupleRelation)
+            .filter(CoupleRelation.status == "active")
+            .first()
+        )
+        if rel is None:
+            check("画像驱动 query（需 active relation）——已跳过", True)
+            return
+        uid, rid = rel.user_a_id, rel.id
+
+        # 事件行：importance>=1、事件时间最新 → 稳占 build_profile_keywords 的事件槽
+        m = AiMemory(
+            user_id=uid, relation_id=rid, memory_type="事件",
+            memory_text=EVENT_TEXT, visibility="couple", importance=1,
+            occurred_at=datetime.now(), created_at=datetime.now(),
+        )
+        db.add(m)
+        db.flush()
+        created_id = m.id
+        db.commit()
+        print(f"  造画像事件 id={created_id} importance=1")
+
+        # 1) 关键词三源：事件标题词（前 12 字）入选
+        kws = build_profile_keywords(
+            db, uid, rid, conflict_pattern="冷暴力",
+            profile_type=None, partner_profile_type=None,
+        )
+        title = EVENT_TEXT[:12]
+        check("画像关键词含事件标题词", title in kws, str(kws))
+
+        # 2) query 组装（纯函数）
+        q_eff = build_profile_query(RAW, kws)
+        check(
+            "画像驱动 query = 输入 + 关键词",
+            q_eff.startswith(RAW) and title in q_eff,
+            q_eff,
+        )
+
+        # 3) 关键词通道对比：无关 query 召不回；标题词是独立短语（权重 2）可过门槛
+        kw_raw = _keyword_scores(db, rid, uid, RAW)
+        check(
+            "无关 query 关键词通道召不回该事件",
+            created_id not in kw_raw,
+            str(kw_raw.get(created_id)),
+        )
+        kw_title = _keyword_scores(db, rid, uid, title)
+        check(
+            "标题词独立短语过门槛（整段命中权重 2）",
+            kw_title.get(created_id, 0.0) >= KEYWORD_MIN_SCORE,
+            str(kw_title.get(created_id)),
+        )
+        kw_eff = _keyword_scores(db, rid, uid, q_eff)
+        check(
+            "画像关键词参与后事件进入打分集",
+            kw_eff.get(created_id, 0.0) > 0.0,
+            str(kw_eff.get(created_id)),
+        )
+
+        # 4) [MEM-RET] 留痕（DoD#4）：logger 默认 WARNING，临时抬到 INFO 捕获
+        records = []
+
+        class _Capture(logging.Handler):
+            def emit(self, record):
+                records.append(record.getMessage())
+
+        logger = logging.getLogger("couple.memory_retrieval")
+        handler = _Capture()
+        old_level = logger.level
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        try:
+            items = retrieve_memory_items(
+                db, uid, rid, query=RAW, profile_keywords=kws, limit=5
+            )
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(old_level)
+        check(
+            "[MEM-RET] 画像驱动 query 留痕",
+            any("[MEM-RET] 画像驱动 query" in r for r in records),
+            str(records[-3:]),
+        )
+        result_ids = [x["id"] for x in items]
+        check(
+            "无关 query + 画像关键词召回该事件",
+            created_id in result_ids,
+            str(result_ids),
+        )
+    finally:
+        if created_id is not None:
+            row = db.get(AiMemory, created_id)
+            if row:
+                db.delete(row)
+                db.commit()
+            print(f"  已清理画像事件 [{created_id}]")
+        db.close()
+
+
 def main() -> int:
     print("=" * 72)
     print("P0-4 记忆相关性召回（五条补充约束 + §A 三缺陷补丁）")
@@ -749,6 +872,8 @@ def main() -> int:
     case_ex_relation_isolation()
     case_delete_syncs_vector()
     case_prune_and_status()
+    # P-C2 §3 追加（既有断言一条未删）
+    case_profile_driven_query()
 
     print("\n" + "=" * 72)
     if FAILURES:
