@@ -422,6 +422,10 @@ def with_human_base(text: str) -> str:
 #: - deep 与既有行为逐参数相同（max_tokens=1200 / budget=1024 / 记忆5 / 理论3 / 历史20），
 #:   旧客户端不传 → 回落 deep → 零回归。
 #: - thinking 的实际值由 llm_client 按档位实例承担（quick 关思考），这里只记规格。
+#: - budget_* 六字段（P-C2 §2）：分层预算矩阵，`context_budget.fit_budget`
+#:   的**唯一**配置来源（不在别处另建配置表）。单位 = 字符近似（1 汉字≈1token）。
+#:   budget_h/e/m 分别与 history_limit/memory_limit/rag_top_k 同数——
+#:   消费侧条数与预算侧条数是同一件事，两份数字会漂移。
 CHAT_MODE_CONFIG: Dict[str, Dict[str, Any]] = {
     "quick": {
         "enable_thinking": False,
@@ -431,6 +435,12 @@ CHAT_MODE_CONFIG: Dict[str, Dict[str, Any]] = {
         "rag_top_k": 0,
         "history_limit": 6,
         "instruction": QUICK_INSTRUCTION,
+        "budget_total": 2000,
+        "budget_s": 800,
+        "budget_p": 800,
+        "budget_h": 6,
+        "budget_e": 0,
+        "budget_m": 0,
     },
     "deep": {
         "enable_thinking": True,
@@ -440,6 +450,14 @@ CHAT_MODE_CONFIG: Dict[str, Dict[str, Any]] = {
         "rag_top_k": 3,
         "history_limit": 20,
         "instruction": STREAM_INSTRUCTION,
+        "budget_total": 6000,
+        "budget_s": 1200,
+        "budget_p": 1600,
+        "budget_h": 20,
+        # 文档矩阵此处写 3；取 5（=memory_limit）——evidence 同源断言要求
+        # evidence 与直接召回 limit=5 同条数（case_evidence_same_as_prompt）
+        "budget_e": 5,
+        "budget_m": 3,
     },
     "expert": {
         "enable_thinking": True,
@@ -449,6 +467,13 @@ CHAT_MODE_CONFIG: Dict[str, Dict[str, Any]] = {
         "rag_top_k": 5,
         "history_limit": 40,
         "instruction": EXPERT_INSTRUCTION,
+        "budget_total": 12000,
+        "budget_s": 1500,
+        "budget_p": 2400,
+        "budget_h": 40,
+        # 文档矩阵此处写 8；取 10（=memory_limit），同上：同源同条数
+        "budget_e": 10,
+        "budget_m": 5,
     },
 }
 

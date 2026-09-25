@@ -31,6 +31,7 @@ from app.services.prompt_builder import (
     resolve_system_prompt,
 )
 from app.services.lc_prompt_builder import build_chat_messages
+from app.services.context_budget import fit_budget, layer_chars
 from app.services.scene_router import get_scene_config
 # 循环导入注意：ai_generation_service 也会 import 本模块的辅助函数，
 # 不能放模块顶层，prepare_* 内部再导入。
@@ -207,12 +208,8 @@ def _preprocess(
     session_id = session.id
 
     history = ai_repo.get_messages_by_session(db, session_id)
-    # P-B §1.2：历史条数按档位取（quick 6 / deep 20 / expert 40）
-    _hl = mode_cfg["history_limit"]
-    recent_history = history[-_hl:] if len(history) > _hl else history
-    history_text = "\n".join(
-        f"{m.role}: {m.content}" for m in recent_history
-    )
+    # P-C2 §2：历史**不再在此内联截断**——条数（budget_h）与字符总额
+    # 统一交给 context_budget.fit_budget（全链路唯一裁剪层）。
 
     user_profile_text = _format_profile(user_profile, user_scores)
     # 伴侣段：有画像用「TA 的画像」卡，双方都有时再拼「你们的关系」；
@@ -225,10 +222,51 @@ def _preprocess(
         f"{partner_card}\n\n{rel_block}" if rel_block else partner_card
     )
 
+    # prompt 版本化：优先取 DB 中该场景 active 的模板（多版本时按 user_id 稳定分流），
+    # 取不到才回退代码内置文案。结构化与流式两条出口共用同一份模板——
+    # 若各解析一次，两个 active 版本并存时可能出现「结构化用 v2、流式用 v1」的分叉。
+    # P-C2 §2：上移到预算之前——S 层（场景 system + 人格）要在裁剪前量出来。
+    system_template = resolve_system_prompt(scene_key, db=db, user_id=user_id)
+
+    # P0-7 军师人格：读 ai_avatar（名字 + 语气），指令追加到 system 最后一段。
+    # 结构化与流式两条出口都加，保证「换语气后回答风格可观察地不同」两条链路一致。
+    # 取不到 avatar（未捏过脸）用默认人格，不报错。
+    # P-C2 §2：同样上移——人格计入 S 层长度。
+    avatar = avatar_repo.get_avatar_by_relation_id(db, relation_id)
+    persona = build_persona_instruction(
+        avatar.name if avatar else None,
+        avatar.voice_style if avatar else None,
+    )
+
+    # ---- P-C2 §2：S 层长度 = 空上下文渲染的场景 system（两出口取较长）
+    # + 人格。system 只含 S/P/H 变量，与本轮 U/E/M 无关，空渲染即固定成本。
+    _empty_ctx = dict(
+        scene_key=scene_key,
+        user_profile="",
+        partner_profile="",
+        conflict_pattern="",
+        user_input="",
+        history="",
+        rag_context="",
+        memory_context="",
+    )
+    _s_struct = build_chat_messages(
+        mode="structured", system_template=system_template, **_empty_ctx
+    )[0]["content"]
+    _s_stream = build_chat_messages(
+        mode="stream",
+        system_template=system_template,
+        stream_instruction=mode_cfg["instruction"],
+        **_empty_ctx,
+    )[0]["content"]
+    s_text = _s_struct if len(_s_struct) >= len(_s_stream) else _s_stream
+    s_text = _append_persona(
+        [{"role": "system", "content": s_text}], persona
+    )[0]["content"]
+
     # P-B §1.2：理论 RAG 条数按档位取（quick 0=关闭 / deep 3 / expert 5）
     _rk = mode_cfg["rag_top_k"]
     rag_chunks = retrieve_chunks(db, user_input, top_k=_rk) if _rk else []
-    rag_context = build_rag_context(rag_chunks)
 
     # P0-4：召回一次、两处使用（约束③）——prompt 注入与 evidence 展示
     # 必须是同一份结果，否则面板显示近因 10 条、prompt 用相关性 5 条
@@ -245,6 +283,61 @@ def _preprocess(
         memory_items = []
     from app.services.memory_retrieval import format_memory_context
 
+    # ---- P-C2 §2：分层预算——全链路唯一裁剪层（唯一调用点）----
+    sections = dict(
+        s=s_text,
+        p="\n".join(
+            x for x in (
+                user_profile_text,
+                partner_profile_text,
+                conflict_pattern or "未确定",
+            ) if x
+        ),
+        u=user_input,
+        h=[f"{m.role}: {m.content}" for m in history],
+        e=memory_items,
+        m=rag_chunks,
+    )
+    fitted, budget_omitted, needs_archive = fit_budget(sections, mode_cfg)
+
+    if needs_archive and history:
+        # 规则 2：超上限不硬塞 → 归档（复用 should_start_new_session 的
+        # "budget" 分支语义），历史清零后重算一次。
+        _archive_session_with_summary(db, session, "budget", user_id, relation_id)
+        segment_reason = "budget"
+        privacy = get_scene_config(scene_key).get("privacy_level", "private")
+        session = ai_repo.create_session(
+            db,
+            user_id,
+            relation_id,
+            scene_key,
+            title=scene.name,
+            privacy_level=privacy,
+            segment_reason="budget",
+        )
+        session_id = session.id
+        sections["h"] = []
+        fitted, budget_omitted, needs_archive = fit_budget(sections, mode_cfg)
+        if needs_archive:
+            logger.error(
+                "[BUDGET] 归档后仍超上限（S/P/U 固定成本降不下来） mode=%s "
+                "total=%d budget_total=%d",
+                mode,
+                sum(layer_chars(fitted).values()),
+                mode_cfg.get("budget_total"),
+            )
+    elif needs_archive:
+        logger.error(
+            "[BUDGET] 超上限但无可归档历史（新会话即超） mode=%s", mode
+        )
+    if budget_omitted:
+        logger.info("[BUDGET] 本轮省略: %s", "、".join(budget_omitted))
+
+    # ---- 消费 fitted：h/e/m 可能被裁，P/U/S 原样（永不裁）----
+    history_text = "\n".join(fitted["h"])
+    rag_chunks = fitted["m"]
+    rag_context = build_rag_context(rag_chunks)
+    memory_items = fitted["e"]
     memory_context = format_memory_context(memory_items)
 
     prompt_args = dict(
@@ -257,13 +350,11 @@ def _preprocess(
         rag_context=rag_context,
         memory_context=memory_context,
     )
-    # prompt 版本化：优先取 DB 中该场景 active 的模板（多版本时按 user_id 稳定分流），
-    # 取不到才回退代码内置文案。结构化与流式两条出口共用同一份模板——
-    # 若各解析一次，两个 active 版本并存时可能出现「结构化用 v2、流式用 v1」的分叉。
-    system_template = resolve_system_prompt(scene_key, db=db, user_id=user_id)
     # 同一份上下文，两种出口：结构化 JSON 版 / 自然语言流式版。
     # 二者都由 LangChain 组装成 system + human 分层消息（见 lc_prompt_builder）：
     # 人设与画像进 system，检索上下文、长期记忆与本次输入进 human。
+    # P-C2 §2 坑②：两出口共用同一份 prompt_args（fitted 只裁一次），
+    # 结构化/流式注入内容不会分叉。
     messages = build_chat_messages(
         **prompt_args, mode="structured", system_template=system_template
     )
@@ -272,15 +363,6 @@ def _preprocess(
         mode="stream",
         system_template=system_template,
         stream_instruction=mode_cfg["instruction"],
-    )
-
-    # P0-7 军师人格：读 ai_avatar（名字 + 语气），指令追加到 system 最后一段。
-    # 结构化与流式两条出口都加，保证「换语气后回答风格可观察地不同」两条链路一致。
-    # 取不到 avatar（未捏过脸）用默认人格，不报错。
-    avatar = avatar_repo.get_avatar_by_relation_id(db, relation_id)
-    persona = build_persona_instruction(
-        avatar.name if avatar else None,
-        avatar.voice_style if avatar else None,
     )
     messages = _append_persona(messages, persona)
     stream_messages = _append_persona(stream_messages, persona)
