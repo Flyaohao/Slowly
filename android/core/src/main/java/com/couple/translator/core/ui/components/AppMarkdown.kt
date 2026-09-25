@@ -72,6 +72,9 @@ fun AppMarkdownText(
  *   `desired − fontSpacing`，落点同样是 desired。
  */
 private fun TextView.applyAbsoluteLineHeight(sizeSp: Float, ratio: Float) {
+    // 必须先设字号再算行距：API 26/27 分支用 paint.fontMetrics 反算 naturalPx，
+    // 字号没设会取到平台默认字号（≈14sp）的度量，行距跟着算错（P-C3 §1）。
+    textSize = sizeSp
     val scaledDensity = resources.displayMetrics.scaledDensity
     val desiredPx = sizeSp * ratio * scaledDensity
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
