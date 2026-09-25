@@ -18,6 +18,8 @@ data class AvatarUiState(
     val mouthStyle: Int = 0,
     val blushStyle: Int = 0,
     val toneIndex: Int = 0,
+    /** P-B §4.4：auto → 下拉顶部显示「当前由画像自动选择」；manual → 不显示 */
+    val toneSource: String = "auto",
     val aiName: String = "翻译官",
     val isSaving: Boolean = false,
     val saved: Boolean = false,
@@ -25,7 +27,12 @@ data class AvatarUiState(
 )
 
 internal val toneValues = listOf("gentle", "calm", "direct", "cute", "mature")
-internal val toneLabels = listOf("温柔", "冷静", "直接", "可爱", "成熟")
+//: P-B §4.3：cute 的 UI 文案改「活泼阳光」（DB 值仍是 cute，枚举不动）
+internal val toneLabels = listOf("温柔", "冷静", "直接", "活泼阳光", "成熟")
+//: P-B §4.2：每档一行副文案——下拉里一次看全「这档是什么意思」
+internal val toneDescriptions = listOf(
+    "先接住情绪", "就事论事", "结论前置", "轻快鼓励", "沉稳有分寸",
+)
 
 /** 后端 voice_style 值 → UI 文案下标；未知值回退到 0（温柔）。 */
 private fun toneIndexOf(value: String?): Int = toneValues.indexOf(value).coerceAtLeast(0)
@@ -55,6 +62,7 @@ class AvatarCustomizeViewModel @Inject constructor(
                                 mouthStyle = (face["mouth_style"] ?: 0).coerceIn(0, 2),
                                 blushStyle = (face["blush_style"] ?: 0).coerceIn(0, 2),
                                 toneIndex = toneIndexOf(avatar.voiceStyle),
+                                toneSource = avatar.voiceStyleSource,
                                 aiName = avatar.name,
                             )
                         }
@@ -91,11 +99,10 @@ class AvatarCustomizeViewModel @Inject constructor(
         _uiState.update { it.copy(blushStyle = index) }
     }
 
-    fun cycleTone() {
-        _uiState.update { state ->
-            val next = (state.toneIndex + 1) % toneValues.size
-            state.copy(toneIndex = next)
-        }
+    /** P-B §4.2：下拉/底部单选直接点选（替代点一下循环一次的 cycleTone）。
+     *  手选一次即视为 manual——顶部「由画像自动选择」提示随之消失。 */
+    fun setTone(index: Int) {
+        _uiState.update { it.copy(toneIndex = index, toneSource = "manual") }
     }
 
     fun updateName(name: String) {

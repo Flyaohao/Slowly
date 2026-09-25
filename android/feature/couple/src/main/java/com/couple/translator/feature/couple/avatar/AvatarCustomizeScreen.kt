@@ -2,6 +2,7 @@ package com.couple.translator.feature.couple.avatar
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,19 +24,24 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -60,6 +66,8 @@ fun AvatarCustomizeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    // P-B §4.2：语气由「点一下循环」改为底部五选一
+    var toneSheetOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.saved) {
         if (uiState.saved) {
@@ -139,10 +147,23 @@ fun AvatarCustomizeScreen(
             SettingRow(
                 label = "语气设置",
                 value = toneLabels[uiState.toneIndex],
-                onClick = { viewModel.cycleTone() },
+                onClick = { toneSheetOpen = true },
             )
 
             Spacer(modifier = Modifier.height(40.dp))
+        }
+
+        // P-B §4.2：五选一底部面板（与军师页回答深度面板同一套视觉）
+        if (toneSheetOpen) {
+            ToneSheet(
+                selectedIndex = uiState.toneIndex,
+                source = uiState.toneSource,
+                onDismiss = { toneSheetOpen = false },
+                onSelect = { index ->
+                    toneSheetOpen = false
+                    viewModel.setTone(index)
+                },
+            )
         }
     }
 }
@@ -226,4 +247,82 @@ private fun SettingRow(
         }
     }
     AppDivider(modifier = Modifier.padding(horizontal = 20.dp))
+}
+
+/**
+ * P-B §4.2：语气五选一底部面板——与军师页「回答深度」面板同一套视觉。
+ * 一次看全 5 档 + 每档副文案；来源为 auto 时顶部提示「当前由画像自动选择」。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ToneSheet(
+    selectedIndex: Int,
+    source: String,
+    onDismiss: () -> Unit,
+    onSelect: (Int) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = AppBackground,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp)
+                .padding(bottom = 32.dp),
+        ) {
+            Text(
+                text = "语气设置",
+                style = MaterialTheme.typography.labelMedium,
+                color = AppTextSecondary,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+            if (source == "auto") {
+                Text(
+                    text = "当前由画像自动选择",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppTextTertiary,
+                    modifier = Modifier.padding(bottom = 10.dp),
+                )
+            }
+            toneLabels.indices.forEach { index ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (index == selectedIndex) AppAccentLight else AppSurface)
+                        .clickable { onSelect(index) }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = toneLabels[index],
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                            color = AppTextPrimary,
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = toneDescriptions[index],
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTextSecondary,
+                        )
+                    }
+                    if (index == selectedIndex) {
+                        Text(
+                            text = "✓",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = AppAccent,
+                        )
+                    }
+                }
+                if (index < toneLabels.lastIndex) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+    }
 }

@@ -21,6 +21,12 @@ object AiDto {
         @Json(name = "session_id") val sessionId: Long? = null,
         @Json(name = "scene_key") val sceneKey: String,
         @Json(name = "message") val message: String,
+        /**
+         * P-B §1.6：回答深度档位 quick / deep / expert，缺省 deep。
+         * 字段名必须是 `chat_mode`（`mode` 是后端输出通道，撞名会错乱）；
+         * 缺省 deep 与后端白名单回落一致，不传 = 旧客户端行为零回归。
+         */
+        @Json(name = "chat_mode") val chatMode: String = "deep",
     )
 
     @JsonClass(generateAdapter = true)

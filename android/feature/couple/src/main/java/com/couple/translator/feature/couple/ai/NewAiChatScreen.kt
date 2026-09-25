@@ -98,6 +98,8 @@ fun NewAiChatScreen(
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     var showModeSheet by remember { mutableStateOf(false) }
+    // P-B §1.6：回答深度三选一面板
+    var showChatModeSheet by remember { mutableStateOf(false) }
     // P0-8：「＋」一级菜单 + 二级引用选择器（null = 关闭）
     var showPlusSheet by remember { mutableStateOf(false) }
     var quotePickerType by remember { mutableStateOf<QuotePickerType?>(null) }
@@ -302,6 +304,8 @@ fun NewAiChatScreen(
             onSend = viewModel::sendMessage,
             isLoading = uiState.isBusy,
             onOpenPlusMenu = { showPlusSheet = true },
+            chatMode = uiState.chatMode,
+            onOpenModePanel = { showChatModeSheet = true },
         )
     }
 
@@ -381,6 +385,18 @@ fun NewAiChatScreen(
             onModeSelected = { scene ->
                 showModeSheet = false
                 dispatchScene(scene)
+            },
+        )
+    }
+
+    // P-B §1.6：回答深度三选一（⚡快速 / 🧠深度 / 🎓专家）
+    if (showChatModeSheet) {
+        ChatModeSheet(
+            current = uiState.chatMode,
+            onDismiss = { showChatModeSheet = false },
+            onSelect = { mode ->
+                showChatModeSheet = false
+                viewModel.setChatMode(mode)
             },
         )
     }
@@ -648,7 +664,8 @@ private fun QuoteChipRow(
     }
 }
 
-/** P0-8：输入区收敛为 [输入框] [＋] [发送] —— 模式/改写/引用全收进「＋」 */
+/** P0-8：输入区收敛为 [输入框] [＋] [发送] —— 模式/改写/引用全收进「＋」
+ *  P-B §1.6：输入框左下角常驻档位 chip（⚡快速/🧠深度/🎓专家），点开底部三选一。 */
 @Composable
 private fun AiInputBar(
     value: String,
@@ -656,54 +673,198 @@ private fun AiInputBar(
     onSend: () -> Unit,
     isLoading: Boolean,
     onOpenPlusMenu: () -> Unit,
+    chatMode: String,
+    onOpenModePanel: () -> Unit,
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(AppSurface)
             .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.weight(1f),
-            placeholder = { Text("想说点什么…", color = AppTextTertiary) },
-            shape = RoundedCornerShape(24.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = AppAccent,
-                unfocusedBorderColor = AppBorderLight,
-                cursorColor = AppTextPrimary,
-            ),
-            maxLines = 4,
-        )
-
-        Spacer(modifier = Modifier.width(6.dp))
-
-        IconButton(
-            onClick = onOpenPlusMenu,
-            modifier = Modifier.size(38.dp),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Add,
-                contentDescription = "更多",
-                tint = AppTextSecondary,
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("想说点什么…", color = AppTextTertiary) },
+                shape = RoundedCornerShape(24.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = AppAccent,
+                    unfocusedBorderColor = AppBorderLight,
+                    cursorColor = AppTextPrimary,
+                ),
+                maxLines = 4,
             )
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            IconButton(
+                onClick = onOpenPlusMenu,
+                modifier = Modifier.size(38.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Add,
+                    contentDescription = "更多",
+                    tint = AppTextSecondary,
+                )
+            }
+
+            IconButton(
+                onClick = onSend,
+                enabled = value.isNotBlank() && !isLoading,
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(if (value.isNotBlank() && !isLoading) AppTextPrimary else AppBorderLight),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Send,
+                    contentDescription = "发送",
+                    tint = AppSurface,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
 
-        IconButton(
-            onClick = onSend,
-            enabled = value.isNotBlank() && !isLoading,
+        // P-B §1.6：档位 chip 在输入框左下角常驻——档位决定这条消息多快多深，
+        // 发送前必须一眼可见、一点可改；藏进「＋」等于让用户以为没这个能力。
+        val option = chatModeOptionOf(chatMode)
+        Row(
             modifier = Modifier
-                .size(38.dp)
-                .clip(CircleShape)
-                .background(if (value.isNotBlank() && !isLoading) AppTextPrimary else AppBorderLight),
+                .fillMaxWidth()
+                .padding(top = 6.dp),
         ) {
-            Icon(
-                Icons.AutoMirrored.Filled.Send,
-                contentDescription = "发送",
-                tint = AppSurface,
-                modifier = Modifier.size(18.dp),
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(AppSurfaceMuted)
+                    .clickable(onClick = onOpenModePanel)
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "${option.icon} ${option.label}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AppTextSecondary,
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "▾",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppTextTertiary,
+                )
+            }
+        }
+    }
+}
+
+/** P-B §1.6：三档选项定义——chip 与底部面板共用一份，文案是验收项（P2）逐字核对的。 */
+private data class ChatModeOption(
+    val key: String,
+    val icon: String,
+    val label: String,
+    /** 可感知差异（速度/长度），不是参数罗列 */
+    val benefit: String,
+    /** 检索深度差异 */
+    val retrieval: String,
+)
+
+private val CHAT_MODE_OPTIONS = listOf(
+    ChatModeOption("quick", "⚡", "快速", "1 秒内先给一句能说的话", "不查记忆"),
+    ChatModeOption("deep", "🧠", "深度", "会先想清楚再答，约 15 秒", "查记忆 + 理论"),
+    ChatModeOption(
+        "expert", "🎓", "专家",
+        "分点讲清依据，附替代解释，约 20 秒", "查全部记忆 + 事件时间线",
+    ),
+)
+
+private fun chatModeOptionOf(key: String): ChatModeOption =
+    CHAT_MODE_OPTIONS.firstOrNull { it.key == key } ?: CHAT_MODE_OPTIONS[1] // 缺省 deep
+
+/**
+ * P-B §1.6：回答深度三选一面板。与 [ModeDrawerSheet] 同一套 ModalBottomSheet 视觉。
+ * 每张卡写明可感知差异（速度 + 检索），只写档位名会被用户视为「劣质感」。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChatModeSheet(
+    current: String,
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = AppBackground,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp)
+                .padding(bottom = 32.dp),
+        ) {
+            Text(
+                text = "回答深度",
+                style = MaterialTheme.typography.labelMedium,
+                color = AppTextSecondary,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+            CHAT_MODE_OPTIONS.forEach { option ->
+                ChatModeOptionCard(
+                    option = option,
+                    selected = option.key == current,
+                    onClick = { onSelect(option.key) },
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatModeOptionCard(
+    option: ChatModeOption,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) AppAccentLight else AppSurface)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "${option.icon} ${option.label}",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = AppTextPrimary,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = option.benefit,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTextSecondary,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = option.retrieval,
+                style = MaterialTheme.typography.labelSmall,
+                color = AppTextTertiary,
+            )
+        }
+        if (selected) {
+            Text(
+                text = "✓",
+                style = MaterialTheme.typography.bodyLarge,
+                color = AppAccent,
             )
         }
     }

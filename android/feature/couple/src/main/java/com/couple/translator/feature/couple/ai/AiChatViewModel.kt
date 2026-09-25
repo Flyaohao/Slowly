@@ -59,6 +59,8 @@ data class AiChatUiState(
     val thinkingSeconds: Int = 0,
     val isStreaming: Boolean = false,
     val inputText: String = "",
+    /** P-B §1.6：回答深度档位（quick/deep/expert）——只存 UiState，不进 DataStore */
+    val chatMode: String = "deep",
     val isLoading: Boolean = false,
     val isLoadingMessages: Boolean = false,
     val showRewriteSheet: Boolean = false,
@@ -447,6 +449,11 @@ class AiChatViewModel @Inject constructor(
         _uiState.update { it.copy(inputText = text) }
     }
 
+    /** P-B §1.6：切换回答深度档位（quick/deep/expert），仅存 UiState 不持久化 */
+    fun setChatMode(mode: String) {
+        _uiState.update { it.copy(chatMode = mode) }
+    }
+
     fun dismissRewriteSheet() {
         stopRewrite()
         _uiState.update {
@@ -608,6 +615,7 @@ class AiChatViewModel @Inject constructor(
                 sessionId = state.sessionId,
                 sceneKey = state.sceneKey,
                 message = text,
+                chatMode = state.chatMode,
             )
 
             // 发出时的 sessionId：Meta 回来若不同 = 服务端发生了分段（§2.5/改动二）
