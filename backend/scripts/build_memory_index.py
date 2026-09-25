@@ -12,6 +12,12 @@
 
 幂等依据：chroma id == str(ai_memory.id)，逐条查 get(ids=[id])。
 与 build_vectorstore.py 的 couple_theory 集合互不干扰（同目录不同 collection）。
+
+v3.2 阶段 A 注意（§8 ③）：
+  本脚本只写向量、**不改 index_status**。legacy 行迁移后保持
+  index_status='skipped'，索引 worker 不会接管它们；把存量行批量翻成
+  pending_upsert 走新 CAS 链路是阶段 B 项，**现在不做**。
+  INDEX_WORKER 开启后，本脚本仍可用于缺向量回填 / 孤儿清理（--backfill/--prune）。
 """
 from __future__ import annotations
 

@@ -145,26 +145,44 @@ def case_partner_couple_labeled():
 # ④ embedding 超时降级
 # ---------------------------------------------------------------------- #
 def case_embedding_timeout_fallback():
-    print("\n[④] embedding 超时 → 近因降级、不抛错")
+    # v3.2 §5.2 口径变更：embed 失败不再「一律近因」——近因还是空由
+    # memory_need 路由表决定。拆两例：
+    #   recent_context：双通道失败 → 近因（新鲜度就是本需求）
+    #   personal_fact ：双通道失败 → **空**（宁可漏记，不硬凑近因）
+    print("\n[④] embedding 超时 → 按 memory_need 路由（近因 or 空），不抛错")
     from app.core.database import SessionLocal
     from app.models.couple_relation import CoupleRelation
     from app.services import memory_retrieval as mr
 
     db = SessionLocal()
+    orig_embed = mr._embed_query_fast
+    orig_kw = mr._keyword_scores
+    mr._embed_query_fast = lambda *a, **k: None  # 模拟超时/失败
+    mr._keyword_scores = lambda *a, **k: {}      # 双通道都失败，结果确定
     try:
         rel = db.query(CoupleRelation).filter(CoupleRelation.status == "active").first()
-        orig = mr._embed_query_fast
-        mr._embed_query_fast = lambda *a, **k: None  # 模拟超时/失败
-        try:
-            t0 = time.time()
-            items = mr.retrieve_memory_items(db, rel.user_a_id, rel.id, query="随便什么查询")
-            elapsed = time.time() - t0
-            check("返回 list（降级近因）", isinstance(items, list) and len(items) > 0,
-                  f"len={len(items)}")
-            check("耗时 < 3s（不拖首字）", elapsed < 3.0, f"{elapsed:.2f}s")
-        finally:
-            mr._embed_query_fast = orig
+
+        t0 = time.time()
+        items_recent = mr.retrieve_memory_items(
+            db, rel.user_a_id, rel.id, query="随便什么查询",
+            memory_need="recent_context",
+        )
+        elapsed = time.time() - t0
+        check("recent_context：失败 → 近因非空",
+              isinstance(items_recent, list) and len(items_recent) > 0,
+              f"len={len(items_recent)}")
+        check("耗时 < 3s（不拖首字）", elapsed < 3.0, f"{elapsed:.2f}s")
+
+        items_fact = mr.retrieve_memory_items(
+            db, rel.user_a_id, rel.id, query="随便什么查询",
+            memory_need="personal_fact",
+        )
+        check("personal_fact：失败 → 空列表（无命中即有效答案，不硬凑近因）",
+              isinstance(items_fact, list) and len(items_fact) == 0,
+              f"len={len(items_fact)}")
     finally:
+        mr._embed_query_fast = orig_embed
+        mr._keyword_scores = orig_kw
         db.close()
 
 
@@ -262,11 +280,18 @@ def case_evidence_same_as_prompt():
     from app.core.database import SessionLocal
     from app.models.couple_relation import CoupleRelation
     from app.services import memory_retrieval as mr
+    from app.services import ai_service as ais
     from app.services.ai_service import _preprocess
 
-    # 确定性：强制走近因（embed 返回 None），两边应逐条一致
-    orig = mr._embed_query_fast
+    # 确定性：双通道置空 + 两边同 memory_need（recent_context）强制走近因，
+    # 结果逐条可复现。（v3.2 §5.2：personal_fact 下失败是空，须显式指定
+    # recent_context 才能测「两边同路径」这件事）
+    orig_embed = mr._embed_query_fast
+    orig_kw = mr._keyword_scores
+    orig_gsc = ais.get_scene_config
     mr._embed_query_fast = lambda *a, **k: None
+    mr._keyword_scores = lambda *a, **k: {}
+    ais.get_scene_config = lambda sk: {**orig_gsc(sk), "memory_need": "recent_context"}
     db = SessionLocal()
     try:
         rel = db.query(CoupleRelation).filter(CoupleRelation.status == "active").first()
@@ -275,9 +300,10 @@ def case_evidence_same_as_prompt():
         ev = ctx.get("evidence") or {}
         ev_items = ev.get("recalled_memories") or []
 
-        # 重新用同一入口取 prompt 侧（同一 query 降级路径）
+        # 重新用同一入口取 prompt 侧（同一 query 同一 memory_need 同路径）
         prompt_items = mr.retrieve_memory_items(
-            db, rel.user_a_id, rel.id, query="他三天没回消息，依据是什么？"
+            db, rel.user_a_id, rel.id, query="他三天没回消息，依据是什么？",
+            memory_need="recent_context",
         )
         check("evidence 非空（本地有记忆）", len(ev_items) > 0, str(len(ev_items)))
         ev_pairs = [(m.get("content"), m.get("source")) for m in ev_items]
@@ -294,13 +320,14 @@ def case_evidence_same_as_prompt():
         check("同请求只召回一次（_preprocess 源码级）",
               True)  # 实现上 memory_items 单变量，见下方源码断言
     finally:
-        mr._embed_query_fast = orig
+        mr._embed_query_fast = orig_embed
+        mr._keyword_scores = orig_kw
+        ais.get_scene_config = orig_gsc
         db.rollback()
         db.close()
 
     # 源码级：_preprocess 不再出现第二次 get_memories/get_memory_context 召回
     import inspect
-    from app.services import ai_service as ais
     src = inspect.getsource(ais._preprocess)
     check("无 get_memories(...) 二次召回", "get_memories(" not in src)
     check("使用 retrieve_memory_items", "retrieve_memory_items(" in src)
@@ -334,9 +361,9 @@ def case_backfill_idempotent_and_old_recallable():
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "scripts", "build_memory_index.py",
     )
-    r1 = subprocess.run([py, script, "--backfill"], capture_output=True, text=True, timeout=120)
+    r1 = subprocess.run([py, script, "--backfill"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
     check("第一次 backfill 退出 0", r1.returncode == 0, (r1.stdout + r1.stderr)[-200:])
-    r2 = subprocess.run([py, script, "--backfill"], capture_output=True, text=True, timeout=120)
+    r2 = subprocess.run([py, script, "--backfill"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
     check("第二次 backfill 退出 0（幂等）", r2.returncode == 0, (r2.stdout + r2.stderr)[-200:])
     check("第二次新增为 0（幂等）",
           "新增 0" in r2.stdout or "新增 0" in (r2.stdout + r2.stderr),
@@ -345,7 +372,7 @@ def case_backfill_idempotent_and_old_recallable():
     # 老记忆（回填前无向量）可被相关 query 召回
     from app.core.database import SessionLocal
     from app.models.couple_relation import CoupleRelation
-    from app.services.memory_retrieval import retrieve_memory_items, SCORE_THRESHOLD
+    from app.services.memory_retrieval import retrieve_memory_items
 
     db = SessionLocal()
     try:
@@ -369,7 +396,9 @@ def case_backfill_idempotent_and_old_recallable():
         check(f"回填后老记忆 id={oldest.id} 可被召回", oldest.id in hit_ids,
               f"hit={hit_ids}")
         if items and items[0].get("score") is not None:
-            check("命中分 ≥ 阈值", items[0]["score"] >= SCORE_THRESHOLD,
+            # v3.2 §5.1 口径：准入由通道原始分 floor 把关，融合分只排序
+            # （>0 即证明它过了通道准入进来，不再用融合分卡相关度）
+            check("命中分 > 0（已过通道原始分准入）", items[0]["score"] > 0,
                   str(items[0]["score"]))
     finally:
         db.close()
@@ -404,7 +433,6 @@ def case_cross_relation_isolation():
     from app.models.couple_relation import CoupleRelation
     from app.services.embedding import embeddings
     from app.services.memory_retrieval import (
-        SCORE_THRESHOLD,
         _get_collection,
         reset_store_for_tests,
         retrieve_memory_items,
@@ -495,7 +523,9 @@ def case_cross_relation_isolation():
         check("本 relation 相关记忆被向量召回", len(own_scored) >= 1,
               f"own_scored={[x['id'] for x in own_scored]}")
         if scored:
-            check("命中分 ≥ 阈值", all((x["score"] or 0) >= SCORE_THRESHOLD for x in scored),
+            # v3.2 §5.1 口径：融合分只排序（>0 = 已过通道原始分准入）
+            check("命中分 > 0（已过通道原始分准入）",
+                  all((x["score"] or 0) > 0 for x in scored),
                   str([x["score"] for x in scored]))
     finally:
         for gid in ghost_other + created_own:
@@ -672,6 +702,9 @@ def case_prune_and_status():
 
     reset_store_for_tests()
     col = _get_collection()
+    if col is None:
+        check("prune/status（需 chroma）collection 可打开", False, "collection=None")
+        return
     db = SessionLocal()
     try:
         chroma_ids = set(int(x) for x in (col.get(include=[])["ids"] or [])) if col else set()
@@ -680,7 +713,7 @@ def case_prune_and_status():
     finally:
         db.close()
 
-    r1 = subprocess.run([py, script, "--prune"], capture_output=True, text=True, timeout=120)
+    r1 = subprocess.run([py, script, "--prune"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
     out1 = r1.stdout + r1.stderr
     check("第一次 --prune 退出 0", r1.returncode == 0, out1[-300:])
     if orphans_before:
@@ -692,7 +725,7 @@ def case_prune_and_status():
     else:
         print("  注：当前无孤儿（可能已被前序用例清掉），幂等路径仍需验证")
 
-    r2 = subprocess.run([py, script, "--prune"], capture_output=True, text=True, timeout=120)
+    r2 = subprocess.run([py, script, "--prune"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
     out2 = r2.stdout + r2.stderr
     check("第二次 --prune 退出 0（幂等）", r2.returncode == 0, out2[-300:])
     check("第二次删除 0 条", "删除孤儿 0" in out2 or "删除 0" in out2 or "删除孤儿 0 条" in out2,
@@ -717,7 +750,7 @@ def case_prune_and_status():
                 metadatas=[{"memory_id": fake_orphan, "user_id": 0,
                             "relation_id": 0, "visibility": "private",
                             "memory_type": "偏好"}])
-        rs = subprocess.run([py, script, "--status"], capture_output=True, text=True, timeout=60)
+        rs = subprocess.run([py, script, "--status"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
         outs = rs.stdout + rs.stderr
         check("--status 退出 0", rs.returncode == 0, outs[-200:])
         check("--status 打印孤儿向量数（不是用 max(0,…) 掩盖）",

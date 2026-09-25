@@ -34,6 +34,87 @@ SESSION_SUMMARY_MEMORY_TYPE = "session_summary"  # 会话归档摘要（已在�
 #: 太短的输入没有可沉淀的信息，直接跳过，省一次模型调用
 _MIN_INPUT_LEN = 6
 
+#: memory_type → v3.2 封闭谓词（计划 Step 6 粗映射；表外类型落 other）
+_MEMORY_TYPE_PREDICATE = {
+    "偏好": "preference",
+    "关系事实": "behavior",
+    "沟通雷区": "constraint",
+    "核心诉求": "goal",
+    "事件": "event",
+}
+
+
+def _apply_v3_fields(
+    memory: AiMemory,
+    *,
+    user_id: int,
+    memory_type: str,
+    source: Optional[str],
+    pipeline_task_id: Optional[int] = None,
+    item_fingerprint: Optional[str] = None,
+    v3_identity=None,
+) -> None:
+    """双写：在同一条 AiMemory 上补齐 v3.2 §1~4 契约列（flag 开才调用）。
+
+    身份优先用调用方给的 `v3_identity`（pipeline 路径，已 enforce 过仍再
+    enforce 一次——幂等），否则按 source 默认推导；**推导失败由调用方捕获**
+    标 `legacy_pending`，绝不让记忆落库失败（§6.3 补偿队列指标桩）。
+    """
+    from app.core import config as app_config
+    from app.services.memory_fingerprint import PIPELINE_VERSION
+    from app.services.memory_identity import Identity, enforce_identity
+    from app.services.memory_ownership import (
+        default_ownership,
+        epistemic_default,
+    )
+    from app.services.memory_registry import (
+        build_fact_key,
+        cardinality_for,
+        normalize_object_key,
+    )
+
+    # 身份四元组
+    if v3_identity is None:
+        epi, origin = epistemic_default(source)
+        if origin == "business_event" or epi == "system_event":
+            identity = Identity(None, None, "system_event", "business_event")
+        else:
+            identity = Identity(user_id, user_id, epi, origin)
+    elif isinstance(v3_identity, Identity):
+        identity = v3_identity
+    else:
+        identity = Identity(**v3_identity)
+    enforced = enforce_identity(identity)
+    memory.reported_by_user_id = enforced.reported_by_user_id
+    memory.attributed_to_user_id = enforced.attributed_to_user_id
+    memory.epistemic_type = enforced.epistemic_type
+    memory.assertion_origin = enforced.assertion_origin
+
+    # 主体与谓词注册表
+    subject_role_user = user_id
+    memory.subject_type = "user"
+    memory.subject_user_id = subject_role_user
+    predicate = _MEMORY_TYPE_PREDICATE.get(memory_type, "other")
+    object_key, registry_miss = normalize_object_key(None)  # 非 chat 路径无词典输入
+    memory.predicate_code = predicate
+    memory.object_key = object_key
+    memory.registry_miss = registry_miss
+    memory.cardinality = cardinality_for(predicate)
+    memory.fact_key = build_fact_key("user", subject_role_user, predicate, object_key)
+
+    # 所有权（§6.2）
+    owner, creator, ownership_type = default_ownership(source, user_id=user_id)
+    memory.owner_user_id = owner
+    memory.created_by_user_id = creator
+    memory.ownership_type = ownership_type
+
+    # 管线与索引（§4；index_status 显式写，绝不依赖 DB 默认）
+    memory.schema_version = "v3"
+    memory.pipeline_task_id = pipeline_task_id
+    memory.item_fingerprint = item_fingerprint
+    memory.pipeline_version = PIPELINE_VERSION
+    memory.index_status = "pending_upsert" if app_config.MEMORY_ASSERTION_INDEX_WORKER else "skipped"
+
 
 def create_memory(
     db: Session,
@@ -47,11 +128,22 @@ def create_memory(
     source: Optional[str] = None,
     source_id: Optional[int] = None,
     importance: int = 0,
+    pipeline_task_id: Optional[int] = None,
+    item_fingerprint: Optional[str] = None,
+    v3_identity=None,
 ) -> dict:
     """落库一条记忆。P-C1 §3：事件四要素透传（全部可选，旧调用逐字节不变）。
 
     ``occurred_at`` 为空时存 ``created_at``（只在为空时回填，不覆盖已有值）。
+
+    v3.2 双写（`MEMORY_ASSERTION_DUAL_WRITE=1`）：同事务补齐 v3 契约列；
+    推导失败仍提交但标 `schema_version='legacy_pending'` + `[MEM-V3-COMP]`
+    告警（补偿队列指标桩）。`MEMORY_ASSERTION_INDEX_WORKER=1` 时新行
+    `index_status='pending_upsert'` 并**跳过**旧向量化钩子（单一索引属主）。
+    flag 全关时本函数行为与 v1 逐字节一致。
     """
+    from app.core import config as app_config
+
     memory = AiMemory(
         user_id=user_id,
         relation_id=relation_id,
@@ -63,6 +155,25 @@ def create_memory(
         source_id=source_id,
         importance=importance,
     )
+    if app_config.MEMORY_ASSERTION_DUAL_WRITE:
+        try:
+            _apply_v3_fields(
+                memory,
+                user_id=user_id,
+                memory_type=memory_type,
+                source=source,
+                pipeline_task_id=pipeline_task_id,
+                item_fingerprint=item_fingerprint,
+                v3_identity=v3_identity,
+            )
+        except Exception:
+            # §6.3：推导失败不阻塞落库，标 legacy_pending 进补偿
+            logger.warning(
+                "[MEM-V3-COMP] v3 列推导失败，标 legacy_pending "
+                "user=%s type=%s source=%s",
+                user_id, memory_type, source, exc_info=True,
+            )
+            memory.schema_version = "legacy_pending"
     db.add(memory)
     db.flush()
     if memory.occurred_at is None:
@@ -73,12 +184,23 @@ def create_memory(
     db.commit()
     saved = _to_dict(memory)
     # P0-4：新记忆异步向量化（约束②写入侧）。失败只记日志，不影响落库。
-    try:
-        from app.services.memory_retrieval import vectorize_memory_async
+    # v3.2：INDEX_WORKER=1 时旧钩子让位（新行 pending_upsert 由 worker 领取）。
+    if not app_config.MEMORY_ASSERTION_INDEX_WORKER:
+        try:
+            from app.services.memory_retrieval import vectorize_memory_async
 
-        vectorize_memory_async(saved)
-    except Exception:
-        logger.warning("[MEMORY] 向量化挂钩异常（不影响落库）", exc_info=True)
+            vectorize_memory_async(saved)
+        except Exception:
+            logger.warning("[MEMORY] 向量化挂钩异常（不影响落库）", exc_info=True)
+    elif app_config.MEMORY_ASSERTION_DUAL_WRITE:
+        # v3.2 D3：非 chat 触发点写入 pending_upsert 行，拉起索引 worker
+        # （进程内懒启动；flags 关时下面的门直接放行=旧行为）
+        try:
+            from app.services.memory_pipeline_worker import ensure_started
+
+            ensure_started()
+        except Exception:
+            logger.warning("[MEMORY] 启动索引 worker 异常（不影响落库）", exc_info=True)
     return saved
 
 
@@ -135,12 +257,31 @@ def update_importance(db: Session, memory_id: int, user_id: int, importance: int
 
 
 def get_couple_memories(db: Session, user_id: int, relation_id: int) -> List[dict]:
+    """读取本关系 couple 可见记忆。
+
+    IDOR 修复（v3.2 附录 §5.2）：强制 current_user ∈ 关系成员，否则
+    `ValueError`（router 映射 403）——仅靠 relation_id 不足以授权，
+    任何拿到关系外 id 的调用方都必须被挡在这里。
+    """
+    from app.models.couple_relation import CoupleRelation
+
+    relation = (
+        db.query(CoupleRelation)
+        .filter(CoupleRelation.id == relation_id)
+        .first()
+    )
+    if relation is None or user_id not in (
+        relation.user_a_id,
+        relation.user_b_id,
+    ):
+        raise ValueError("50002")  # router 层翻译为 403，不泄露关系是否存在
     memories = (
         db.query(AiMemory)
         .filter(
             and_(
                 AiMemory.relation_id == relation_id,
                 AiMemory.visibility == "couple",
+                AiMemory.status == "active",
             )
         )
         .order_by(AiMemory.created_at.desc())
@@ -155,13 +296,17 @@ def get_memory_context(
     relation_id: int,
     limit: int = 10,
     query: str = "",
+    *,
+    memory_need: str = "personal_fact",
 ) -> str:
     """prompt 注入用的记忆片段。
 
     P0-4 起改走 `memory_retrieval.retrieve_memory_items`：
-      - 传了 query → 向量相关性召回（阈值 0.35），无命中/超时降级近因
-      - 未传 query → 近因降级（agent 工具等无 query 调用方行为不变）
+      - 传了 query → 两段式混合召回（通道 floor 原始分 + 排序层）
+      - 未传 query → 按 memory_need 路由（recent_context/空 query 契约
+        → 近因；personal_fact/history → 空，v3.2 §5.2）
     可见性：自己 private + 本关系 couple（约束①），不含对方 private。
+    memory_need 由**服务端**调用方传（场景配置/工具契约），不接受模型指定。
     """
     from app.services.memory_retrieval import (
         format_memory_context,
@@ -169,7 +314,12 @@ def get_memory_context(
     )
 
     items = retrieve_memory_items(
-        db, user_id, relation_id, query=query or "", limit=max(limit, 10)
+        db,
+        user_id,
+        relation_id,
+        query=query or "",
+        limit=max(limit, 10),
+        memory_need=memory_need,
     )
     return format_memory_context(items)
 

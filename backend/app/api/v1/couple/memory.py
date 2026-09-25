@@ -37,7 +37,16 @@ def get_couple_memories(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    memories = memory_service.get_couple_memories(db, current_user.id, relation_id)
+    # IDOR 守卫（v3.2 附录 §5.2）：非关系成员一律 403，不区分「关系不存在」
+    try:
+        memories = memory_service.get_couple_memories(
+            db, current_user.id, relation_id
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": 50002, "message": "无权访问该关系的记忆", "data": None},
+        )
     return ApiResponse(data=memories)
 
 

@@ -298,6 +298,11 @@ def _preprocess(
             limit=_ml,
             profile_keywords=profile_keywords,
             scene_key=scene_key,
+            # v3.2 §5.2：memory_need 是**服务端**场景配置字段（D4），模型/
+            # 用户不可指定；阶段 A 无场景显式赋值 → 保守默认 personal_fact
+            memory_need=get_scene_config(scene_key).get(
+                "memory_need", "personal_fact"
+            ),
         )[:_ml]
     else:
         memory_items = []
@@ -506,6 +511,21 @@ def chat(
     )
 
     session.title = session.title or scene.name
+    # v3.2 §8 双写（D2）：助手消息**同一事务**入队蒸馏任务（T1，savepoint
+    # 撞键幂等）；flag 关时完全不碰管线，逐字节走旧路径。
+    from app.core import config as _app_config
+
+    if _app_config.MEMORY_ASSERTION_DUAL_WRITE and relation_id:
+        from app.services.memory_pipeline import enqueue_task
+
+        enqueue_task(
+            db,
+            relation_id=relation_id,
+            trigger_kind="chat_turn",
+            source_type="chat_message",
+            source_id=assistant_msg.id,
+            requested_by_user_id=user_id,
+        )
     db.commit()
 
     # P0-10A 改动六：第 1 轮回答落库后异步生成 ≤12 字标题
@@ -519,10 +539,16 @@ def chat(
         )
 
     # 记忆沉淀：由模型判断本轮是否含值得长期记住的信息，写进 AiMemory。
-    # 放后台线程 + 独立会话，既不占用本次响应时间，也不受请求级会话销毁影响。
-    distill_in_background(
-        user_id, relation_id, scene_key, ctx["user_input"], assistant_msg.content
-    )
+    # flag 开（DUAL_WRITE=1）→ 后台 worker 从队列取（D2）；
+    # flag 关 → 放后台线程 + 独立会话（旧路径，零行为变化）。
+    if _app_config.MEMORY_ASSERTION_DUAL_WRITE:
+        from app.services.memory_pipeline_worker import ensure_started
+
+        ensure_started()
+    else:
+        distill_in_background(
+            user_id, relation_id, scene_key, ctx["user_input"], assistant_msg.content
+        )
 
     return {
         "session_id": session_id,
@@ -820,6 +846,20 @@ def _persist_streamed_message(
             risk_level=risk_level,
             chat_mode=chat_mode,
         )
+        # v3.2 §8 双写（D2）：与助手消息同一事务入队（T1），flag 关不碰管线
+        from app.core import config as _app_config
+
+        if _app_config.MEMORY_ASSERTION_DUAL_WRITE and relation_id:
+            from app.services.memory_pipeline import enqueue_task
+
+            enqueue_task(
+                db,
+                relation_id=relation_id,
+                trigger_kind="chat_turn",
+                source_type="chat_message",
+                source_id=msg.id,
+                requested_by_user_id=user_id,
+            )
         db.commit()
         # P0-10A 改动六：流式链路同样在第 1 轮回答后生成标题
         from app.models.ai import AiChatSession as _Sess
@@ -835,12 +875,18 @@ def _persist_streamed_message(
                 scene_name=scene.name if scene else scene_key,
                 scene_key=scene_key,
             )
-        # 记忆沉淀同样走后台线程 + 独立会话：本函数所在阶段请求级 db 已经销毁，
-        # 不能复用这里的 db 之外的任何会话。
+        # 记忆沉淀：flag 开 → 后台 worker 从队列取（D2，与非流式一致）；
+        # flag 关 → 旧后台线程 + 独立会话（本函数所在阶段请求级 db 已经销毁，
+        # 不能复用这里的 db 之外的任何会话）。
         if user_id and relation_id:
-            distill_in_background(
-                user_id, relation_id, scene_key, user_input, content
-            )
+            if _app_config.MEMORY_ASSERTION_DUAL_WRITE:
+                from app.services.memory_pipeline_worker import ensure_started
+
+                ensure_started()
+            else:
+                distill_in_background(
+                    user_id, relation_id, scene_key, user_input, content
+                )
         return msg.id, token_after
     except Exception:
         db.rollback()
