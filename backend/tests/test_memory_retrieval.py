@@ -8,6 +8,7 @@ P0-4 验收：记忆相关性召回（按五条补充约束）。
   ③ evidence 与 prompt 同一份 memory_items（同请求单次召回）
   ④ embedding 3s 超时/失败 → 近因降级，不抛错；mock 超时后流式仍能开始
   ⑤ couple 数据前提：本地 0 行 couple，测试内主动造
+  §8.2 P-C1：降级按 occurred_at 排（NULL 回退 created_at，不变量④）
 
 运行：cd backend && python tests/test_memory_retrieval.py
 """
@@ -164,6 +165,50 @@ def case_embedding_timeout_fallback():
         finally:
             mr._embed_query_fast = orig
     finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------- #
+# §8.2 P-C1：降级按事件时间排（不变量④，只增不改既有断言）
+# ---------------------------------------------------------------------- #
+def case_fallback_orders_by_occurred_at():
+    print("\n[§8.2] 降级按 occurred_at 排：NULL 回退 created_at，而非 created_at 盲排")
+    from app.core.database import SessionLocal
+    from app.models.couple_relation import CoupleRelation
+    from app.services.memory_retrieval import retrieve_memory_items
+    from app.services.memory_service import create_memory, delete_memory
+
+    db = SessionLocal()
+    uid = None
+    ids = []
+    try:
+        rel = db.query(CoupleRelation).filter(CoupleRelation.status == "active").first()
+        uid, rid = rel.user_a_id, rel.id
+        stamp = datetime.now().strftime("%H%M%S%f")
+        # 行B 先插：occurred_at=NULL → coalesce 回退 created_at≈今天
+        b = create_memory(db, uid, rid, "事件", "占位B-时间回退取created-%s" % stamp,
+                          "private", source="chat_summary")
+        # 行A 后插：created_at 更新，但 occurred_at=2 天前
+        a = create_memory(db, uid, rid, "事件", "占位A-事件时间2天前-%s" % stamp,
+                          "private", occurred_at=datetime.now() - timedelta(days=2),
+                          source="diary")
+        ids = [a["id"], b["id"]]
+        items = retrieve_memory_items(db, uid, rid, query=None, limit=50)
+        order = [it["id"] for it in items]
+        check("两行都进降级结果", set(ids) <= set(order),
+              f"ids={ids} head={[i for i in order[:6]]}")
+        if set(ids) <= set(order):
+            # 按 created_at 盲排 → A 在前（抓错①）；按 occurred_at 且 NULL 垫底
+            # → B 落后（抓错②）；coalesce 正确才 B(today) 在 A(2天前) 前
+            check("B（今天）排在 A（2天前）之前——按事件时间排",
+                  order.index(b["id"]) < order.index(a["id"]),
+                  f"B@{order.index(b['id'])} A@{order.index(a['id'])}")
+    finally:
+        for mid in ids:
+            try:
+                delete_memory(db, mid, uid)
+            except Exception:
+                pass
         db.close()
 
 
@@ -694,6 +739,7 @@ def main() -> int:
     case_visibility_rules()
     case_partner_couple_labeled()
     case_embedding_timeout_fallback()
+    case_fallback_orders_by_occurred_at()
     case_stream_starts_on_embed_timeout()
     case_evidence_same_as_prompt()
     case_backfill_idempotent_and_old_recallable()

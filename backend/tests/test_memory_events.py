@@ -3,8 +3,8 @@ P0-3 验收：统一记忆事件入口（memory_events）。
 
 源覆盖（v1.2 裁决后）：
   实际接线 5 源：letter / museum / anniversary / dual / questionnaire
-  diary 缺席：DiaryEntry 无 relation_id、AiMemory.relation_id NOT NULL，
-             且日记为单身专属——见任务单差异 1 裁决，连跳过分支都不写
+  diary 接线（P-C1 §5.1）：v2_7 起 DiaryEntry.relation_id 可空，
+             write_diary_memory 有 active relation 才写——原「diary 缺席」作废
   practice 缺席：真机路径复现判定 b（双方各自 start→各 submit 自己的 record，
              status 永远停在 both_completed，summarized 不可达）——
              见差异 2 裁决与 §0.5.4#2，本轮不接、不修状态机
@@ -14,8 +14,9 @@ P0-3 验收：统一记忆事件入口（memory_events）。
      source 正确、AI 源带 focus、结构化源走 save_structured_memory
   b) focus="" 的旧路径 user 消息与改动前逐字节一致（防回归）
   c) 超长 content 截断到 1200 字
-  d) 重复 anniversary 事件 → 只落一条记忆（幂等，复用同一套去重）
-  e) 超短 content / 空 content → 不调模型、不落库、不抛异常
+  d) 重复 anniversary 事件 → 首次双写 2 条、重复不再 add（幂等，同一套去重）
+  e) 空 content → 不落库；过短 / LLM 异常 → 事件行仍落、不调模型、不抛
+     （P-C1 §4：事件行无条件先写——原「过短/异常 → []」断言作废）
 
 运行：cd backend && python tests/test_memory_events.py
 """
@@ -140,7 +141,10 @@ def case_five_sources():
             result = distill_event(_make_event(source), db=db)
             check(f"{source} 不抛异常", True)
             check(f"{source} 返回 list", isinstance(result, list), type(result).__name__)
-            check(f"{source} 落库 1 条", len(result) == 1 and len(db.added) == 1,
+            # P-C1 §4 两段写：事件行无条件先写 + 蒸馏行（原「1 条」作废）
+            check(f"{source} 落库 2 条（事件行+蒸馏行双写）",
+                  len(result) == 2 and len(db.added) == 2
+                  and result[0].get("memory_type") == "事件",
                   f"result={result} added={len(db.added)}")
             check(f"{source} 带 focus 调 LLM", len(fake.calls) == 1)
             user_msg = fake.calls[0]["messages"][1]["content"]
@@ -163,7 +167,11 @@ def case_five_sources():
         try:
             result = distill_event(_make_event(source, "在一起纪念日是 6 月 28 日"), db=db)
             check(f"{source} 不抛异常", True)
-            check(f"{source} 落库 1 条", len(result) == 1 and len(db.added) == 1)
+            # P-C1 §4 两段写：事件行 + 结构化直写（原「1 条」作废）
+            check(f"{source} 落库 2 条（事件行+结构化直写）",
+                  len(result) == 2 and len(db.added) == 2
+                  and result[0].get("memory_type") == "事件",
+                  f"result={len(result)} added={len(db.added)}")
             check(f"{source} 不调 LLM", len(fake.calls) == 0, f"calls={len(fake.calls)}")
             check(f"{source} 在 STRUCTURED_SOURCES", source in STRUCTURED_SOURCES)
         except Exception as exc:
@@ -248,13 +256,15 @@ def case_anniversary_idempotent():
     text = "在一起纪念日是 6 月 28 日"
     db = FakeDb(existing=None)
     r1 = distill_event(_make_event("anniversary", text), db=db)
-    check("首次落库 1 条", len(r1) == 1 and len(db.added) == 1)
+    # P-C1 §4：首次 = 事件行 + 结构化直写（双写）
+    check("首次落库 2 条（双写）", len(r1) == 2 and len(db.added) == 2,
+          f"r1={len(r1)} added={len(db.added)}")
 
     # 第二次：existing 指向已有同文记忆 → 去重命中
     db.existing = _R(id=1, memory_text=text)
     r2 = distill_event(_make_event("anniversary", text), db=db)
     check("重复事件返回空", r2 == [], repr(r2))
-    check("未再 add", len(db.added) == 1, f"added={len(db.added)}")
+    check("未再 add（保持首次的 2）", len(db.added) == 2, f"added={len(db.added)}")
 
 
 # ---------------------------------------------------------------------- #
@@ -269,8 +279,11 @@ def case_boundaries():
         check("空白 content → [] 且不调 LLM", r == [] and len(fake.calls) == 0)
 
         r = distill_event(_make_event("letter", "短"), db=FakeDb())
-        check("过短 content → [] 且不调 LLM（_MIN_INPUT_LEN）",
-              r == [] and len(fake.calls) == 0)
+        # P-C1 §4：事件行无条件先写；过短只挡蒸馏（_MIN_INPUT_LEN 在蒸馏侧）
+        check("过短 content → 事件行仍落、不调 LLM",
+              len(r) == 1 and r[0].get("memory_type") == "事件"
+              and len(fake.calls) == 0,
+              repr(r))
     finally:
         _restore_llm(orig)
 
@@ -284,7 +297,9 @@ def case_boundaries():
     orig = _with_llm(_Boom())
     try:
         r = distill_event(_make_event("museum"), db=FakeDb())
-        check("LLM 异常 → [] 不抛", r == [])
+        # P-C1 §4：LLM 异常吞在蒸馏层，事件行已先落 → 返回 [event] 且不抛
+        check("LLM 异常 → 不抛，事件行仍在（[event]）",
+              len(r) == 1 and r[0].get("memory_type") == "事件", repr(r))
     finally:
         _restore_llm(orig)
 
@@ -328,7 +343,8 @@ def case_wired_into_services():
         if fname.endswith(".py"):
             with open(os.path.join(root, fname), encoding="utf-8") as f:
                 all_src += f.read()
-    check("无 diary 接线", 'source="diary"' not in all_src)
+    # P-C1 §5.1：diary 已接线（write_diary_memory），原「无 diary 接线」作废
+    check("diary 已接线（source=\"diary\"）", 'source="diary"' in all_src)
     check("无 practice 接线", 'source="practice"' not in all_src)
 
 

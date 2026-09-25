@@ -305,15 +305,25 @@ def case_h_session_summary_unit():
     check("visibility 列存在", "visibility" in cols)
     check("relation_id 非空（NOT NULL）", not cols["relation_id"].nullable)
 
-    # 源码级：直插路径写了三个关键字段，且绕过 vectorize
+    # 源码级：§5.2 起改走 create_memory（原「直插+绕过 vectorize」作废——
+    # P-C1 §5.2 要求本路径接上向量化挂钩，C10 的向量断言在
+    # test_memory_events_persist）。字段契约三条改为对新实现断言。
     import inspect
     from app.services import memory_service as ms2
 
     src = inspect.getsource(ms2.distill_session_summary_in_background)
-    check("写 memory_type=session_summary", 'memory_type="session_summary"' in src)
+    flat = " ".join(src.split())
+    # 原断言 'memory_type="session_summary"'——实现改用登记常量（§2）
+    check("写 memory_type=SESSION_SUMMARY_MEMORY_TYPE（值=session_summary）",
+          "SESSION_SUMMARY_MEMORY_TYPE" in src
+          and ms2.SESSION_SUMMARY_MEMORY_TYPE == "session_summary")
     check("写 visibility=private", 'visibility="private"' in src)
-    check("传 relation_id=relation_id", "relation_id=relation_id" in src)
-    check("本路径不调 vectorize_memory_async", "vectorize_memory_async" not in src)
+    # 原断言 'relation_id=relation_id' 关键字——create_memory 位置参数传入
+    check("create_memory 传 relation_id（位置参数）",
+          "create_memory( db, user_id, relation_id, SESSION_SUMMARY_MEMORY_TYPE"
+          in flat, flat[flat.find("create_memory"):flat.find("create_memory") + 90])
+    # 原断言「不调 vectorize_memory_async」——§5.2 语义反转，改断言统一入口
+    check("走 create_memory 统一入口（§5.2 向量化挂钩）", "create_memory(" in src)
     check("读 COUPLE_DISABLE_MEMORY_DISTILL",
           "COUPLE_DISABLE_MEMORY_DISTILL" in src)
 
