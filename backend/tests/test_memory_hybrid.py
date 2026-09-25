@@ -76,9 +76,9 @@ def case_keyword_recalls_proper_noun(db, uid, rid, ids):
     check("专有名词老记忆被召回", id_target in result_ids, str(result_ids))
     target = next((x for x in items if x["id"] == id_target), None)
     check(
-        "召回分 ≥ 归一化阈值",
+        "召回分 > 0（已过通道原始分 floor，融合分只排序）",
         (target or {}).get("score") is not None
-        and (target or {}).get("score") >= mr.SCORE_THRESHOLD,
+        and (target or {}).get("score") > 0,
         str(target),
     )
     check(
@@ -145,14 +145,13 @@ def case_rrf_fusion_order():
         str(fused),
     )
     check(
-        "双通道共识排第一（归一化 top=1.0）",
-        fused.get(both.id) == 1.0,
+        "双通道共识排第一（性质断言，v3.2 不再归一到 top=1.0）",
+        fused.get(both.id, 0.0) == max(fused.values()),
         str(fused),
     )
     check(
-        "两条不同通道命中的行都过阈值（融合不饿死单通道）",
-        fused.get(vec_only.id, 0.0) >= mr.SCORE_THRESHOLD
-        and fused.get(kw_only.id, 0.0) >= mr.SCORE_THRESHOLD,
+        "两条不同通道命中的行都为正分（融合不饿死单通道；准入由通道 floor 把关）",
+        fused.get(vec_only.id, 0.0) > 0 and fused.get(kw_only.id, 0.0) > 0,
         str(fused),
     )
     check(

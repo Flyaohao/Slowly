@@ -21,7 +21,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.agent.executor import run_agent  # noqa: E402
-from app.agent.tools import ALL_TOOLS  # noqa: E402
+from app.agent.tools import build_agent_tools  # noqa: E402
 
 FROM_DB = False  # 是否连接数据库执行（由环境决定，仅影响工具返回内容）
 
@@ -41,7 +41,8 @@ def main() -> int:
     print("=" * 72)
 
     print("\n[0] 工具注册检查")
-    for t in ALL_TOOLS:
+    # v3.2 §7.1：工具按身份工厂构建，身份走闭包不进 schema
+    for t in build_agent_tools(user_id=1, relation_id=1):
         schema = t.args_schema.model_json_schema() if t.args_schema else {}
         params = list(schema.get("properties", {}).keys())
         print("  ✅ %-22s 参数: %s" % (t.name, params))

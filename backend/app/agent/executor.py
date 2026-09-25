@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 
-from app.agent.tools import ALL_TOOLS
+from app.agent.tools import build_agent_tools
 from app.core.config import AI_API_KEY, AI_BASE_URL, AI_MODEL
 
 logger = logging.getLogger("couple.agent")
@@ -37,8 +37,8 @@ AGENT_SYSTEM_PROMPT = """你是一位专业的亲密关系沟通顾问，服务�
 4. 若发现暴力、胁迫、自伤信号，优先提示现实求助渠道
 5. 使用简体中文，语气温暖而专业
 
-当前上下文：user_id = {user_id}，relation_id = {relation_id}。
-调用工具时请使用上述 ID。
+工具的查询范围已按当前会话身份限定，你无需（也无法）指定用户或关系 ID，
+按业务语义填 query 等参数即可。
 """
 
 #: 工具调用可能触发的模型轮次上限，防止无限循环
@@ -62,7 +62,8 @@ def build_model(temperature: float = 0.3) -> ChatOpenAI:
 def get_agent(user_id: int, relation_id: int):
     """按 (user_id, relation_id) 构建并缓存 Agent。
 
-    system_prompt 中需要携带这两个 ID（工具调用要用），因此必须按用户区分实例。
+    工具身份走 `build_agent_tools` 闭包（服务端注入，模型不可自报，§7.1），
+    因此必须按 (user_id, relation_id) 区分实例。
     """
     key = (user_id, relation_id)
     if key in _agent_cache:
@@ -73,10 +74,8 @@ def get_agent(user_id: int, relation_id: int):
 
     _agent_cache[key] = create_agent(
         build_model(),
-        ALL_TOOLS,
-        system_prompt=AGENT_SYSTEM_PROMPT.format(
-            user_id=user_id, relation_id=relation_id
-        ),
+        build_agent_tools(user_id, relation_id),
+        system_prompt=AGENT_SYSTEM_PROMPT,
     )
     return _agent_cache[key]
 
