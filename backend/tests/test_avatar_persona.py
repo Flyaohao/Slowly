@@ -147,6 +147,53 @@ def case_two_outlets_share_persona():
           and stream[0]["content"].endswith(persona))
 
 
+def case_auto_voice_recompute():
+    """P-C3 §5：画像 → 语气自动选择。auto 覆盖、manual 不覆盖（反向断言）。"""
+    print("\n[8] 画像自动选语气（auto 覆盖 / manual 不动）")
+    from types import SimpleNamespace
+
+    from app.services.profile_service import _apply_voice_style, decide_voice_style
+
+    class FakeDb:
+        commits = 0
+
+        def commit(self):
+            self.commits += 1
+
+    # 焦虑依恋 + 冲突模式含追逃 → gentle（纯决策）
+    mapped = decide_voice_style(
+        anxiety=65, avoidance=30, conflict_pattern="pursue_withdraw",
+        both_secure=False, recent_conflict_count=0,
+    )
+    check("焦虑+追逃 → gentle", mapped == "gentle", str(mapped))
+
+    # ① auto + 焦虑依恋 → 覆盖为 gentle
+    db = FakeDb()
+    avatar = SimpleNamespace(voice_style="calm", voice_style_source="auto")
+    result = _apply_voice_style(db, avatar, mapped)
+    check("auto 被覆盖为 gentle", result == "gentle" and avatar.voice_style == "gentle",
+          f"result={result} style={avatar.voice_style}")
+    check("auto 覆盖后 source 仍为 auto", avatar.voice_style_source == "auto",
+          avatar.voice_style_source)
+    check("覆盖发生一次 commit", db.commits == 1, str(db.commits))
+
+    # ② manual + 焦虑依恋 → 不被覆盖（最容易漏的反向断言）
+    db2 = FakeDb()
+    avatar2 = SimpleNamespace(voice_style="calm", voice_style_source="manual")
+    result2 = _apply_voice_style(db2, avatar2, mapped)
+    check("manual 不被覆盖", result2 is None and avatar2.voice_style == "calm",
+          f"result={result2} style={avatar2.voice_style}")
+    check("manual 不 commit", db2.commits == 0, str(db2.commits))
+
+    # 映射不到 → 保持现值
+    db3 = FakeDb()
+    avatar3 = SimpleNamespace(voice_style="cute", voice_style_source="auto")
+    none_mapped = decide_voice_style(65, 30, None, False, 0)
+    check("焦虑无追逃模式 → None（保持现值）", none_mapped is None, str(none_mapped))
+    check("None 不写库", _apply_voice_style(db3, avatar3, none_mapped) is None
+          and avatar3.voice_style == "cute" and db3.commits == 0)
+
+
 def main() -> int:
     print("=" * 72)
     print("P0-7 voice_style 真正生效（军师人格注入）")
@@ -158,6 +205,7 @@ def main() -> int:
     case_wired_into_main_chain()
     case_append_persona_pure()
     case_two_outlets_share_persona()
+    case_auto_voice_recompute()
 
     print("\n" + "=" * 72)
     if FAILURES:

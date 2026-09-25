@@ -5,7 +5,7 @@ from typing import Optional, List, Dict
 from datetime import datetime
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 
 from app.models.ai import AiMemory
 from app.core.config import AI_MEMORY_MODEL
@@ -87,14 +87,51 @@ def get_memories(
     user_id: int,
     relation_id: Optional[int] = None,
     memory_type: Optional[str] = None,
+    source: Optional[str] = None,
+    importance: Optional[int] = None,
+    since: Optional[datetime] = None,
+    until: Optional[datetime] = None,
 ) -> List[dict]:
+    """记忆列表（P-C3 §4.1：加 source/importance/since/until 筛选，向后兼容）。
+
+    时间过滤按 ``occurred_at``，NULL 回退 ``created_at``（事件**发生**时间
+    才是用户感知的「什么时候的事」）；排序同理 coalesce 后倒序 + ``id``
+    稳定 tiebreak——MySQL 不支持 ``NULLS LAST``，不能写 ``nullslast()``。
+    """
     query = db.query(AiMemory).filter(AiMemory.user_id == user_id)
     if relation_id:
         query = query.filter(AiMemory.relation_id == relation_id)
     if memory_type:
         query = query.filter(AiMemory.memory_type == memory_type)
-    memories = query.order_by(AiMemory.created_at.desc()).all()
+    if source:
+        query = query.filter(AiMemory.source == source)
+    if importance is not None:
+        query = query.filter(AiMemory.importance == importance)
+    effective_time = func.coalesce(AiMemory.occurred_at, AiMemory.created_at)
+    if since is not None:
+        query = query.filter(effective_time >= since)
+    if until is not None:
+        query = query.filter(effective_time <= until)
+    memories = (
+        query.order_by(effective_time.desc(), AiMemory.id.desc()).all()
+    )
     return [_to_dict(m) for m in memories]
+
+
+def update_importance(db: Session, memory_id: int, user_id: int, importance: int) -> dict:
+    """标星/取消标星（P-C3 §4.2）。只接受 2（标星）/ 0（取消）。"""
+    if importance not in (0, 2):
+        raise ValueError("importance 只能是 0 或 2")
+    memory = (
+        db.query(AiMemory)
+        .filter(AiMemory.id == memory_id, AiMemory.user_id == user_id)
+        .first()
+    )
+    if memory is None:
+        raise ValueError("记忆不存在")
+    memory.importance = importance
+    db.commit()
+    return _to_dict(memory)
 
 
 def get_couple_memories(db: Session, user_id: int, relation_id: int) -> List[dict]:

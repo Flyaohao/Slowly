@@ -18,6 +18,11 @@ v2.2 把信件改写 / AI 回信 / 表达改写 / 画像报告 / 量表分析全
     python tests/test_generation_stream.py
 
 注意：B/C/E/F 会真调大模型（每个约 1~2 分钟），并临时创建一封测试信件，结束时清理。
+
+单样本 LLM 波动（P-C3 §6.3）：F 用例的结构化 JSON 由模型一次生成，
+偶发校验不过（或被 max_tokens 截断）→ done.structured_output={} → 维度 0 条。
+这是单样本波动、不是回归——**允许一次复跑**（用例内自动做，最多 2 次），
+`bool(dims)` 护栏保留（它抓「维度整块为空」）。不要把复跑当回归去查产品代码。
 """
 
 import json
@@ -494,12 +499,43 @@ def main() -> int:
             print("  ⚠️ 库里没有启用的问卷，跳过")
             results.append(("F. 量表分析流式", True))
         else:
-            r = stream_once(STREAM_ANALYSIS % qid, None, headers)
-            if r["ok"]:
+            # P-C3 §6.3 结论（读码核实）：done 帧的 structured_output 是
+            # **归一化后**的——ai_generation_service 里
+            # _validate_structured → _apply_finalizer 都发生在 result/done
+            # yield 之前，模型原始 JSON 只进 warning 日志（structured_raw）。
+            # 「维度 0 条」= 模型 JSON 校验不过/被截断 → structured=None →
+            # done 携带 {}，不是「原始输出泄漏到断言」。
+            # 处置：单样本波动允许一次复跑（最多 2 次），bool(dims) 护栏保留。
+            evidence_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "..", ".workbuddy", "evidence", "pc3", "generation_stream_F_done.jsonl",
+            )
+            ok_f = False
+            for attempt in (1, 2):
+                r = stream_once(STREAM_ANALYSIS % qid, None, headers)
+                if not r["ok"]:
+                    ok_f = r["status"] == 400
+                    print("  无画像，预期拒绝：HTTP %s %s" % (r["status"], "✅" if ok_f else "❌"))
+                    break
                 structured = (r["done"] or {}).get("structured_output") or {}
                 dims = structured.get("dimension_analyses") or []
-                ok_f = r["names"][-1:] == ["done"] and r["delta_chars"] > 100 and bool(dims)
-                print("  有画像，真实生成：delta %d 字，维度 %d 条" % (r["delta_chars"], len(dims)))
+                # done 帧原始 JSON 落盘（§6.3 证据：归一化后形态）
+                try:
+                    with open(evidence_path, "a", encoding="utf-8") as f:
+                        f.write(json.dumps({
+                            "attempt": attempt,
+                            "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "done": r["done"],
+                        }, ensure_ascii=False) + "\n")
+                except OSError:
+                    pass
+                attempt_ok = (
+                    r["names"][-1:] == ["done"]
+                    and r["delta_chars"] > 100
+                    and bool(dims)
+                )
+                print("  第 %d 次 有画像，真实生成：delta %d 字，维度 %d 条"
+                      % (attempt, r["delta_chars"], len(dims)))
 
                 # 归一化生效的硬证据：结果里的分数必须等于库里的维度分
                 db_scores = load_dimension_scores(user_id)
@@ -509,12 +545,14 @@ def main() -> int:
                         for d in dims
                         if d.get("key") in db_scores
                     )
-                    ok_f = ok_f and same
+                    attempt_ok = attempt_ok and same
                     print("  %s 分数与库内一致（归一化生效）" % ("✅" if same else "❌"))
-                print("  %s 整体" % ("✅" if ok_f else "❌"))
-            else:
-                ok_f = r["status"] == 400
-                print("  无画像，预期拒绝：HTTP %s %s" % (r["status"], "✅" if ok_f else "❌"))
+                print("  %s 整体（第 %d 次）" % ("✅" if attempt_ok else "❌", attempt))
+                ok_f = attempt_ok
+                # 复跑只对「维度整块为空」的波动开；维度非空还失败 = 真问题，不掩盖
+                if attempt_ok or bool(dims):
+                    break
+                print("  ⚠️ 维度整块为空（LLM 单样本波动），按 §6.3 允许复跑一次")
             results.append(("F. 量表分析流式", ok_f))
     finally:
         cleanup(letter_id)

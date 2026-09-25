@@ -20,6 +20,13 @@ data class MemoryUiState(
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val error: String = "",
+    // ---- P-C3 §4.3：筛选（null = 全部，改动即重新拉取，筛选在服务端做）----
+    /** 来源：letter/diary/dual/anniversary/questionnaire/chat_summary */
+    val sourceFilter: String? = null,
+    /** 时间窗天数：null = 全部，7 / 30 = 近 N 天 */
+    val daysFilter: Int? = null,
+    /** 重要度：null = 全部，2 = 只看标星 */
+    val importanceFilter: Int? = null,
 )
 
 sealed class MemoryUiEvent {
@@ -42,29 +49,86 @@ class MemoryViewModel @Inject constructor(
         loadMemories()
     }
 
-    fun refresh() {
-        _uiState.update { it.copy(isRefreshing = true, error = "") }
+    fun refresh() = fetch(isRefresh = true)
+
+    fun loadMemories() = fetch(isRefresh = false)
+
+    /** P-C3 §4.3：筛选在服务端做（since 用 occurred_at 回退 created_at 的口径），改筛选即重拉。 */
+    private fun fetch(isRefresh: Boolean) {
+        _uiState.update {
+            if (isRefresh) it.copy(isRefreshing = true, error = "")
+            else it.copy(isLoading = true, error = "")
+        }
+        val state = _uiState.value
+        val since = state.daysFilter?.let { days ->
+            java.time.LocalDateTime.now().minusDays(days.toLong()).toString()
+        }
         viewModelScope.launch {
-            memoryRepository.getMemories().fold(
+            memoryRepository.getMemories(
+                source = state.sourceFilter,
+                importance = state.importanceFilter,
+                since = since,
+            ).fold(
                 onSuccess = { memories ->
-                    _uiState.update { it.copy(memories = memories, isRefreshing = false) }
+                    _uiState.update {
+                        it.copy(
+                            memories = memories,
+                            isLoading = false,
+                            isRefreshing = false,
+                        )
+                    }
                 },
                 onFailure = { error ->
-                    _uiState.update { it.copy(isRefreshing = false, error = error.message ?: "加载失败") }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isRefreshing = false,
+                            error = error.message ?: "加载失败",
+                        )
+                    }
                 },
             )
         }
     }
 
-    fun loadMemories() {
-        _uiState.update { it.copy(isLoading = true, error = "") }
+    fun setSourceFilter(source: String?) {
+        _uiState.update { it.copy(sourceFilter = source) }
+        loadMemories()
+    }
+
+    fun setDaysFilter(days: Int?) {
+        _uiState.update { it.copy(daysFilter = days) }
+        loadMemories()
+    }
+
+    fun setImportanceFilter(importance: Int?) {
+        _uiState.update { it.copy(importanceFilter = importance) }
+        loadMemories()
+    }
+
+    /** P-C3 §4.2：★/☆ 切换——写库成功后才改本地（失败不产生假状态）。 */
+    fun toggleImportance(memoryId: Long) {
+        val current = _uiState.value.memories.firstOrNull { it.id == memoryId } ?: return
+        val next = if (current.importance == 2) 0 else 2
         viewModelScope.launch {
-            memoryRepository.getMemories().fold(
-                onSuccess = { memories ->
-                    _uiState.update { it.copy(memories = memories, isLoading = false) }
+            memoryRepository.updateImportance(memoryId, next).fold(
+                onSuccess = {
+                    _uiState.update { state ->
+                        val updated = state.memories.map {
+                            if (it.id == memoryId) it.copy(importance = next) else it
+                        }
+                        state.copy(
+                            // 正在「只看标星」时取消标星 → 该行已不符合筛选，移出列表
+                            memories = if (state.importanceFilter == 2 && next == 0) {
+                                updated.filter { it.id != memoryId }
+                            } else {
+                                updated
+                            },
+                        )
+                    }
                 },
                 onFailure = { error ->
-                    _uiState.update { it.copy(isLoading = false, error = error.message ?: "加载失败") }
+                    _event.emit(MemoryUiEvent.ShowError(error.message ?: "标星失败"))
                 },
             )
         }

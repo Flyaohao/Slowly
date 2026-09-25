@@ -1,8 +1,14 @@
+import logging
+from datetime import datetime, timedelta
+
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict
 
-from app.repositories import profile_repo, questionnaire_repo
+from app.repositories import profile_repo, questionnaire_repo, avatar_repo, couple_repo
 from app.models.questionnaire import QuestionnaireAnswer
+from app.models.ai import AiChatMessage, AiChatSession
+
+logger = logging.getLogger("couple.profile")
 
 
 # bands 四档阈值：high >=75 / mid_high >=50 / mid_low >=25 / low <25。
@@ -177,6 +183,13 @@ def generate_profile(
         })
 
     profile_repo.add_dimension_scores(db, profile.id, score_entries)
+
+    # P-C3 §5：画像落库后按画像自动选一次语气（仅 voice_style_source='auto'
+    # 生效）。触发点只此一处——进页面/每条消息都调等于天天改用户语气。
+    try:
+        recompute_voice_style(db, user_id)
+    except Exception:
+        logger.warning("[VOICE] 画像自动选语气失败（不影响画像落库）", exc_info=True)
 
     return profile
 
@@ -433,3 +446,105 @@ def derive_relationship_pattern(
     if high_anx and high_avoid:
         return ("双高拉扯", "双方都在自保，先降温再谈事")
     return ("安全基地", "关系健康，重点是加分而不是救火")
+
+
+# --------------------------------------------------------------------------
+# P-C3 §5：画像 → 语气自动选择（设计文档 §7.4）
+#
+# 约束：只动 voice_style_source=='auto' 的行；manual 直接返回；
+#       voice_style 取值恒为 gentle/calm/direct（不碰既有五档枚举与 DB 值）；
+#       映射不到保持现值——不硬塞默认档。
+# --------------------------------------------------------------------------
+
+#: 修复期判定：近 7 天冲突消息数达到该阈值视为「近期冲突事件多」
+_REPAIR_WINDOW_DAYS = 7
+_REPAIR_CONFLICT_MIN = 3
+
+
+def decide_voice_style(
+    anxiety: float,
+    avoidance: float,
+    conflict_pattern: Optional[str],
+    both_secure: bool,
+    recent_conflict_count: int,
+) -> Optional[str]:
+    """纯决策（P-C3 §5，便于无库测试）。返回 None = 映射不到，保持现值。
+
+    优先级：修复期 gentle > 焦虑+追逃 gentle > 回避 calm > 双方安全 direct。
+    """
+    if recent_conflict_count >= _REPAIR_CONFLICT_MIN:
+        return "gentle"
+    if anxiety >= 50 and conflict_pattern and "pursue" in conflict_pattern:
+        return "gentle"
+    if avoidance >= 50:
+        return "calm"
+    if both_secure:
+        return "direct"
+    return None
+
+
+def _count_recent_conflicts(db: Session, relation_id: int) -> int:
+    """近 N 天该关系下的冲突消息数（risk_level='heated_conflict'）。"""
+    since = datetime.now() - timedelta(days=_REPAIR_WINDOW_DAYS)
+    return (
+        db.query(AiChatMessage)
+        .join(AiChatSession, AiChatMessage.session_id == AiChatSession.id)
+        .filter(
+            AiChatSession.relation_id == relation_id,
+            AiChatMessage.risk_level == "heated_conflict",
+            AiChatMessage.created_at >= since,
+        )
+        .count()
+    )
+
+
+def recompute_voice_style(db: Session, user_id: int) -> Optional[str]:
+    """画像生成后按画像自动选语气（P-C3 §5）。返回被写入的档位，None = 未动。
+
+    只在画像生成/更新时被调用一次（generate_profile 尾部）。
+    """
+    relation = couple_repo.get_active_relation_by_user(db, user_id)
+    if relation is None:
+        return None  # 单身模式无 avatar
+    avatar = avatar_repo.get_avatar_by_relation_id(db, relation.id)
+    if avatar is None or avatar.voice_style_source != "auto":
+        return None  # manual 或从未进过形象页：不越界
+    profile = profile_repo.get_latest_profile(db, user_id)
+    if profile is None:
+        return None
+    scores = {
+        s.dimension_key: s.score
+        for s in profile_repo.get_dimension_scores(db, profile.id)
+    }
+    anxiety = scores.get("attachment_anxiety", 50)
+    avoidance = scores.get("attachment_avoidance", 50)
+
+    conflict_pattern = None
+    both_secure = False
+    couple_profile = profile_repo.get_latest_couple_profile(db, relation.id)
+    if couple_profile is not None:
+        conflict_pattern = couple_profile.conflict_pattern
+        pa = profile_repo.get_profile_by_id(db, couple_profile.user_a_profile_id)
+        pb = profile_repo.get_profile_by_id(db, couple_profile.user_b_profile_id)
+        both_secure = bool(
+            pa and pb
+            and pa.profile_type == "secure"
+            and pb.profile_type == "secure"
+        )
+
+    recent = _count_recent_conflicts(db, relation.id)
+    mapped = decide_voice_style(anxiety, avoidance, conflict_pattern, both_secure, recent)
+    return _apply_voice_style(db, avatar, mapped)
+
+
+def _apply_voice_style(db: Session, avatar, mapped: Optional[str]) -> Optional[str]:
+    """写入守卫（P-C3 §5）：manual 不动、映射不到不动、值相同不写。"""
+    if mapped is None or avatar.voice_style_source != "auto":
+        return None
+    if mapped == avatar.voice_style:
+        return None
+    # 直写列，不走 set_voice_style（那会把 source 置 manual）
+    avatar.voice_style = mapped
+    db.commit()
+    logger.info("[VOICE] 画像自动选语气 -> %s", mapped)
+    return mapped

@@ -225,8 +225,13 @@ interface CoupleApiService {
 
     // Memory
     // 注意：后端 `GET /ai/memory` 的 data 直接是数组，不是 {items:[...]} 包装对象
+    // P-C3 §4.1：筛选参数全部可选，不传 = 旧行为
     @GET("api/v1/couple/ai/memory")
-    suspend fun getMemories(): ApiResponse<List<MemoryDto.MemoryItem>>
+    suspend fun getMemories(
+        @Query("source") source: String? = null,
+        @Query("importance") importance: Int? = null,
+        @Query("since") since: String? = null,
+    ): ApiResponse<List<MemoryDto.MemoryItem>>
 
     @DELETE("api/v1/couple/ai/memory/{id}")
     suspend fun deleteMemory(@Path("id") memoryId: Long): ApiResponse<Unit>
@@ -235,6 +240,13 @@ interface CoupleApiService {
     suspend fun updateMemoryVisibility(
         @Path("id") memoryId: Long,
         @Body body: MemoryDto.VisibilityUpdateRequest,
+    ): ApiResponse<Unit>
+
+    /** P-C3 §4.2：标星/取消标星（importance 只能 0|2） */
+    @PUT("api/v1/couple/ai/memory/{id}/importance")
+    suspend fun updateMemoryImportance(
+        @Path("id") memoryId: Long,
+        @Body body: MemoryDto.ImportanceUpdateRequest,
     ): ApiResponse<Unit>
 
     // Dual Perspective
