@@ -153,6 +153,9 @@ object AiDto {
         @Json(name = "avatar_name") val avatarName: String = "",
         @Json(name = "voice_style") val voiceStyle: String = "",
         @Json(name = "voice_style_label") val voiceStyleLabel: String = "",
+        // P-C2 §5：本轮省略了什么（分层预算裁剪说明）。默认空列表——
+        // 旧后端不回此字段时 Moshi 走默认值，面板整栏不显示。
+        @Json(name = "omitted") val omitted: List<String> = emptyList(),
     )
 
     @JsonClass(generateAdapter = true)

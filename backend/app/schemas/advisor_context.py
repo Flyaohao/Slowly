@@ -37,6 +37,9 @@ class AdvisorContext:
     # ④ 军师是谁
     avatar_name: str = ""
     voice_style: str = ""
+    # ⑤ 本轮省略了什么（P-C2 §5）：分层预算裁剪说明，如「省去 2 条理论片段」。
+    #    每项是短文案；无省略时为空列表，前端整栏不显示。
+    omitted: List[str] = field(default_factory=list)
 
     def to_display(self) -> dict:
         """给客户端的展示结构（纯基本类型，无 ORM / 无 datetime 对象）。"""
@@ -64,4 +67,5 @@ class AdvisorContext:
             "avatar_name": self.avatar_name or "",
             "voice_style": self.voice_style or "",
             "voice_style_label": VOICE_STYLE_LABELS.get(self.voice_style, ""),
+            "omitted": list(self.omitted or []),
         }

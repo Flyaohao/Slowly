@@ -45,7 +45,7 @@ from app.services.safety_service import (
 )
 from app.services.rag_service import retrieve_chunks, build_rag_context
 from app.services.memory_service import get_memory_context, distill_in_background
-from app.services.memory_retrieval import retrieve_memory_items
+from app.services.memory_retrieval import build_profile_keywords, retrieve_memory_items
 from app.services.llm_client import llm, LlmError, get_client_for_mode
 from app.services.sse import HEARTBEAT_INTERVAL, stream_with_heartbeat
 
@@ -274,10 +274,30 @@ def _preprocess(
     # P-B §1.2：记忆召回条数按档位取（quick 0=不查 / deep 5 / expert 10+事件时间线）。
     # 召回各路径（含降级）已按 limit 截断；这里再在调用侧截一道，把档位矩阵
     # 钉死在消费侧——即使日后召回实现改动，三档条数也不会越过矩阵。
+    #
+    # Stage 2（P-C2 §3）：画像驱动 query——冲突模式 + 依恋类型名 +
+    # 近期 importance>=1 事件标题词；取不到就跳过，不塞占位。
+    # 关键词在召回入口（retrieve_memory_items）拼进 query（build_profile_query），
+    # 本轮原话单独走 echo 惩罚——两者分离，画像词不算「用户说过的话」。
     _ml = mode_cfg["memory_limit"]
+    profile_keywords: List[str] = []
     if _ml:
+        profile_keywords = build_profile_keywords(
+            db,
+            user_id,
+            relation_id,
+            conflict_pattern=conflict_pattern,
+            profile_type=user_profile.profile_type if user_profile else None,
+            partner_profile_type=partner_profile.profile_type if partner_profile else None,
+        )
         memory_items = retrieve_memory_items(
-            db, user_id, relation_id, query=user_input, limit=_ml
+            db,
+            user_id,
+            relation_id,
+            query=user_input,
+            limit=_ml,
+            profile_keywords=profile_keywords,
+            scene_key=scene_key,
         )[:_ml]
     else:
         memory_items = []
@@ -392,6 +412,8 @@ def _preprocess(
         ],
         avatar_name=(avatar.name if avatar else "") or DEFAULT_AVATAR_NAME,
         voice_style=(avatar.voice_style if avatar else "") or "gentle",
+        # P-C2 §5：本轮省略了什么（分层预算裁剪说明，空则前端整栏不显示）
+        omitted=budget_omitted,
     ).to_display()
 
     ai_repo.create_message(db, session_id, "user", user_input, chat_mode=mode)

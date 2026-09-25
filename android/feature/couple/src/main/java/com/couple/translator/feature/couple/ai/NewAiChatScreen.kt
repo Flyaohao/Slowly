@@ -1099,6 +1099,24 @@ private fun EvidencePanel(evidence: AiDto.EvidencePayload) {
                 }
             }
 
+            // P-C2 §5：本轮省略了什么（分层预算裁剪说明）——空列表整栏不显示
+            if (evidence.omitted.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "✂️ 本轮省略了什么",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AppAccent,
+                )
+                evidence.omitted.forEach { item ->
+                    Text(
+                        text = "· $item",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextSecondary,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+
             if (!hasProfile && !hasMemory && !hasTheory) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
