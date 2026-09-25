@@ -28,7 +28,7 @@ from app.repositories import ai_generation_repo, couple_repo, ai_repo
 
 logger = logging.getLogger("couple.ai")
 
-router = APIRouter(prefix="/ai", tags=["AI 翻译官"])
+router = APIRouter(prefix="/ai", tags=["AI 军师"])
 
 
 @router.get("/scenes", response_model=ApiResponse)

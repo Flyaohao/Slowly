@@ -20,7 +20,7 @@ import retrofit2.http.Streaming
 /**
  * 共享 API 服务
  * 包含 Auth、User、Home、Couple、Questionnaire、Profile 等两种模式共用的接口。
- * AI 翻译官是情侣模式专属，其接口见 feature/couple 的 CoupleApiService。
+ * AI 军师是情侣模式专属，其接口见 feature/couple 的 CoupleApiService。
  */
 interface SharedApiService {
 

@@ -54,7 +54,7 @@ fun AvatarPreview(
         Spacer(modifier = Modifier.height(12.dp))
 
         Text(
-            text = "翻译官",
+            text = "军师",
             style = MaterialTheme.typography.titleMedium,
             color = AppAccent,
         )

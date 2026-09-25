@@ -380,10 +380,10 @@ interface CoupleApiService {
     @DELETE("api/v1/couple/wishlists/{id}")
     suspend fun deleteWishlist(@Path("id") id: Long): ApiResponse<Unit>
 
-    // ---------- AI 翻译官 ----------
+    // ---------- AI 军师 ----------
     // 2026-09-14：这 6 个接口此前留在 core/SharedApiService 里，路径仍是旧的
     // `api/v1/ai/...`，而后端 v2.0 只注册 `api/v1/couple/ai/...`，线上实测 404。
-    // AI 翻译官只存在于情侣模式，因此按 v2.0 分层迁到本接口。
+    // AI 军师只存在于情侣模式，因此按 v2.0 分层迁到本接口。
 
     @POST("api/v1/couple/ai/chat")
     suspend fun aiChat(@Body body: AiDto.ChatRequest): ApiResponse<AiDto.ChatResponse>

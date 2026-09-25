@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-「AI 翻译官」这种多轮对话走 `ai_service.stream_chat_events` + `ai_chat_message`；
+「AI 军师」这种多轮对话走 `ai_service.stream_chat_events` + `ai_chat_message`；
 而**单次触发**的分析类能力——解读一封信、改写一封信、生成回信、改写表达——
 走这里，结果落 `ai_generation`。
 

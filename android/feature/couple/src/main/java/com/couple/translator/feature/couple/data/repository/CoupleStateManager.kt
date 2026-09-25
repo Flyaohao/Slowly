@@ -21,7 +21,7 @@ data class CoupleState(
     val isLoading: Boolean = true,
     val coupleInfo: CoupleDto.CoupleRelationResponse? = null,
     val userNickname: String? = null,
-    /** 顶栏叠头像的统一数据源：首页/信箱/翻译官都从这里取，避免有的页面显示真头像、有的显示"我"字 */
+    /** 顶栏叠头像的统一数据源：首页/信箱/军师都从这里取，避免有的页面显示真头像、有的显示"我"字 */
     val userAvatarUrl: String? = null,
     val partnerNickname: String? = null,
     val partnerAvatarUrl: String? = null,

@@ -4,7 +4,7 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
 /**
- * AI 翻译官相关 DTO。
+ * AI 军师相关 DTO。
  *
  * 字段名与 `backend/app/schemas/ai_schema.py` 及后端实际返回的 dict 严格对齐。
  * 2026-09-14 修正了此前三处不一致（都会导致线上失败）：

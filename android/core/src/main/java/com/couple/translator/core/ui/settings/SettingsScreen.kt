@@ -276,7 +276,7 @@ fun SettingsScreen(
             title = { Text("关于应用") },
             text = {
                 Column {
-                    Text("情侣 AI 翻译官 · 版本 $versionName")
+                    Text("情侣 AI 军师 · 版本 $versionName")
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "已知边界（如实说明）：\n" +

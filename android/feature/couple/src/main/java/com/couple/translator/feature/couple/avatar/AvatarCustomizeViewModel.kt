@@ -20,7 +20,7 @@ data class AvatarUiState(
     val toneIndex: Int = 0,
     /** P-B §4.4：auto → 下拉顶部显示「当前由画像自动选择」；manual → 不显示 */
     val toneSource: String = "auto",
-    val aiName: String = "翻译官",
+    val aiName: String = "军师",
     val isSaving: Boolean = false,
     val saved: Boolean = false,
     val error: String = "",
@@ -119,7 +119,7 @@ class AvatarCustomizeViewModel @Inject constructor(
         viewModelScope.launch {
             repository.updateAvatar(
                 AvatarDto.AvatarUpdateRequest(
-                    name = state.aiName.ifBlank { "翻译官" },
+                    name = state.aiName.ifBlank { "军师" },
                     faceConfig = mapOf(
                         "face_shape" to state.faceShape,
                         "eye_style" to state.eyeStyle,

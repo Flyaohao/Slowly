@@ -127,17 +127,17 @@ fun GuideScreen(
                     index = "3",
                     icon = Icons.Outlined.AutoAwesome,
                     title = "开始使用",
-                    desc = "底部三个入口：我们、信箱、翻译官。核心功能是「翻译官」。",
+                    desc = "底部三个入口：我们、信箱、军师。核心功能是「军师」。",
                     route = null,
                     onNavigateToRoute = onNavigateToRoute,
                 )
             }
 
             Spacer(modifier = Modifier.height(28.dp))
-            SectionTitle("AI 翻译官", "整个 App 的核心，共 7 个场景")
+            SectionTitle("AI 军师", "整个 App 的核心，共 7 个场景")
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "进入底部「翻译官」，点左上角可切换场景。每个场景的回答结构和侧重点都不同。",
+                text = "进入底部「军师」，点左上角可切换场景。每个场景的回答结构和侧重点都不同。",
                 style = MaterialTheme.typography.bodySmall,
                 color = AppTextTertiary,
                 modifier = Modifier.padding(horizontal = 4.dp),
@@ -171,7 +171,7 @@ fun GuideScreen(
                 SceneRow(
                     icon = Icons.Outlined.People,
                     name = "双人调解",
-                    desc = "两个人都参与的完整调解流程：各自陈述 → 生成方案 → 双方确认。从翻译官页面的调解入口进入。",
+                    desc = "两个人都参与的完整调解流程：各自陈述 → 生成方案 → 双方确认。从军师页面的调解入口进入。",
                 )
                 GuideDivider()
                 SceneRow(
@@ -311,13 +311,13 @@ fun GuideScreen(
             SectionTitle("遇到这些情况，该用哪个功能", "按处境查就行")
             Spacer(modifier = Modifier.height(8.dp))
             GuideCard {
-                QuickCaseRow("TA 说了句很冲的话，不知道什么意思", "翻译官 · 听懂 TA")
+                QuickCaseRow("TA 说了句很冲的话，不知道什么意思", "军师 · 听懂 TA")
                 GuideDivider()
-                QuickCaseRow("心里堵得慌，但不想让任何人知道", "翻译官 · 日常（私密）")
+                QuickCaseRow("心里堵得慌，但不想让任何人知道", "军师 · 日常（私密）")
                 GuideDivider()
-                QuickCaseRow("有话想说，但怕说出口就伤人", "翻译官 · 帮我表达")
+                QuickCaseRow("有话想说，但怕说出口就伤人", "军师 · 帮我表达")
                 GuideDivider()
-                QuickCaseRow("吵完架谁都不肯先开口", "翻译官 · 冷静一下，或发起双人调解")
+                QuickCaseRow("吵完架谁都不肯先开口", "军师 · 冷静一下，或发起双人调解")
                 GuideDivider()
                 QuickCaseRow("收到一封信，不确定 TA 想表达什么", "信箱 → 打开信件 → 信件解读")
                 GuideDivider()
@@ -325,7 +325,7 @@ fun GuideScreen(
                 GuideDivider()
                 QuickCaseRow("想让 TA 明白我当时真实的感受", "双视角记录")
                 GuideDivider()
-                QuickCaseRow("为什么我们总在同一件事上吵", "关系画像 + 翻译官里的 AI 记忆")
+                QuickCaseRow("为什么我们总在同一件事上吵", "关系画像 + 军师里的 AI 记忆")
                 GuideDivider()
                 QuickCaseRow("想一起做点什么", "关系练习 / 愿望清单")
                 GuideDivider()
@@ -371,7 +371,7 @@ private fun GuideHero() {
             }
             Spacer(modifier = Modifier.width(12.dp))
             Text(
-                text = "情侣 AI 翻译官",
+                text = "情侣 AI 军师",
                 style = MaterialTheme.typography.titleLarge,
                 color = AppTextPrimary,
             )

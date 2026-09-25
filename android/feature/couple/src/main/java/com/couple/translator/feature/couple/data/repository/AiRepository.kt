@@ -18,10 +18,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * AI 翻译官数据仓库。
+ * AI 军师数据仓库。
  *
  * 2026-09-14 从 core/data/repository 迁到本模块：
- * AI 翻译官只存在于情侣模式，接口前缀是 `api/v1/couple/ai`。
+ * AI 军师只存在于情侣模式，接口前缀是 `api/v1/couple/ai`。
  * 留在 core 会形成「共享层调用情侣专属接口」的越层依赖，且撞上了 v2.0 漏改路径的坑。
  */
 @Singleton

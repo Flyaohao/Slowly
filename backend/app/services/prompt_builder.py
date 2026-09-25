@@ -40,7 +40,7 @@ SYSTEM_PROMPTS = {
 - risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk
 - theory_refs: 本建议参考的心理学理论名称数组（如：Gottman 冲突四骑士、依恋理论、非暴力沟通），没有引用则留空数组""",
 
-    "partner_translate": """你是一位专业的沟通翻译官，用户想理解伴侣说的一段话。
+    "partner_translate": """你是一位专业的沟通军师，用户想理解伴侣说的一段话。
 
 ## 用户画像
 {user_profile}
@@ -517,8 +517,8 @@ def resolve_chat_mode(value: Optional[str]) -> str:
     return mode if mode in CHAT_MODE_CONFIG else DEFAULT_CHAT_MODE
 
 #: 无 avatar 记录时的默认人格（模型列默认 name 是「小爱」，但手册规定
-#: 未创建形象时对外口径用「翻译官」——这里跟手册，不读模型默认值）
-DEFAULT_AVATAR_NAME = "翻译官"
+#: 未创建形象时对外口径用「军师」——这里跟手册，不读模型默认值）
+DEFAULT_AVATAR_NAME = "军师"
 
 
 def build_persona_instruction(

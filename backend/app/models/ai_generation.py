@@ -10,7 +10,7 @@ class AiGeneration(BigIntPKMixin, TimestampMixin, Base):
 
     ## 为什么不能只有 ai_chat_message
 
-    `ai_chat_message` 挂在会话下，服务的是「AI 翻译官」这种一来一回的多轮对话。
+    `ai_chat_message` 挂在会话下，服务的是「AI 军师」这种一来一回的多轮对话。
     但产品里还有一大批**单次触发的分析类 AI**：解读一封信、改写一封信、
     生成回信、改写表达、生成画像报告。它们没有会话概念，此前的结果一律
     只存在于客户端 ViewModel 的内存里，退出页面即蒸发——用户想再看一眼

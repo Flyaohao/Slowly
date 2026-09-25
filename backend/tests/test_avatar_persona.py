@@ -4,7 +4,7 @@ P0-7 验收：voice_style 真正生效（军师人格注入）。
 断言：
   a) voice_style 5 个取值 → 注入的 system 分别包含对应语气指令
   b) 未知值（含库里历史脏数据）→ 回退 gentle
-  c) 无 avatar（name/voice_style 均 None）→ 默认「翻译官」+ gentle
+  c) 无 avatar（name/voice_style 均 None）→ 默认「军师」+ gentle
   d) 主链路接线：_preprocess 读 avatar 并把 persona 追加到两条出口
   e) 人格指令 ≤60 字（token 预算）
 

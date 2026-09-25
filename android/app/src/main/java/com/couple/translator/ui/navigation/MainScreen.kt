@@ -81,7 +81,7 @@ fun MainScreen(
     val openDrawer: () -> Unit = { scope.launch { drawerState.open() } }
     val closeDrawer: () -> Unit = { scope.launch { drawerState.close() } }
 
-    // 单身模式下不显示翻译官 Tab
+    // 单身模式下不显示军师 Tab
     val tabs = if (isCoupleMode) {
         BottomTab.entries
     } else {

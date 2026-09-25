@@ -35,21 +35,21 @@ logger = logging.getLogger(__name__)
 # 用户要看内容必须打开 App（受登录态与私密密码保护）。
 NOTIFICATION_MAILS = {
     "letter_received": (
-        "情侣 AI 翻译官 · 你收到一封新信件",
+        "情侣 AI 军师 · 你收到一封新信件",
         "有人给你写了一封信。\n\n"
-        "打开「情侣 AI 翻译官」App 即可查看与回复。\n\n"
+        "打开「情侣 AI 军师」App 即可查看与回复。\n\n"
         "为了你的隐私，这封提醒不包含信件内容，信件只在 App 内可见。\n",
     ),
     "mediation_invite": (
-        "情侣 AI 翻译官 · 你收到一次冷静沟通邀请",
+        "情侣 AI 军师 · 你收到一次冷静沟通邀请",
         "对方邀请你进行一次冷静沟通。\n\n"
-        "打开「情侣 AI 翻译官」App 查看并回应。\n\n"
+        "打开「情侣 AI 军师」App 查看并回应。\n\n"
         "为了你的隐私，这封提醒不包含沟通内容。\n",
     ),
     "unbind_requested": (
-        "情侣 AI 翻译官 · 你收到一条关系解绑请求",
+        "情侣 AI 军师 · 你收到一条关系解绑请求",
         "有人发起了关系解绑请求。\n\n"
-        "打开「情侣 AI 翻译官」App 查看详情。如果不是你的意愿，"
+        "打开「情侣 AI 军师」App 查看详情。如果不是你的意愿，"
         "冷静期内可以随时取消。\n",
     ),
 }
@@ -63,7 +63,7 @@ def _send(to_email: str, subject: str, body: str) -> None:
     """真正走一次 SMTP。失败抛 ValueError("20004")。"""
     msg = MIMEText(body, "plain", "utf-8")
     msg["Subject"] = Header(subject, "utf-8")
-    msg["From"] = formataddr(("情侣 AI 翻译官", EMAIL_FROM or SMTP_USER))
+    msg["From"] = formataddr(("情侣 AI 军师", EMAIL_FROM or SMTP_USER))
     msg["To"] = formataddr(("", to_email))
 
     if SMTP_PORT == 465:
@@ -80,12 +80,12 @@ def _send(to_email: str, subject: str, body: str) -> None:
 
 def send_verification_code(to_email: str, code: str, minutes: int = 10) -> None:
     """发送验证码邮件。失败且非 dev 模式时抛 ValueError("20004")。"""
-    subject = "情侣 AI 翻译官 · 密码重置验证码"
+    subject = "情侣 AI 军师 · 密码重置验证码"
     body = (
         f"你好！\n\n"
         f"你正在重置密码，验证码为：{code}\n\n"
         f"验证码 {minutes} 分钟内有效。如果不是你本人操作，请忽略本邮件。\n\n"
-        f"—— 情侣 AI 翻译官"
+        f"—— 情侣 AI 军师"
     )
 
     if EMAIL_DEV_MODE or not smtp_configured():

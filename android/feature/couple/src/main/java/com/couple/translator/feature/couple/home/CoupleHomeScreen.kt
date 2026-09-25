@@ -90,7 +90,7 @@ import com.couple.translator.feature.couple.presence.MeetCountdown
  * 这一版的排版原则：**先有一个视觉锚点，再谈信息**。
  * 之前的版本把「在一起第几天」当成一行正文排在标题下面，整页读起来像文档；
  * 现在这个数字被放大成 52sp 放进一张淡粉卡片里，成为首屏唯一的重心，
- * 其余信息（快捷入口 / 翻译官 / 最近）依次退到它下面。
+ * 其余信息（快捷入口 / 军师 / 最近）依次退到它下面。
  */
 @Composable
 fun NewHomeScreen(
@@ -106,7 +106,7 @@ fun NewHomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // 顶栏身份优先用全局共享的那份（与信箱/翻译官同源），拿不到时退回本页自己拉的
+    // 顶栏身份优先用全局共享的那份（与信箱/军师同源），拿不到时退回本页自己拉的
     val barIdentity = remember(identity, uiState) {
         if (identity.userAvatarUrl != null || identity.nickname != null) {
             identity
@@ -430,7 +430,7 @@ private fun HomeQuickEntryCards(
         )
         QuickEntryCard(
             icon = Icons.Outlined.ChatBubbleOutline,
-            title = "翻译官",
+            title = "军师",
             subtitle = "随时帮你整理",
             onClick = onNavigateToAiChat,
             modifier = Modifier.weight(1f),
@@ -608,7 +608,7 @@ private fun HomeAiHint(onClick: () -> Unit) {
         )
         Spacer(modifier = Modifier.width(10.dp))
         Text(
-            text = "没想好怎么说？让翻译官替你润色",
+            text = "没想好怎么说？让军师替你润色",
             style = MaterialTheme.typography.bodySmall,
             color = AppTextSecondary,
             modifier = Modifier.weight(1f),
