@@ -576,3 +576,21 @@ class LlmClient:
 
 #: 模块级单例，业务代码 `from app.services.llm_client import llm` 即可使用
 llm = LlmClient()
+
+
+#: chat_mode → 客户端实例（P-B §1.3）。按档位缓存 3 个实例，比请求级 clone
+#: 简单且无并发风险——思考开关/预算是实例构造参数，不是 invoke 参数。
+#: - deep 直接复用模块单例：它读环境变量，与 chat_mode 出现之前的行为
+#:   逐参数相同（零回归）；
+#: - quick 关思考（enable_thinking=False → 请求体带 enable_thinking=false）；
+#: - expert 思考预算 2048。
+_CLIENTS: Dict[str, LlmClient] = {
+    "quick": LlmClient(enable_thinking=False),
+    "deep": llm,
+    "expert": LlmClient(enable_thinking=True, thinking_budget=2048),
+}
+
+
+def get_client_for_mode(mode: Optional[str]) -> LlmClient:
+    """按 chat_mode 取客户端；未知值回落 deep 单例（与 resolve_chat_mode 同口径）。"""
+    return _CLIENTS.get((mode or "").strip().lower(), llm)

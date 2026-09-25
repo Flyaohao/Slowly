@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from app.schemas.ai_output import inline_json_schema
 from app.services.structured_stream import STRUCTURED_MARKER
@@ -355,15 +355,113 @@ STREAM_INSTRUCTION = (
     + MARKDOWN_OUTPUT_RULES
 )
 
+#: chat_mode=quick 尾部指令：结论先行、一句可用，不展开原理（§1.2 差异矩阵）。
+#: 与 STREAM_INSTRUCTION / EXPERT_INSTRUCTION 三段互斥——各自的标志性片段
+#: （"120 字" / "300 字" / "700 字"、"替代解释"）是 test_chat_mode_distinctness 的断言点。
+QUICK_INSTRUCTION = (
+    """## 输出格式（重要）
+先给结论：一句话说清现在该怎么做，再给一句能直接说出口的话（用短横线列出）。
+全文控制在 120 字以内：不解释原理、不展开分析、不列分点。
+不要输出 JSON、不要输出字段名、不要提及"结构化输出"。"""
+    + "\n\n"
+    + MARKDOWN_OUTPUT_RULES
+)
+
+#: chat_mode=expert 尾部指令：分点作答 + 标注依据 + 2 个可验证的替代解释（§1.2）。
+EXPERT_INSTRUCTION = (
+    """## 输出格式（重要）
+请直接用简体中文、以 Markdown 分段的形式**分点**作答，全文控制在 700 字以内。
+- 每个判断后面标注依据来源（心理学理论名称 / 画像依据 / 对话里的事实）。
+- 至少给出 2 个可验证的替代解释，并分别说明"什么情况下它成立"。
+- 结论仍要可直接使用：给能照着说的话，用短横线列出。
+不要输出 JSON、不要输出字段名、不要提及"结构化输出"。"""
+    + "\n\n"
+    + MARKDOWN_OUTPUT_RULES
+)
+
 #: 军师人格：voice_style → 语气指令（ai_avatar.voice_style，客户端 5 选 1 枚举）。
 #: 未知值（含库里历史脏数据）一律回退 gentle，与客户端 toneIndexOf 的回退一致。
 VOICE_STYLE_INSTRUCTIONS = {
     "gentle": "用温和、包容的语气，多用「我理解」。",
     "calm": "用理性、克制的语气，少用感叹句，先分析再建议。",
     "direct": "直说不绕弯，指出问题不回避，但不说教。",
-    "cute": "语气轻快，可以用一点可爱的表达，但不过度。",
+    #: P-B §3：cute 只改这一条指令文本（key 与 DB 值不动）。冷战/冲突场景下
+    #: 「可爱表达」不合适，改成活泼阳光语感。
+    "cute": "语气轻快有活力，多用主动、鼓励的措辞。",
     "mature": "像一位有阅历的长辈，稳重、有分寸。",
 }
+
+#: L0 人性化基线（P-B §2 / 文档 D7）：无条件追加到每个场景 system，位置在
+#: 场景模板之后、人格指令（_append_persona）之前。禁语清单逐字来自真实样本，
+#: test_human_base_prompt 逐字断言——不许"优化删减"。
+HUMAN_BASE_INSTRUCTION = """## 表达基线（一律遵守）
+- 用「你」称呼用户，短句为主；先复述对方的具体处境，再给判断。
+- 信息不足时直接给通用判断，不解释为什么；不提画像、数据、系统、字段、「未填写」这类内部概念。
+- 不给伴侣贴心理学或病理标签（例如「回避型人格」）；要谈就谈行为——「他这类反应通常出现在…」，并标注为推测。
+- 不说「我们试着…」「记住…」「希望对你有所帮助」「如果你愿意补充更多背景」这类咨询师仪式用语。
+- 不堆抽象名词（防御机制 / 沟通僵局 / 亲密感）；每个道理都落到具体行为和一句能直接说出口的话。
+- 不用空洞共情开场（「我理解这种被冷落的失落感」）；先接住具体的细节。
+- 不确定就说不确定，不编造对方的想法。
+优先级（三段指令互相打架时按此裁决）：L0 禁语 > 长度要求（chat_mode）> 场景字段要求（scene）> 语气风格（voice_style）。"""
+
+
+def with_human_base(text: str) -> str:
+    """把 L0 基线追加到 prompt/system 文本尾部（幂等：已含则原样返回）。
+
+    所有出口共用这一处，避免有的场景加了有的没加；幂等是为了
+    「base_prompt 已经过 build_chat_messages（含 L0）」的链路不再重复拼接。
+    """
+    if HUMAN_BASE_INSTRUCTION in text:
+        return text
+    return text.rstrip() + "\n\n" + HUMAN_BASE_INSTRUCTION
+
+
+#: chat_mode 三档规格（P-B §1.2 差异矩阵，逐项可断言）。
+#: - 字段名必须是 chat_mode；**绝不能叫 mode**——lc_prompt_builder 的 mode 是
+#:   输出通道（structured|stream），撞名会直接错乱。
+#: - deep 与既有行为逐参数相同（max_tokens=1200 / budget=1024 / 记忆5 / 理论3 / 历史20），
+#:   旧客户端不传 → 回落 deep → 零回归。
+#: - thinking 的实际值由 llm_client 按档位实例承担（quick 关思考），这里只记规格。
+CHAT_MODE_CONFIG: Dict[str, Dict[str, Any]] = {
+    "quick": {
+        "enable_thinking": False,
+        "thinking_budget": 0,
+        "max_tokens": 600,
+        "memory_limit": 0,
+        "rag_top_k": 0,
+        "history_limit": 6,
+        "instruction": QUICK_INSTRUCTION,
+    },
+    "deep": {
+        "enable_thinking": True,
+        "thinking_budget": 1024,
+        "max_tokens": 1200,
+        "memory_limit": 5,
+        "rag_top_k": 3,
+        "history_limit": 20,
+        "instruction": STREAM_INSTRUCTION,
+    },
+    "expert": {
+        "enable_thinking": True,
+        "thinking_budget": 2048,
+        "max_tokens": 2000,
+        "memory_limit": 10,
+        "rag_top_k": 5,
+        "history_limit": 40,
+        "instruction": EXPERT_INSTRUCTION,
+    },
+}
+
+DEFAULT_CHAT_MODE = "deep"
+
+
+def resolve_chat_mode(value: Optional[str]) -> str:
+    """chat_mode 白名单：非法值（None/空串/脏请求/旧版本客户端）一律回落 deep。
+
+    不抛 422——档位是体验参数，不该让脏请求打不开对话。
+    """
+    mode = (value or "").strip().lower()
+    return mode if mode in CHAT_MODE_CONFIG else DEFAULT_CHAT_MODE
 
 #: 无 avatar 记录时的默认人格（模型列默认 name 是「小爱」，但手册规定
 #: 未创建形象时对外口径用「翻译官」——这里跟手册，不读模型默认值）
@@ -576,7 +674,9 @@ def build_structured_stream_prompt(
         "除这两段之外，不要输出任何多余内容（不要开场白、不要总结）。"
         % (content_instruction, max_content_chars, MARKDOWN_OUTPUT_RULES + "\n", STRUCTURED_MARKER, schema)
     )
-    return head + tail
+    # L0 基线（P-B §2）：信件类双出口的正文段同样受禁语约束；head 常已经
+    # 含 L0（base_prompt 走过 build_chat_messages），with_human_base 幂等。
+    return with_human_base(head) + tail
 
 
 def build_profile_report_prompt(
@@ -598,19 +698,19 @@ def build_profile_report_prompt(
     user_profile = f"依恋类型：{type_name}，置信度：{confidence * 100:.0f}%"
 
     template = SYSTEM_PROMPTS["profile_report"]
-    return template.format(
+    return with_human_base(template.format(
         user_profile=user_profile,
         dimensions_data=dimensions_data,
-    )
+    ))
 
 
 def build_memory_card_prompt(item_kind: str, item_detail: str) -> str:
     """构建纪念日/愿望回忆卡片的 prompt"""
     template = SYSTEM_PROMPTS["memory_card"]
-    return template.format(
+    return with_human_base(template.format(
         item_kind=item_kind,
         item_detail=item_detail,
-    )
+    ))
 
 
 def build_practice_summary_prompt(
@@ -620,11 +720,11 @@ def build_practice_summary_prompt(
 ) -> str:
     """构建关系练习 AI 整理的 prompt"""
     template = SYSTEM_PROMPTS["practice_summary"]
-    return template.format(
+    return with_human_base(template.format(
         practice_title=practice_title,
         side_self=side_self or "（未作答）",
         side_partner=side_partner or "（未作答）",
-    )
+    ))
 
 
 def build_dual_summary_prompt(
@@ -634,8 +734,8 @@ def build_dual_summary_prompt(
 ) -> str:
     """构建双视角对照总结的 prompt"""
     template = SYSTEM_PROMPTS["dual_summary"]
-    return template.format(
+    return with_human_base(template.format(
         event_title=event_title,
         side_self=side_self or "（未填写）",
         side_partner=side_partner or "（未填写）",
-    )
+    ))

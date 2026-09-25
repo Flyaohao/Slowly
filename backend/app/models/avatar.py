@@ -20,6 +20,11 @@ class AiAvatar(BigIntPKMixin, TimestampMixin, Base):
     face_config: Mapped[Optional[dict]] = mapped_column(JSON)
     outfit_config: Mapped[Optional[dict]] = mapped_column(JSON)
     voice_style: Mapped[str] = mapped_column(String(30), default="gentle", nullable=False)
+    #: P-B §4.4：语气来源。auto=由画像自动选择（默认），manual=用户手选过。
+    #: 画像驱动的自动重算是 P-D，本轮只建列 + 读写提示。
+    voice_style_source: Mapped[str] = mapped_column(
+        String(10), default="auto", nullable=False, server_default="auto"
+    )
     background_url: Mapped[Optional[str]] = mapped_column(String(500))
 
 

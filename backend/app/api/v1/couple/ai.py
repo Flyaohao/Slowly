@@ -63,6 +63,7 @@ def chat(
             session_id=req.session_id,
             scene_key=req.scene_key,
             user_input=req.message,
+            chat_mode=req.chat_mode,
         )
     except ValueError as e:
         code = str(e)
@@ -116,6 +117,7 @@ def chat_stream(
             session_id=req.session_id,
             scene_key=req.scene_key,
             user_input=req.message,
+            chat_mode=req.chat_mode,
         )
     except ValueError as e:
         code = str(e)

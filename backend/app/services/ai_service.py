@@ -17,6 +17,7 @@ from app.repositories import (
 from app.schemas.ai_output import RewriteOutput, ReviewOutput
 from app.schemas.advisor_context import AdvisorContext
 from app.services.prompt_builder import (
+    CHAT_MODE_CONFIG,
     DEFAULT_AVATAR_NAME,
     build_prompt,
     build_structured_stream_prompt,
@@ -26,6 +27,7 @@ from app.services.prompt_builder import (
     build_practice_summary_prompt,
     build_memory_card_prompt,
     messages_to_text,
+    resolve_chat_mode,
     resolve_system_prompt,
 )
 from app.services.lc_prompt_builder import build_chat_messages
@@ -43,7 +45,7 @@ from app.services.safety_service import (
 from app.services.rag_service import retrieve_chunks, build_rag_context
 from app.services.memory_service import get_memory_context, distill_in_background
 from app.services.memory_retrieval import retrieve_memory_items
-from app.services.llm_client import llm, LlmError
+from app.services.llm_client import llm, LlmError, get_client_for_mode
 from app.services.sse import HEARTBEAT_INTERVAL, stream_with_heartbeat
 
 logger = logging.getLogger("couple.ai")
@@ -108,15 +110,25 @@ def _preprocess(
     session_id: Optional[int],
     scene_key: str,
     user_input: str,
+    chat_mode: str = "deep",
 ) -> Dict[str, Any]:
     """聊天链路共享前处理（13 步里的 1~9 步）。
 
     `chat()`（阻塞）与 `prepare_chat()`（流式）共用这一份实现，避免两条路径各写一遍。
     返回值中 `blocked` 非空表示输入被安全护栏拦截，此时不创建会话、不调用模型。
 
+    `chat_mode`（P-B §1）：quick/deep/expert，非法值回落 deep。**不是 `mode`**——
+    后者是 lc_prompt_builder 的输出通道（structured|stream），撞名会错乱。
+    本函数是历史/记忆/理论条数的实际决策点；档位尾部指令随 stream_messages
+    组装传入，人格与 L0 基线的相对顺序由「build_chat_messages → _append_persona」
+    固定为 场景(+L0) → 人格。
+
     注意：返回的 `session` 是 ORM 实例，只在请求级 `db` 存活期间可用，
     流式端点不要持有它（见 `prepare_chat`）。
     """
+    mode = resolve_chat_mode(chat_mode)
+    mode_cfg = CHAT_MODE_CONFIG[mode]
+
     scene = ai_repo.get_scene_by_key(db, scene_key)
     if not scene:
         raise ValueError("50001")
@@ -195,7 +207,9 @@ def _preprocess(
     session_id = session.id
 
     history = ai_repo.get_messages_by_session(db, session_id)
-    recent_history = history[-20:] if len(history) > 20 else history
+    # P-B §1.2：历史条数按档位取（quick 6 / deep 20 / expert 40）
+    _hl = mode_cfg["history_limit"]
+    recent_history = history[-_hl:] if len(history) > _hl else history
     history_text = "\n".join(
         f"{m.role}: {m.content}" for m in recent_history
     )
@@ -211,13 +225,24 @@ def _preprocess(
         f"{partner_card}\n\n{rel_block}" if rel_block else partner_card
     )
 
-    rag_chunks = retrieve_chunks(db, user_input)
+    # P-B §1.2：理论 RAG 条数按档位取（quick 0=关闭 / deep 3 / expert 5）
+    _rk = mode_cfg["rag_top_k"]
+    rag_chunks = retrieve_chunks(db, user_input, top_k=_rk) if _rk else []
     rag_context = build_rag_context(rag_chunks)
 
     # P0-4：召回一次、两处使用（约束③）——prompt 注入与 evidence 展示
     # 必须是同一份结果，否则面板显示近因 10 条、prompt 用相关性 5 条
     # 就造出 P0-5 要消灭的那种分叉。
-    memory_items = retrieve_memory_items(db, user_id, relation_id, query=user_input)
+    # P-B §1.2：记忆召回条数按档位取（quick 0=不查 / deep 5 / expert 10+事件时间线）。
+    # 召回函数的降级路径用固定近因条数、不吃 limit 参数——所以这里在调用侧
+    # 统一按档位截断，保证三档在向量库缺失/超时的环境里也遵守同一张矩阵。
+    _ml = mode_cfg["memory_limit"]
+    if _ml:
+        memory_items = retrieve_memory_items(
+            db, user_id, relation_id, query=user_input, limit=_ml
+        )[:_ml]
+    else:
+        memory_items = []
     from app.services.memory_retrieval import format_memory_context
 
     memory_context = format_memory_context(memory_items)
@@ -243,7 +268,10 @@ def _preprocess(
         **prompt_args, mode="structured", system_template=system_template
     )
     stream_messages = build_chat_messages(
-        **prompt_args, mode="stream", system_template=system_template
+        **prompt_args,
+        mode="stream",
+        system_template=system_template,
+        stream_instruction=mode_cfg["instruction"],
     )
 
     # P0-7 军师人格：读 ai_avatar（名字 + 语气），指令追加到 system 最后一段。
@@ -284,7 +312,7 @@ def _preprocess(
         voice_style=(avatar.voice_style if avatar else "") or "gentle",
     ).to_display()
 
-    ai_repo.create_message(db, session_id, "user", user_input)
+    ai_repo.create_message(db, session_id, "user", user_input, chat_mode=mode)
     # 留档用压平后的文本，便于直接读「这一轮到底给模型看了什么」
     ai_repo.save_prompt_version(
         db, user_id, relation_id, scene_key, messages_to_text(messages)
@@ -305,6 +333,7 @@ def _preprocess(
         "user_input": user_input,
         "rag_chunks": rag_chunks,
         "evidence": evidence,
+        "chat_mode": mode,
     }
 
 
@@ -315,8 +344,12 @@ def chat(
     session_id: Optional[int],
     scene_key: str,
     user_input: str,
+    chat_mode: str = "deep",
 ) -> dict:
-    ctx = _preprocess(db, user_id, relation_id, session_id, scene_key, user_input)
+    ctx = _preprocess(
+        db, user_id, relation_id, session_id, scene_key, user_input,
+        chat_mode=chat_mode,
+    )
 
     if ctx["blocked"]:
         return {
@@ -362,6 +395,7 @@ def chat(
         ai_response.get("raw_text", ""),
         structured_output=structured,
         risk_level=risk_level,
+        chat_mode=ctx.get("chat_mode"),
     )
 
     session.title = session.title or scene.name
@@ -405,6 +439,7 @@ def prepare_chat(
     session_id: Optional[int],
     scene_key: str,
     user_input: str,
+    chat_mode: str = "deep",
 ) -> dict:
     """SSE 端点专用：只做前处理，返回**纯数据**（不含 ORM 对象）。
 
@@ -413,7 +448,10 @@ def prepare_chat(
     此时 `ctx["session"]` 已经 Detached，再访问属性会抛异常。
     所以这里立刻把需要的信息拍平成基本类型，生成器只认这些数据。
     """
-    ctx = _preprocess(db, user_id, relation_id, session_id, scene_key, user_input)
+    ctx = _preprocess(
+        db, user_id, relation_id, session_id, scene_key, user_input,
+        chat_mode=chat_mode,
+    )
 
     if ctx["blocked"]:
         return {
@@ -422,6 +460,7 @@ def prepare_chat(
             "risk_level": ctx["risk_level"],
             "session_id": ctx["session_id"],
             "scene_key": scene_key,
+            "chat_mode": ctx.get("chat_mode", "deep"),
         }
 
     return {
@@ -430,6 +469,7 @@ def prepare_chat(
         "scene_key": scene_key,
         "scene_name": ctx["scene"].name,
         "stream_messages": ctx["stream_messages"],
+        "chat_mode": ctx.get("chat_mode", "deep"),
         "rag_hit": len(ctx["rag_chunks"]),
         # P0-5：evidence 已是纯 dict，可在响应体阶段随生成器携带
         "evidence": ctx.get("evidence"),
@@ -445,6 +485,8 @@ def _stream_with_heartbeat(
     messages: List[Dict[str, Any]],
     scene_key: str,
     interval: float = HEARTBEAT_INTERVAL,
+    max_tokens: int = 1200,
+    client=None,
 ) -> Iterator[Optional[Tuple[str, str]]]:
     """产出 `(kind, text)` 增量，静默期产出 `None` 作为心跳信号。
 
@@ -454,13 +496,18 @@ def _stream_with_heartbeat(
 
     `messages` 由 `lc_prompt_builder.build_chat_messages` 组装（system 承载人设
     与画像，human 承载检索上下文、长期记忆与本次输入）。
+
+    `max_tokens` / `client`：P-B §1.3——正文长度上限曾在这里硬编码 1200，
+    三档必须透传各自的值（quick 600 / deep 1200 / expert 2000），否则 quick
+    永远突破不了上限；思考开关在客户端实例上，随 client 一并传入。
     """
     return stream_with_heartbeat(
         messages,
         scene_key,
         temperature=0.7,
-        max_tokens=1200,
+        max_tokens=max_tokens,
         interval=interval,
+        client=client,
     )
 
 
@@ -509,8 +556,16 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
 
     buffer: List[str] = []
     thinking_buffer: List[str] = []
+    # P-B §1.3：按档位取正文上限与客户端实例（deep 即既有行为）
+    _mode = resolve_chat_mode(prepared.get("chat_mode"))
+    _mode_cfg = CHAT_MODE_CONFIG[_mode]
     try:
-        for item in _stream_with_heartbeat(prepared["stream_messages"], prepared["scene_key"]):
+        for item in _stream_with_heartbeat(
+            prepared["stream_messages"],
+            prepared["scene_key"],
+            max_tokens=_mode_cfg["max_tokens"],
+            client=get_client_for_mode(_mode),
+        ):
             if item is None:
                 # 兜底保活：模型连推理都不吐时，用注释帧证明连接还活着
                 yield {"comment": "keep-alive"}
@@ -565,6 +620,7 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
         relation_id=prepared.get("relation_id"),
         scene_key=prepared["scene_key"],
         user_input=prepared.get("user_input", ""),
+        chat_mode=prepared.get("chat_mode"),
     )
 
     # P0-5：正文完整后的末帧之一——判断依据。独立事件名，不与 thinking/delta 混用；
@@ -611,6 +667,7 @@ def _persist_streamed_message(
     relation_id: Optional[int] = None,
     scene_key: str = "unknown",
     user_input: str = "",
+    chat_mode: Optional[str] = None,
 ) -> int:
     """流式结束后落库。
 
@@ -626,6 +683,7 @@ def _persist_streamed_message(
             content,
             structured_output=structured,
             risk_level=risk_level,
+            chat_mode=chat_mode,
         )
         db.commit()
         # P0-10A 改动六：流式链路同样在第 1 轮回答后生成标题

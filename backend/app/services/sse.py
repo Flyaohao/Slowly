@@ -69,6 +69,7 @@ def stream_with_heartbeat(
     max_tokens: int = 1800,
     interval: float = HEARTBEAT_INTERVAL,
     cancel_event: Optional[threading.Event] = None,
+    client: Optional[Any] = None,
 ) -> Iterator[Optional[Tuple[str, str]]]:
     """产出 `(kind, text)` 增量，静默期产出 `None` 作为心跳信号。
 
@@ -87,10 +88,13 @@ def stream_with_heartbeat(
     """
     q: "queue.Queue[Any]" = queue.Queue()
     _END = object()
+    #: P-B：chat_mode 三档各持一个客户端（思考开关/预算在实例上）；
+    #: 不传保持原行为——用模块单例 llm。
+    active_client = client if client is not None else llm
 
     def _worker() -> None:
         try:
-            for item in llm.stream_events(
+            for item in active_client.stream_events(
                 messages,
                 temperature=temperature,
                 max_tokens=max_tokens,

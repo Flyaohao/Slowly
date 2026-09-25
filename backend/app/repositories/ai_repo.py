@@ -159,6 +159,7 @@ def create_message(
     structured_output: Optional[dict] = None,
     risk_level: Optional[str] = None,
     token_count: Optional[int] = None,
+    chat_mode: Optional[str] = None,
 ) -> AiChatMessage:
     """写消息并**同步刷新**所属 session 的 last_message_at/message_count/token_total。
 
@@ -173,6 +174,7 @@ def create_message(
         structured_output=structured_output,
         risk_level=risk_level,
         token_count=token_count,
+        chat_mode=chat_mode,
     )
     db.add(msg)
     db.flush()

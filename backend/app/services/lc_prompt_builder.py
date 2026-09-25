@@ -27,6 +27,7 @@ from app.services.prompt_builder import (
     STREAM_INSTRUCTION,
     SYSTEM_PROMPTS,
     truncate_at_json_marker,
+    with_human_base,
 )
 
 try:
@@ -80,6 +81,7 @@ def build_chat_messages(
     memory_context: str = "",
     mode: str = "structured",
     system_template: Optional[str] = None,
+    stream_instruction: str = STREAM_INSTRUCTION,
 ) -> List[Dict[str, Any]]:
     """产出可直接发给 LLM 的 messages 列表（OpenAI 兼容格式）。
 
@@ -93,12 +95,18 @@ def build_chat_messages(
     `system_template`：由 `prompt_builder.resolve_system_prompt()` 解析出的、
     当前对该场景生效的模板（可能来自 DB，支持版本化与 A/B 分流）。
     传 None 时使用代码内置模板。
+
+    `stream_instruction`：流式尾部指令按 `chat_mode` 分档传入
+    （quick/deep/expert → QUICK/STREAM/EXPERT_INSTRUCTION，默认 deep 口径）。
+    本层同时无条件追加 L0 人性化基线 `with_human_base`——位置在场景模板
+    （含尾部指令）之后、人格（`_append_persona`）之前，两条出口都经过这里。
     """
     base = system_template or SYSTEM_PROMPTS.get(
         scene_key, SYSTEM_PROMPTS["private_advisor"]
     )
     if mode == "stream":
-        base = truncate_at_json_marker(base) + "\n\n" + STREAM_INSTRUCTION
+        base = truncate_at_json_marker(base) + "\n\n" + stream_instruction
+    base = with_human_base(base)
 
     profile_vars = {
         "user_profile": user_profile,
@@ -114,8 +122,8 @@ def build_chat_messages(
         # 这种模板一旦渲染失败就会挡掉整轮对话，回退到内置模板是更划算的选择。
         fallback = SYSTEM_PROMPTS.get(scene_key, SYSTEM_PROMPTS["private_advisor"])
         if mode == "stream":
-            fallback = truncate_at_json_marker(fallback) + "\n\n" + STREAM_INSTRUCTION
-        system_text = _render(fallback, profile_vars)
+            fallback = truncate_at_json_marker(fallback) + "\n\n" + stream_instruction
+        system_text = _render(with_human_base(fallback), profile_vars)
 
     # 上下文块自带尾部分隔，为空时不留多余空行
     human_text = _render(

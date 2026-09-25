@@ -1,12 +1,26 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Any, List, Dict, Literal
 from datetime import datetime
+
+#: P-B §1.1：chat_mode 白名单。非法值回落 deep（不 422——档位是体验参数，
+#: 旧版本客户端/脏请求不该打不开对话）。
+_CHAT_MODES = ("quick", "deep", "expert")
 
 
 class ChatRequest(BaseModel):
     session_id: Optional[int] = None
     scene_key: str
     message: str = Field(..., min_length=1, max_length=2000)
+    #: 三档模式，默认 deep（与既有行为逐参数相同 → 旧客户端零回归）。
+    #: ⚠️ 字段名必须是 chat_mode，**绝不能叫 mode**——lc_prompt_builder 的
+    #: mode 是输出通道（structured|stream），撞名会在那一层直接错乱。
+    chat_mode: str = "deep"
+
+    @field_validator("chat_mode")
+    @classmethod
+    def _normalize_chat_mode(cls, v: str) -> str:
+        mode = (v or "").strip().lower()
+        return mode if mode in _CHAT_MODES else "deep"
 
 
 class StructuredOutput(BaseModel):

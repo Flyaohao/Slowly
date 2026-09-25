@@ -83,6 +83,9 @@ class AiChatMessage(BigIntPKMixin, TimestampMixin, Base):
     structured_output: Mapped[Optional[dict]] = mapped_column(JSON)
     risk_level: Mapped[Optional[str]] = mapped_column(String(30))
     token_count: Mapped[Optional[int]] = mapped_column(Integer)
+    #: P-B §1.5：这条消息由哪一档生成（quick/deep/expert）。NULL=旧数据/未标注。
+    #: 只落库不进 MessageOut——DTO 契约测试是静态正则扫描，等 P-C 一起放开。
+    chat_mode: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
 
     session: Mapped["AiChatSession"] = relationship(back_populates="messages")
 

@@ -38,7 +38,11 @@ def get_assets(db: Session, user_id: int) -> list:
 def set_voice_style(db: Session, user_id: int, voice_style: str) -> AiAvatar:
     relation = _check_relation(db, user_id)
     avatar = avatar_repo.get_or_create_avatar(db, relation.id)
-    avatar = avatar_repo.update_avatar(db, avatar, {"voice_style": voice_style})
+    # P-B §4.4：用户手选一次即写 manual（UI 顶部「由画像自动选择」提示随之消失）。
+    # 画像驱动的自动重算是 P-D，本轮不碰。
+    avatar = avatar_repo.update_avatar(
+        db, avatar, {"voice_style": voice_style, "voice_style_source": "manual"}
+    )
     db.commit()
     db.refresh(avatar)
     return avatar

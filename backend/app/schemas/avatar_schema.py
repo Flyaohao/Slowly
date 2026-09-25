@@ -23,6 +23,9 @@ class AvatarOut(BaseModel):
     face_config: Optional[dict] = None
     outfit_config: Optional[dict] = None
     voice_style: str
+    #: P-B §4.4：auto=画像自动选择 / manual=用户手选过。
+    #: 客户端据此显示「当前由画像自动选择」提示行。
+    voice_style_source: str = "auto"
     background_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
