@@ -35,8 +35,8 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
 
 
 app = FastAPI(
-    title="Couple AI Translator",
-    description="情侣 AI 翻译器 API",
+    title="Slowly慢慢说",
+    description="Slowly慢慢说 API",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",

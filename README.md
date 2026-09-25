@@ -1,4 +1,4 @@
-# 情侣 AI 军师 · Couple AI Translator
+# Slowly慢慢说 · Couple AI Translator
 
 > 把伴侣说的一句话，用 AI「翻译」成他真正想表达的意思，并告诉你该怎么回。
 
