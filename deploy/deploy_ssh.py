@@ -39,15 +39,28 @@ def main():
             command = f.read()
     elif argv and argv[0] == "--upload":
         local, remote = argv[1], argv[2]
+        # MSYS/Git Bash 会把以 / 开头的 argv 自动转成 Windows 路径
+        # （/usr/src/... → D:/java1/Git/usr/src/...），远端 cat/SFTP 必失败，
+        # 且报错（FileNotFoundError / Socket closed）完全看不出是路径被转换了。
+        # 这里显式拦截，给出可操作的提示；根治办法是带 MSYS_NO_PATHCONV=1 运行。
+        if not remote.startswith("/"):
+            raise SystemExit(
+                f"远端路径必须以 / 开头，收到：{remote}\n"
+                "若在 Git Bash 中运行，这是 MSYS 路径转换所致，"
+                "请改用：MSYS_NO_PATHCONV=1 python deploy/deploy_ssh.py ..."
+            )
+        # paramiko 5.x 起 put() 不再把以 / 结尾的 remote 当目录拼文件名，
+        # 会直接拿目录本身开写、必失败；先归一成完整文件路径，语义与旧版一致。
+        if remote.endswith("/"):
+            remote = remote + os.path.basename(local)
         try:
             client = _connect()
             sftp = client.open_sftp()
             sftp.put(local, remote)
-            target = sftp.stat(remote).st_size if not remote.endswith("/") else None
+            target = sftp.stat(remote).st_size
             sftp.close()
             client.close()
-            size = target if target is not None else os.path.getsize(local)
-            print(f"[OK] 已上传 {local} -> {remote}（{size} 字节，SFTP）")
+            print(f"[OK] 已上传 {local} -> {remote}（{target} 字节，SFTP）")
             return 0
         except Exception as exc:  # noqa: BLE001 —— 任何 SFTP 异常都退回 exec 管道
             # 2026-09-16 起线上 sftp-server 对**任何写操作**都回 SSH_FX_FAILURE：
@@ -88,31 +101,44 @@ def _put_via_exec(local: str, remote: str) -> int:
     with open(local, "rb") as f:
         data = f.read()
 
-    client = _connect()
-    try:
-        stdin, stdout, stderr = client.exec_command(
-            "cat > %s" % shlex.quote(remote), timeout=1800
-        )
-        stdin.write(data)
-        stdin.flush()
-        # 关掉写方向即向远端 cat 发 EOF，否则它会一直等更多输入
-        stdin.channel.shutdown_write()
-        out = stdout.read().decode("utf-8", errors="replace")
-        err = stderr.read().decode("utf-8", errors="replace")
-        code = stdout.channel.recv_exit_status()
-        # 回读校验：字节数对不上就当作失败，别让半截包进到解包步骤
-        size = client.exec_command("stat -c %%s %s" % shlex.quote(remote), timeout=60)[1]
-        remote_size = size.read().decode().strip()
-    finally:
-        client.close()
+    # 写到一半 SSH 连接断掉（Socket is closed）时整包重试一次，重试也失败
+    # 才报错，绝不静默返回成功。注意：2026-09-26 排查的连续两次 Socket closed
+    # 实为 Git Bash 把远端路径 MSYS 转换所致（见 --upload 分支的拦截），
+    # 此重试是留给真实网络瞬断的兜底。
+    last_error = None
+    for attempt in (1, 2):
+        client = _connect()
+        try:
+            stdin, stdout, stderr = client.exec_command(
+                "cat > %s" % shlex.quote(remote), timeout=1800
+            )
+            stdin.write(data)
+            stdin.flush()
+            # 关掉写方向即向远端 cat 发 EOF，否则它会一直等更多输入
+            stdin.channel.shutdown_write()
+            out = stdout.read().decode("utf-8", errors="replace")
+            err = stderr.read().decode("utf-8", errors="replace")
+            code = stdout.channel.recv_exit_status()
+            # 回读校验：字节数对不上就当作失败，别让半截包进到解包步骤
+            size = client.exec_command(
+                "stat -c %%s %s" % shlex.quote(remote), timeout=60
+            )[1]
+            remote_size = size.read().decode().strip()
+        except OSError as exc:
+            last_error = exc
+            print(f"[warn] exec 上传中断（第 {attempt} 次：{exc}），重传")
+            continue
+        finally:
+            client.close()
 
-    if out or err:
-        print((out + err).rstrip())
-    if remote_size != str(len(data)):
-        print(f"[FAIL] 本地 {len(data)} 字节，远端 {remote_size or '?'} 字节")
-        return 1
-    print(f"[OK] 已上传 {local} -> {remote}（{len(data)} 字节，exec 管道）")
-    return code
+        if out or err:
+            print((out + err).rstrip())
+        if remote_size != str(len(data)):
+            print(f"[FAIL] 本地 {len(data)} 字节，远端 {remote_size or '?'} 字节")
+            return 1
+        print(f"[OK] 已上传 {local} -> {remote}（{len(data)} 字节，exec 管道）")
+        return code
+    raise SystemExit(f"上传失败（两次均被中断）：{last_error}")
 
 
 def _connect():
