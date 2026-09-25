@@ -76,6 +76,11 @@ services:
       - chroma_data:/app/data/chroma
       # 上传的图片（头像 / 纪念馆藏品配图）放挂载卷，重建镜像不丢
       - uploads_data:/app/uploads
+      # 安卓安装包目录：刻意用宿主 bind mount 而不是命名卷，
+      # 这样换包只需往宿主 ./apk 里丢新文件（或 scp 上去），
+      # 既不用重建镜像，20MB 的 APK 也不会被打进部署包与镜像层。
+      # 宣传页在镜像内（backend/static/app），不需要挂载。
+      - ./apk:/app/static/apk
     ports:
       - "${BACKEND_PORT:-8000}:8000"
 

@@ -152,6 +152,31 @@ _UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 os.makedirs(_UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=_UPLOAD_DIR), name="uploads")
 
+# ---------------------------------------------------------------------------
+# 静态文件：宣传页与安卓安装包下载。
+#
+# 两者刻意用不同的发布方式：
+#
+#   /app   —— 宣传页（单文件 HTML，约 40 KB）。**随镜像发布**，
+#             跟代码一起走部署流程，不需要额外的宿主目录。
+#
+#   /download —— 安装包（APK，20 MB 起）。**走宿主 bind mount，不进镜像、
+#             也不进部署包**：一是免得每次换包都重建镜像（重建要几分钟），
+#             二是避免 20 MB 的二进制被反复打进部署包。
+#             换包时只需把新文件放进宿主的 apk/ 目录。
+#
+# 目录用环境变量兜底默认值，因此**不需要往 compose 的 environment
+# 白名单里加新变量** —— 少一个"设了却在容器里看不到"的坑。
+# ---------------------------------------------------------------------------
+_LANDING_DIR = os.getenv("LANDING_DIR", "static/app")
+if os.path.isdir(_LANDING_DIR):
+    # html=True：访问 /app/ 时自动返回 index.html，无需显式写文件名
+    app.mount("/app", StaticFiles(directory=_LANDING_DIR, html=True), name="landing")
+
+_APK_DIR = os.getenv("APK_DIR", "static/apk")
+os.makedirs(_APK_DIR, exist_ok=True)
+app.mount("/download", StaticFiles(directory=_APK_DIR), name="download")
+
 
 # ---------------------------------------------------------------------------
 # 统一响应封装

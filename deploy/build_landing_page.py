@@ -10,10 +10,12 @@
 真正会随版本变化的是「落地页 → 安装包」这一跳，它由 manifest.json 一处驱动。
 
 ── 重新部署安装包时的正确流程 ────────────────────────────────────────
-    1. 打好新的 release 包（android/app/build/outputs/apk/release/）
-    2. 上传到服务器 app-download/ 目录，文件名带上版本号
-    3. 重跑本脚本 → index.html 与 manifest.json 一起更新
-    4. 把 manifest.json 传到服务器（index.html 只在文案变动时才需要传）
+    0. 出包。**优先用 release 产物；没有则自动回落 debug**
+       （android/app/build/outputs/apk/{release,debug}/）
+       当前阶段对外分发的是 debug 包，故这条回落是必需的；release 一可用会自动优先。
+    1. 上传到服务器 apk/ 目录，文件名 = couple-<版本>[-debug].apk
+    2. 重跑本脚本 → index.html 与 manifest.json 一起更新
+    3. 传上去（只换安装包时其实只需 manifest.json，index.html 只在文案变动时才要传）
 二维码与页面结构全程不动。
 
 用法（依赖 qrcode + pillow，装在 default venv 里，不在项目 venv 中）：
@@ -42,11 +44,15 @@ MANIFEST = os.path.join(APP_DIR, "manifest.json")
 
 BASE = os.getenv("LANDING_BASE_URL", "http://182.92.194.78:8000").rstrip("/")
 PAGE_URL = BASE + "/app/"
-APK_NAME = os.getenv("APK_NAME", "couple-1.0.0.apk")
-APK_URL = BASE + "/download/" + APK_NAME
+# 文件名默认按「版本号 + 构建类型」推导（见 main）。只有要强制指定时才设 APK_NAME。
+APK_NAME_OVERRIDE = os.getenv("APK_NAME", "").strip()
 
 QR_PLACEHOLDER = "__QR_DATA_URI__"
 APK_PLACEHOLDER = "__APK_URL__"
+# 安装包体积的**静态回退文案**。页面加载后会读同源 manifest.json 覆盖它；
+# 但 manifest 读不到时（离线、路径被改）就会显示这行，所以它必须也是真值 ——
+# 写死一个旧体积等于在兜底路径上骗用户。由本脚本注入。
+APK_SIZE_PLACEHOLDER = "__APK_SIZE_TEXT__"
 
 
 def qr_data_uri(text: str) -> str:
@@ -89,15 +95,26 @@ def read_app_version():
 
 
 def find_apk():
-    """找 release 产物；没构建过则返回 None（此时 manifest 的大小与校验值为空）。"""
-    d = os.path.join(ROOT, "android", "app", "build", "outputs", "apk", "release")
-    if not os.path.isdir(d):
-        return None
-    apks = [os.path.join(d, f) for f in os.listdir(d) if f.endswith(".apk")]
-    return max(apks, key=os.path.getmtime) if apks else None
+    """找安装包：**优先 release，没有则回落 debug**。
+
+    返回 (路径, 构建类型)；两者都找不到时返回 (None, None)，此时 manifest 的
+    大小与校验值为空，页面会回落到 HTML 里写死的地址。
+
+    为什么要有 debug 回落：当前 App 尚未定稿，对外分发的是 debug 包；
+    release 一可用会自动优先，不必回来改脚本。
+    """
+    base = os.path.join(ROOT, "android", "app", "build", "outputs", "apk")
+    for build_type in ("release", "debug"):
+        d = os.path.join(base, build_type)
+        if not os.path.isdir(d):
+            continue
+        apks = [os.path.join(d, f) for f in os.listdir(d) if f.endswith(".apk")]
+        if apks:
+            return max(apks, key=os.path.getmtime), build_type
+    return None, None
 
 
-def build_manifest(version, code, apk_path):
+def build_manifest(version, code, apk_path, apk_name, build_type):
     """产出 manifest.json —— 重新部署安装包时唯一需要更新的文件。"""
     size = sha = None
     released = datetime.date.today().isoformat()
@@ -113,8 +130,10 @@ def build_manifest(version, code, apk_path):
         "name": "慢慢说",
         "version": version,
         "versionCode": code,
-        "fileName": APK_NAME,
-        "url": "/download/" + APK_NAME,
+        # 对外明示包类型：debug 包体积更大且带调试开关，别让人误以为是正式包
+        "buildType": build_type or "unknown",
+        "fileName": apk_name,
+        "url": "/download/" + apk_name,
         "sizeBytes": size,
         "sha256": sha,
         "minAndroid": "8.0",
@@ -130,7 +149,7 @@ def main():
     with open(TPL, "r", encoding="utf-8") as f:
         html = f.read()
 
-    missing = [p for p in (QR_PLACEHOLDER, APK_PLACEHOLDER) if p not in html]
+    missing = [p for p in (QR_PLACEHOLDER, APK_PLACEHOLDER, APK_SIZE_PLACEHOLDER) if p not in html]
     if missing:
         raise SystemExit(
             "模板里缺少占位符 %s —— 模板可能被误改过，不要继续生成"
@@ -138,11 +157,29 @@ def main():
         )
 
     version, code = read_app_version()
-    apk = find_apk()
-    manifest = build_manifest(version, code, apk)
+    apk, build_type = find_apk()
+
+    if APK_NAME_OVERRIDE:
+        apk_name = APK_NAME_OVERRIDE
+    elif build_type == "debug":
+        apk_name = "couple-%s-debug.apk" % version
+    else:
+        apk_name = "couple-%s.apk" % version
+    apk_url = BASE + "/download/" + apk_name
+
+    manifest = build_manifest(version, code, apk, apk_name, build_type)
 
     uri = qr_data_uri(PAGE_URL)
-    html = html.replace(QR_PLACEHOLDER, uri).replace(APK_PLACEHOLDER, APK_URL)
+    size_text = (
+        "约 %.1f MB" % (manifest["sizeBytes"] / 1024 / 1024)
+        if manifest["sizeBytes"]
+        else "体积以实际下载为准"
+    )
+    html = (
+        html.replace(QR_PLACEHOLDER, uri)
+        .replace(APK_PLACEHOLDER, apk_url)
+        .replace(APK_SIZE_PLACEHOLDER, size_text)
+    )
 
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(html)
@@ -152,20 +189,21 @@ def main():
     print("已生成 %s（%.1f KB）" % (OUT, os.path.getsize(OUT) / 1024))
     print("已生成 %s" % MANIFEST)
     print("  落地页地址：%s" % PAGE_URL)
-    print("  安装包直链：%s" % APK_URL)
+    print("  安装包直链：%s" % apk_url)
     print("  App 版本  ：v%s (versionCode %s)" % (version, code))
+    print("  包类型    ：%s" % (build_type or "未找到产物"))
     if manifest["sizeBytes"]:
         print("  安装包大小：%.1f MB" % (manifest["sizeBytes"] / 1024 / 1024))
         print("  SHA-256   ：%s…" % manifest["sha256"][:16])
     else:
         print(
-            "  [warn] 未找到 release 产物，manifest 里大小与校验值为空"
+            "  [warn] release/debug 目录下都没有 APK，manifest 里大小与校验值为空"
             "（打好包后再跑一次即可）"
         )
     print("  二维码    ：%d 字符 base64" % len(uri))
 
     # 产物里不该再残留占位符
-    if QR_PLACEHOLDER in html or APK_PLACEHOLDER in html:
+    if any(p in html for p in (QR_PLACEHOLDER, APK_PLACEHOLDER, APK_SIZE_PLACEHOLDER)):
         raise SystemExit("[FAIL] 产物中仍存在占位符")
 
 
