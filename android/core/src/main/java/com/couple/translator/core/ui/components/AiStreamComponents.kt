@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppSurface
@@ -240,6 +241,13 @@ fun AiWaitingBubble(modifier: Modifier = Modifier) {
  *
  * 光标是这件事唯一的视觉信号来源——没有它，用户分不清"输出完了"和
  * "模型卡住了"，只能干等。
+ *
+ * P-A §2.3：内部改走 [parseInlineMarkdown]——只处理 `**粗体**` / `*斜体*` /
+ * `` `code` ``，未闭合标记按字面显示（防忽粗忽细抖动）；**无标记时输出与
+ * 改造前逐字节一致**，5 个既有调用方零回归。
+ *
+ * [textSizeSp]：`0f`（默认）= 沿用 `bodyMedium`（14sp，既有调用方不变）；
+ * 传具体值 = 军师页终稿对齐用（bodyLarge 16sp），保证流式→终稿不跳字号。
  */
 @Composable
 fun AiStreamingText(
@@ -247,15 +255,29 @@ fun AiStreamingText(
     modifier: Modifier = Modifier,
     isStreaming: Boolean = false,
     color: Color = AppTextPrimary,
+    textSizeSp: Float = 0f,
 ) {
     if (content.isEmpty() && !isStreaming) return
 
-    Text(
-        text = if (isStreaming) "$content▍" else content,
-        style = MaterialTheme.typography.bodyMedium,
-        color = color,
-        modifier = modifier.fillMaxWidth(),
-    )
+    val display = if (isStreaming) "$content▍" else content
+    val annotated = remember(display) { parseInlineMarkdown(display) }
+    if (textSizeSp > 0f) {
+        val sp = textSizeSp
+        Text(
+            text = annotated,
+            color = color,
+            fontSize = sp.sp,
+            lineHeight = 24.sp,
+            modifier = modifier.fillMaxWidth(),
+        )
+    } else {
+        Text(
+            text = annotated,
+            style = MaterialTheme.typography.bodyMedium,
+            color = color,
+            modifier = modifier.fillMaxWidth(),
+        )
+    }
 }
 
 /**

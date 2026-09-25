@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -54,20 +53,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.AiDto
+import com.couple.translator.core.ui.components.AiRiskLevel
 import com.couple.translator.core.ui.components.AiStreamingText
 import com.couple.translator.core.ui.components.AiThinkingPanel
 import com.couple.translator.core.ui.components.AiWaitingBubble
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppFilterChip
+import com.couple.translator.core.ui.components.AppMarkdownText
 import com.couple.translator.core.ui.components.AppPageHeader
 import com.couple.translator.core.ui.components.AppTopBar
 import com.couple.translator.core.ui.components.AppTopBarAction
+import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.TopBarIdentity
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentFaint
@@ -115,7 +120,11 @@ fun NewAiChatScreen(
     // 优先消费列表页传来的待进入会话，否则向服务端要 active。
     LaunchedEffect(Unit) {
         val pending = PendingSessionHolder.consume()
-        if (pending != null) {
+        if (pending != null && pending.newChat) {
+            // P-A §3.1 D5：列表页「＋」→ 回来开新对话（lambda 内可安全 return）
+            viewModel.startNewChat()
+            return@LaunchedEffect
+        } else if (pending != null) {
             viewModel.setSceneKey(pending.sceneKey)
             viewModel.loadSession(pending.sessionId)
             // loadSession 只拉消息与 id，不同步标题/归档态——不补会残留
@@ -124,6 +133,33 @@ fun NewAiChatScreen(
             viewModel.setSessionArchived(pending.archived)
         } else {
             viewModel.refreshActiveSession()
+        }
+    }
+
+    // P-A §2.1：错误呈现（ShowError 事件 + uiState.error 合并，只弹一个）
+    var errorMessage by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        viewModel.event.collect { ev ->
+            if (ev is AiChatUiEvent.ShowError) errorMessage = ev.message
+        }
+    }
+    val dialogMessage = errorMessage.ifBlank { uiState.error }
+    if (dialogMessage.isNotBlank()) {
+        ErrorDialog(
+            message = dialogMessage,
+            onDismiss = {
+                errorMessage = ""
+                viewModel.clearError()
+            },
+        )
+    }
+
+    // P-A §2.5：chip 与抽屉共用同一分派（此前 chip 忽略 target，复盘点不进去）
+    val dispatchScene: (AiScene) -> Unit = { scene ->
+        when (scene.target) {
+            AiSceneTarget.MEDIATION -> onNavigateToMediation()
+            AiSceneTarget.REVIEW -> onNavigateToReview()
+            AiSceneTarget.CHAT -> viewModel.selectScene(scene)
         }
     }
 
@@ -180,7 +216,7 @@ fun NewAiChatScreen(
                     QuickSceneChips(
                         scenes = quickChips,
                         currentScene = uiState.sceneKey,
-                        onSceneSelected = viewModel::selectScene,
+                        onSceneSelected = dispatchScene,
                     )
                 }
             }
@@ -192,6 +228,7 @@ fun NewAiChatScreen(
                     AiReplyBubble(
                         content = message.content,
                         thinking = message.structuredOutput?.thinking,
+                        riskLevel = message.riskLevel,
                     )
                 }
             }
@@ -202,10 +239,12 @@ fun NewAiChatScreen(
             if (uiState.thinkingContent.isNotEmpty() || uiState.streamingContent.isNotEmpty()) {
                 item {
                     Column(modifier = Modifier.fillMaxWidth()) {
+                        // P-A §2.4：与正文文字同一左起点（15dp）
                         AiThinkingPanel(
                             thinking = uiState.thinkingContent,
                             isLive = uiState.isThinking,
                             seconds = uiState.thinkingSeconds,
+                            modifier = Modifier.padding(start = 15.dp),
                         )
                         if (uiState.streamingContent.isNotEmpty()) {
                             if (uiState.thinkingContent.isNotEmpty()) {
@@ -341,12 +380,7 @@ fun NewAiChatScreen(
             onDismiss = { showModeSheet = false },
             onModeSelected = { scene ->
                 showModeSheet = false
-                // 有专属页面的场景跳转过去，其余作为聊天场景切换
-                when (scene.target) {
-                    AiSceneTarget.MEDIATION -> onNavigateToMediation()
-                    AiSceneTarget.REVIEW -> onNavigateToReview()
-                    AiSceneTarget.CHAT -> viewModel.selectScene(scene)
-                }
+                dispatchScene(scene)
             },
         )
     }
@@ -368,6 +402,7 @@ fun NewAiChatScreen(
     }
 }
 
+/** P-A §2.4 D1：用户气泡右对齐，宽度随屏（0.82），不再固定 280dp。 */
 @Composable
 private fun UserBubble(content: String) {
     Row(
@@ -376,7 +411,7 @@ private fun UserBubble(content: String) {
     ) {
         Box(
             modifier = Modifier
-                .widthIn(max = 280.dp)
+                .fillMaxWidth(0.82f)
                 .clip(RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp))
                 .background(AppTextPrimary)
                 .padding(12.dp),
@@ -391,40 +426,68 @@ private fun UserBubble(content: String) {
 }
 
 /**
- * AI 回复气泡。
+ * AI 回复（P-A §2.2/§2.3/§2.4）：
+ * - 风险卡（[riskLevel] wire 值，normal/null 不渲染；流式不传）
+ * - 终稿 Markdown（[AppMarkdownText]）/ 流式行内 Markdown（[AiStreamingText]）
+ *   字号统一 16sp（bodyLarge），流式→终稿不跳字
+ * - 无底文档流：左侧 3dp 竖线 + 缩进，全宽
  *
  * [thinking] 是**历史消息**里落库的思考过程（`structured_output.thinking`）：
- * 流式期间它由 [AiThinkingPanel] 实时渲染，重新进入会话时则从这里回读，
- * 这样"深度思考过程可展开查看"在事后依然成立。
+ * 流式期间它由 [AiThinkingPanel] 实时渲染，重新进入会话时则从这里回读。
  */
 @Composable
 private fun AiReplyBubble(
     content: String,
     isStreaming: Boolean = false,
     thinking: String? = null,
+    riskLevel: String? = null,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         if (!thinking.isNullOrBlank()) {
-            AiThinkingPanel(thinking = thinking, isLive = false)
+            // P-A §2.4：思考面板是次级容器，左缘与正文文字同一左起点（15dp）
+            AiThinkingPanel(
+                thinking = thinking,
+                isLive = false,
+                modifier = Modifier.padding(start = 15.dp),
+            )
             Spacer(modifier = Modifier.height(8.dp))
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Start,
-        ) {
-            Box(
+
+        // 风险卡在正文上方；流式期间不渲染（risk 只在 done 帧给，中途会闪）
+        val risk = if (isStreaming) null else AiRiskLevel.fromWire(riskLevel)
+        if (risk != null) {
+            SafetyWarningCard(riskLevel = risk)
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        // 去重：命中输入护栏时正文就是同一段安全文案，卡片已完整表达 → 不再重复渲染
+        val canned = risk?.let { safetyCannedMessage(it) }
+        val showBody = canned == null || !content.trim().startsWith(canned.take(12))
+
+        if (showBody) {
+            // App* 是 @Composable getter：先取值再进 drawBehind 闭包（红线）
+            val lineColor = AppBorderLight
+            val lineWidthPx = with(LocalDensity.current) { 3.dp.toPx() }
+            Column(
                 modifier = Modifier
-                    .widthIn(max = 280.dp)
-                    .clip(RoundedCornerShape(4.dp, 16.dp, 16.dp, 16.dp))
-                    .background(AppSurface)
-                    .padding(12.dp),
+                    .fillMaxWidth()
+                    .drawBehind {
+                        drawRect(color = lineColor, size = Size(lineWidthPx, size.height))
+                    }
+                    .padding(start = 15.dp),
             ) {
-                Text(
-                    // 流式过程中补一个光标，让"还在写"这件事可见
-                    text = if (isStreaming) "$content▍" else content,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = AppTextPrimary,
-                )
+                if (isStreaming) {
+                    AiStreamingText(
+                        content = content,
+                        isStreaming = true,
+                        textSizeSp = 16f,
+                    )
+                } else {
+                    AppMarkdownText(
+                        markdown = content,
+                        textSizeSp = 16f,
+                    )
+                }
             }
         }
     }
@@ -663,7 +726,10 @@ private fun EvidencePanel(evidence: AiDto.EvidencePayload) {
     val hasTheory = evidence.theoryChunks.isNotEmpty()
 
     AppCard(
-        modifier = Modifier.fillMaxWidth(),
+        // P-A §2.4：依据面板左缘与正文文字同一左起点（15dp）
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 15.dp),
         onClick = { expanded = !expanded },
         containerColor = AppSurface,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),

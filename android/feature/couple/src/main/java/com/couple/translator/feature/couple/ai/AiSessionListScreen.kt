@@ -17,17 +17,27 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,11 +54,13 @@ import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.SkeletonListCard
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppSurfaceMuted
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
+import java.time.LocalDateTime
 
 // 场景名不再本地硬编码：此前这里只有 3 个，比后端少一半，
 // 陌生场景的会话就退化成显示原始 scene_key。改由 AiSceneCatalog 统一提供
@@ -66,6 +78,8 @@ fun AiSessionListScreen(
     val sceneLabel: (String) -> String = { key ->
         scenes.firstOrNull { it.key == key }?.label ?: key
     }
+    // P-A §3.2 本地过滤（纯客户端，不打接口）
+    var query by remember { mutableStateOf("") }
 
     if (uiState.error.isNotEmpty()) {
         ErrorDialog(
@@ -74,12 +88,45 @@ fun AiSessionListScreen(
         )
     }
 
+    // 过滤 + 分组（🟢J：按最后活跃时间，而非 createdAt）
+    val now = remember { LocalDateTime.now() }
+    val filtered = uiState.sessions.filter { s ->
+        query.isBlank() ||
+            (s.title ?: "").contains(query, ignoreCase = true) ||
+            sceneLabel(s.sceneKey).contains(query, ignoreCase = true)
+    }
+    val grouped: List<Pair<String, List<AiDto.SessionResponse>>> = remember(filtered, now) {
+        val buckets = LinkedHashMap<SessionBucket, MutableList<AiDto.SessionResponse>>()
+        for (s in filtered) {
+            val activeIso = s.lastMessageAt ?: s.createdAt
+            val b = sessionBucketOf(activeIso, now)
+            buckets.getOrPut(b) { mutableListOf() }.add(s)
+        }
+        SessionBucket.entries
+            .mapNotNull { b -> buckets[b]?.let { b.label to it } }
+    }
+
     Scaffold(
         containerColor = AppBackground,
         topBar = {
+            // P-A §3.1 D5：顶栏「＋」→ 回军师页开新对话（不在此页 close）
             AppBackTopBar(
                 onBack = onNavigateBack,
                 title = "历史会话",
+                trailing = {
+                    IconButton(
+                        onClick = {
+                            PendingSessionHolder.setNewChat()
+                            onNavigateBack()
+                        }
+                    ) {
+                        Icon(
+                            Icons.Outlined.Add,
+                            contentDescription = "新建会话",
+                            tint = com.couple.translator.core.ui.theme.AppTextSecondary,
+                        )
+                    }
+                },
             )
         },
     ) { padding ->
@@ -107,31 +154,72 @@ fun AiSessionListScreen(
                         }
                     }
                     else -> {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = AppSpacing.screenH),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            item { Spacer(modifier = Modifier.height(8.dp)) }
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            // P-A §3.2：本地搜索框
+                            OutlinedTextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = AppSpacing.screenH, vertical = 8.dp),
+                                placeholder = { Text("搜索标题或场景", color = AppTextTertiary) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = AppAccent,
+                                    unfocusedBorderColor = com.couple.translator.core.ui.theme.AppBorderLight,
+                                    cursorColor = com.couple.translator.core.ui.theme.AppTextPrimary,
+                                ),
+                            )
 
-                            items(uiState.sessions) { session ->
-                                SessionItem(
-                                    session = session,
-                                    sceneLabel = sceneLabel,
-                                    onClick = {
-                                        onNavigateToSession(
-                                            session.id,
-                                            session.sceneKey,
-                                            session.title,
-                                            session.status == "archived",
-                                        )
-                                    },
-                                    onDelete = { viewModel.deleteSession(session.id) },
-                                )
+                            if (grouped.isEmpty()) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = "没有匹配「$query」的会话",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = AppTextTertiary,
+                                    )
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    grouped.forEach { (label, list) ->
+                                        item(key = "header_$label") {
+                                            Text(
+                                                text = label,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = AppTextSecondary,
+                                                modifier = Modifier.padding(
+                                                    start = 4.dp,
+                                                    top = 12.dp,
+                                                    bottom = 4.dp,
+                                                ),
+                                            )
+                                        }
+                                        items(list, key = { it.id }) { session ->
+                                            SessionItem(
+                                                session = session,
+                                                sceneLabel = sceneLabel,
+                                                onClick = {
+                                                    onNavigateToSession(
+                                                        session.id,
+                                                        session.sceneKey,
+                                                        session.title,
+                                                        session.status == "archived",
+                                                    )
+                                                },
+                                                onDelete = { viewModel.deleteSession(session.id) },
+                                            )
+                                        }
+                                    }
+                                    item { Spacer(modifier = Modifier.height(8.dp)) }
+                                }
                             }
-
-                            item { Spacer(modifier = Modifier.height(8.dp)) }
                         }
                     }
                 }
@@ -147,6 +235,31 @@ private fun SessionItem(
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    // P-A §3.2 🟢K：裸删除图标 → 溢出菜单 + 二次确认
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("删除这段对话？") },
+            text = { Text("删除后不可恢复，对话内容与记忆关联将一并移除。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    onDelete()
+                }) {
+                    Text("删除", color = AppErrorRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
+
     AppCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
@@ -189,10 +302,14 @@ private fun SessionItem(
                         style = MaterialTheme.typography.bodySmall,
                         color = AppAccent,
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    session.createdAt?.let {
+                    // 🟢J：显示时间用最后活跃，组内今天/昨天 HH:mm、更早 MM-dd
+                    val activeIso = session.lastMessageAt ?: session.createdAt
+                    val bucket = sessionBucketOf(activeIso, LocalDateTime.now())
+                    val timeLabel = bucketTimeLabel(activeIso, bucket)
+                    if (timeLabel.isNotBlank()) {
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = it.take(10),
+                            text = timeLabel,
                             style = MaterialTheme.typography.bodySmall,
                             color = AppTextTertiary,
                         )
@@ -209,12 +326,27 @@ private fun SessionItem(
                 }
             }
 
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "删除",
-                    tint = AppTextTertiary,
-                )
+            // 溢出菜单（替代裸删除，防误触）
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "更多操作",
+                        tint = AppTextTertiary,
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("删除", color = AppErrorRed) },
+                        onClick = {
+                            menuOpen = false
+                            confirmDelete = true
+                        },
+                    )
+                }
             }
         }
     }
