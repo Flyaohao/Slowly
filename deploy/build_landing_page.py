@@ -100,9 +100,21 @@ def find_apk():
     返回 (路径, 构建类型)；两者都找不到时返回 (None, None)，此时 manifest 的
     大小与校验值为空，页面会回落到 HTML 里写死的地址。
 
-    为什么要有 debug 回落：当前 App 尚未定稿，对外分发的是 debug 包；
-    release 一可用会自动优先，不必回来改脚本。
+    —— 为什么要有 debug 回落：当前 App 尚未定稿，对外分发的是 debug 包；
+       release 一可用会自动优先，不必回来改脚本。
+
+    —— 为什么还要有 APK_PATH：manifest 里的大小与 SHA-256 必须描述
+       **服务器上实际在服务的那一份**。本地构建产物随时会被重新编译，
+       直接拿本地文件生成清单，就可能对外公布一个与下载到的文件对不上的校验值
+       （而校验值的全部意义就是"对的"）。需要指向某个具体文件时用：
+           APK_PATH=/path/to/couple-1.0.0-debug.apk python deploy/build_landing_page.py
     """
+    override = os.getenv("APK_PATH", "").strip()
+    if override:
+        if not os.path.isfile(override):
+            raise SystemExit("APK_PATH 指向的文件不存在：%s" % override)
+        return override, ("debug" if "debug" in override.lower() else "release")
+
     base = os.path.join(ROOT, "android", "app", "build", "outputs", "apk")
     for build_type in ("release", "debug"):
         d = os.path.join(base, build_type)
@@ -165,6 +177,13 @@ def main():
         apk_name = "couple-%s-debug.apk" % version
     else:
         apk_name = "couple-%s.apk" % version
+
+    # 包类型以**最终文件名**为准：APK_PATH 指向临时副本时，路径里未必带 "debug"，
+    # 只看路径会把 debug 包标成 release（manifest 里那个字段是给人看的，
+    # 标错就等于骗人）。
+    if "debug" in apk_name.lower():
+        build_type = "debug"
+
     apk_url = BASE + "/download/" + apk_name
 
     manifest = build_manifest(version, code, apk, apk_name, build_type)

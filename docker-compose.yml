@@ -79,8 +79,11 @@ services:
       # 安卓安装包目录：刻意用宿主 bind mount 而不是命名卷，
       # 这样换包只需往宿主 ./apk 里丢新文件（或 scp 上去），
       # 既不用重建镜像，20MB 的 APK 也不会被打进部署包与镜像层。
-      # 宣传页在镜像内（backend/static/app），不需要挂载。
       - ./apk:/app/static/apk
+      # 宣传页同样走宿主目录：宿主 Nginx 直接发这两个目录的静态文件，
+      # 容器这边挂同一份，两个入口（80 与 8000）读到的内容永远一致。
+      # 于是改文案 = 重跑构建脚本 + 重新解包，**不必重建镜像**。
+      - ./backend/static/app:/app/static/app
     ports:
       - "${BACKEND_PORT:-8000}:8000"
 
