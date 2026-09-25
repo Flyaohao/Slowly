@@ -100,8 +100,11 @@ class AvatarCustomizeViewModel @Inject constructor(
     }
 
     /** P-B §4.2：下拉/底部单选直接点选（替代点一下循环一次的 cycleTone）。
-     *  手选一次即视为 manual——顶部「由画像自动选择」提示随之消失。 */
+     *  P-C1 §0.3：与后端 set_voice_style 同口径——只有**换了档**才算手选；
+     *  点当前已选那一档不置 manual，否则「由画像自动选择」提示会在保存后
+     *  重进页面时又回来（前端立刻隐藏、后端没写，两端打架）。 */
     fun setTone(index: Int) {
+        if (index == _uiState.value.toneIndex) return
         _uiState.update { it.copy(toneIndex = index, toneSource = "manual") }
     }
 
