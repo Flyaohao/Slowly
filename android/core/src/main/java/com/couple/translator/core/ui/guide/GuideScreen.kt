@@ -371,7 +371,7 @@ private fun GuideHero() {
             }
             Spacer(modifier = Modifier.width(12.dp))
             Text(
-                text = "情侣 AI 军师",
+                text = "Slowly慢慢说",
                 style = MaterialTheme.typography.titleLarge,
                 color = AppTextPrimary,
             )
