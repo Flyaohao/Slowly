@@ -267,7 +267,9 @@ fun AiStreamingText(
             text = annotated,
             color = color,
             fontSize = sp.sp,
-            lineHeight = 24.sp,
+            // P-A §0.3 方案甲：行高随字号走（1.4×），不再写死 24.sp——
+            // 写死值与终稿渲染的行高不一致，流式结束切终稿时整段会跳一下。
+            lineHeight = (sp * 1.4f).sp,
             modifier = modifier.fillMaxWidth(),
         )
     } else {

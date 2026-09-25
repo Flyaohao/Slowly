@@ -205,6 +205,7 @@ fun AiSessionListScreen(
                                             SessionItem(
                                                 session = session,
                                                 sceneLabel = sceneLabel,
+                                                now = now,
                                                 onClick = {
                                                     onNavigateToSession(
                                                         session.id,
@@ -232,6 +233,9 @@ fun AiSessionListScreen(
 private fun SessionItem(
     session: AiDto.SessionResponse,
     sceneLabel: (String) -> String,
+    // P-A §0.4：时间桶的 now 单源自屏幕顶部——每项各自取时会在跨分钟时
+    // 出现「分组标题与行内时间用的不是同一个 now」的错位。
+    now: LocalDateTime,
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -243,7 +247,8 @@ private fun SessionItem(
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("删除这段对话？") },
-            text = { Text("删除后不可恢复，对话内容与记忆关联将一并移除。") },
+            // P-A §0.1：文案如实化——删除只影响聊天记录，长期记忆不连坐
+            text = { Text("删除后聊天记录不可恢复。军师从对话里记住的长期记忆不会一起删除。") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
@@ -304,7 +309,7 @@ private fun SessionItem(
                     )
                     // 🟢J：显示时间用最后活跃，组内今天/昨天 HH:mm、更早 MM-dd
                     val activeIso = session.lastMessageAt ?: session.createdAt
-                    val bucket = sessionBucketOf(activeIso, LocalDateTime.now())
+                    val bucket = sessionBucketOf(activeIso, now)
                     val timeLabel = bucketTimeLabel(activeIso, bucket)
                     if (timeLabel.isNotBlank()) {
                         Spacer(modifier = Modifier.width(8.dp))
