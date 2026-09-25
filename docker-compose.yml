@@ -58,6 +58,16 @@ services:
       EMAIL_DEV_MODE: ${EMAIL_DEV_MODE:-false}
       # AI 端点按用户限流（slowapi 语法，0 或空关闭）。默认 20/hour
       AI_RATE_LIMIT: ${AI_RATE_LIMIT:-20/hour}
+      # AI 端点的 IP 维度兜底限流。上面那条的限流键是 user_id，
+      # 批量注册后每个账号各享一份配额，这条按 IP 记总量把它们兜住
+      AI_IP_RATE_LIMIT: ${AI_IP_RATE_LIMIT:-120/hour}
+      # 接口文档保护口令（/docs /redoc /openapi.json）。
+      # 两者任一为空则一律返回 401 —— 不再对外敞开，避免泄露全部接口结构
+      DOCS_USER: ${DOCS_USER:-}
+      DOCS_PASS: ${DOCS_PASS:-}
+      # 允许跨站访问的来源，逗号分隔。默认空 = 不允许任何跨站来源。
+      # App 走 Retrofit 不受 CORS 约束（那是浏览器机制），留空不影响客户端
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
     extra_hosts:
       # 让容器内的 host.docker.internal 指向宿主机，
       # 这样 DB_URL 可以直接连宿主机上原有的 MySQL

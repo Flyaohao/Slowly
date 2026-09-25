@@ -1,5 +1,7 @@
+import base64
 import logging
 import os
+import secrets
 
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import (
@@ -11,8 +13,10 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 
+from app.core import config
 from app.core.limiter import limiter
 from app.api.v1.router import router as v1_router
 
@@ -34,6 +38,75 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
         return response
 
 
+# ---------------------------------------------------------------------------
+# 接口文档保护：/docs、/redoc、/openapi.json 走 HTTP Basic。
+#
+# openapi.json 会把全部端点的路径、参数、结构一次给全，等于一份现成的攻击说明书；
+# 一旦匿名可读，枚举端点就不再需要任何技巧（冒烟脚本都能直接跑）。
+# 生产环境保留文档但加口令，比直接关掉实用 —— 自己要能随时查。
+#
+# 未配置口令时一律返回 401（默认拒绝），避免"忘了设变量"变成"默默敞开"。
+# ---------------------------------------------------------------------------
+_DOCS_PATHS = {"/docs", "/redoc", "/openapi.json"}
+
+
+def _docs_authorized(request: Request) -> bool:
+    if not config.DOCS_USER or not config.DOCS_PASS:
+        return False
+    raw = request.headers.get("authorization", "")
+    if not raw.lower().startswith("basic "):
+        return False
+    try:
+        user, _, pwd = (
+            base64.b64decode(raw[6:], validate=True).decode("utf-8").partition(":")
+        )
+    except Exception:  # noqa: BLE001 —— 头部不是合法 base64 就当认证失败
+        return False
+    # compare_digest 防时序攻击：普通 == 会因提前返回而泄露前缀信息
+    return secrets.compare_digest(user, config.DOCS_USER) and secrets.compare_digest(
+        pwd, config.DOCS_PASS
+    )
+
+
+class DocsGuardMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path in _DOCS_PATHS and not _docs_authorized(request):
+            return Response(
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="docs"'},
+            )
+        return await call_next(request)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """统一安全响应头。
+
+    CSP 里保留 'unsafe-inline' 是刻意的：宣传页是单文件、内联 <style>/<script>。
+    该页面无用户输入、无第三方资源，XSS 面几乎为零，为此拆文件不划算。
+
+    frame-ancestors 'none' 必须由响应头下发 —— 写在页面 <meta> 里不生效，
+    这是防点击劫持的关键一条。
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        resp = await call_next(request)
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        resp.headers["X-Frame-Options"] = "DENY"
+        resp.headers["Referrer-Policy"] = "no-referrer"
+        resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        resp.headers["Content-Security-Policy"] = (
+            "default-src 'self'; img-src 'self' data:; "
+            "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+            "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        )
+        # 不暴露技术栈（uvicorn 默认会回 server 头）。
+        # ⚠️ MutableHeaders 没有 pop()，必须用 del + 存在性判断，否则每个请求都会 500。
+        if "server" in resp.headers:
+            del resp.headers["server"]
+        return resp
+
+
 app = FastAPI(
     title="Slowly慢慢说",
     description="Slowly慢慢说 API",
@@ -45,13 +118,25 @@ app = FastAPI(
 app.add_middleware(RequestLogMiddleware)
 app.state.limiter = limiter
 
+_allowed_origins = [o.strip() for o in config.CORS_ORIGINS.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # 默认空列表 = 不允许任何跨站来源。App 用 Retrofit，不受 CORS 约束（那是浏览器
+    # 才有的机制）；收紧要防的是「任意网站诱导访问者浏览器调用本 API」。
+    allow_origins=_allowed_origins,
+    # 客户端用 Bearer Token，不依赖 cookie 凭据
+    allow_credentials=False,
+    allow_methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
+# ⚠️ 顺序很关键：Starlette 的中间件是「后注册的先执行」（洋葱模型）。
+# SecurityHeadersMiddleware 必须**最后注册**才能成为最外层 ——
+# 这样连 DocsGuard 直接返回的 401 也会带上安全头。
+# 最终顺序：RequestLog → CORS → DocsGuard → SecurityHeaders
+app.add_middleware(DocsGuardMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(v1_router)
 

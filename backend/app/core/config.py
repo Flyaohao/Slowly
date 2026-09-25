@@ -43,3 +43,21 @@ EMAIL_DEV_MODE: bool = os.getenv("EMAIL_DEV_MODE", "false").lower() == "true"
 #: AI 端点按用户限流（slowapi 语法）。AI 调用是重资源操作（推理模型单次 ~30s），
 #: 防刷同时也是成本保护。0 或空串表示关闭。
 AI_RATE_LIMIT: str = os.getenv("AI_RATE_LIMIT", "20/hour")
+
+#: AI 端点的 **IP 维度**兜底限流（slowapi 语法）。
+#: 上面那条的限流键是 user_id，批量注册可让每个账号各享一份配额；
+#: 这条按 IP 记总量，把它们兜住。默认 120/hour，正常用户碰不到。
+AI_IP_RATE_LIMIT: str = os.getenv("AI_IP_RATE_LIMIT", "120/hour")
+
+# ---- 接口文档与跨域 ----
+#: /docs、/redoc、/openapi.json 的保护口令（HTTP Basic）。
+#: openapi.json 会给出全部接口的参数与结构，等同一份攻击说明书，因此不对外敞开。
+#: 两者任一为空时一律拒绝访问 —— 宁可自己进不去，也不默认开放。
+#: ⚠️ compose 的 environment 是白名单转发，新变量必须写进 docker-compose.yml 才会进容器。
+DOCS_USER: str = os.getenv("DOCS_USER", "")
+DOCS_PASS: str = os.getenv("DOCS_PASS", "")
+
+#: 允许跨站访问的来源，逗号分隔。默认空 = 不允许任何跨站来源。
+#: Android 客户端走 Retrofit，不受 CORS 约束（那是浏览器机制）；/docs 的
+#: Try it out 是同源请求。所以收紧此项对现有客户端零影响。
+CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "")
