@@ -36,6 +36,7 @@ P0-3（调解没有真正创建会话）与 P0-4（双方身份可能颠倒）�
 """
 import os
 import sys
+import threading
 import time
 from contextlib import contextmanager
 
@@ -125,7 +126,10 @@ def _tasks(db, session_id, task_type=None):
 
 
 def _reach_confirming(db, partner_first=True):
-    """start → accept → 双方输入，停在 confirming（含改写）。"""
+    """start → accept → 双方输入，停在 confirming（含改写）。
+
+    整改 B4.2 之后 API 进程不执行 LLM：入队后必须显式跑 worker，改写才落地。
+    """
     rel = _relation(db)
     started = mediation_service.start_mediation(db, A_ID, rel.id)
     sid = started["session_id"]
@@ -138,6 +142,7 @@ def _reach_confirming(db, partner_first=True):
     else:
         mediation_service.submit_input(db, sid, A_ID, INPUT_A)
         mediation_service.submit_input(db, sid, B_ID, INPUT_B)
+    ai_task_service.run_due_tasks(db, worker_id="test-worker")
     return sid, started
 
 
@@ -336,7 +341,6 @@ def t_confirm_requires_both_sides():
         sid, _ = _reach_confirming(db)
 
         # 确认阶段只入队，由本用例驱动 worker——这样才能观察到 summarizing 中间态
-        ai_task_service.AUTO_KICK = False
         first = mediation_service.confirm_rewrite(db, sid, A_ID, True)
         check(
             "单人确认不前推（停在 confirming）",
@@ -443,6 +447,96 @@ def t_confirm_after_reveal_only_one_more():
             check("completed 后 confirm 被状态机拒绝", False, "未抛 ValueError(50003)")
 
 
+def t_concurrent_start_single_mediation():
+    """P0-5：两路**真并发** start（双击 / 双设备 / 超时重发）只能有一场活跃调解。
+
+    为什么必须真线程：先 SELECT 后 INSERT 在并发下必然双双查不到行、双双插入，
+    唯一槽位约束才是真正的兜底。两条路径都要被走到——一个请求正常插入，另一个
+    命中 IntegrityError 后回读既有会话并把同一个 session_id 返回。
+    """
+    h = MediationHarness(sync_threads=False)
+    try:
+        with h:
+            h.driving(STUBS)
+            db = h.db()
+            rel_id = _relation(db).id
+            db.close()
+
+            barrier = threading.Barrier(2, timeout=20)
+            results = {}
+            errors = []
+
+            def start():
+                d = h.db()
+                try:
+                    barrier.wait()
+                    results[id(d)] = mediation_service.start_mediation(d, A_ID, rel_id)
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(repr(exc))
+                finally:
+                    d.close()
+
+            threads = [threading.Thread(target=start), threading.Thread(target=start)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=30)
+
+            check("并发 start 无异常", errors == [], str(errors))
+            check("两个请求都拿到回执", len(results) == 2, str(results))
+            check(
+                "两个请求指向同一场会话（幂等）",
+                len({r["session_id"] for r in results.values()}) == 1,
+                str(results),
+            )
+            check(
+                "回执角色都是 inviter",
+                all(r.get("my_role") == "inviter" for r in results.values()),
+                str(results),
+            )
+
+            db = h.db()
+            rows = (
+                db.query(AiChatSession)
+                .filter(
+                    AiChatSession.relation_id == rel_id,
+                    AiChatSession.session_type == "mediation",
+                )
+                .all()
+            )
+            check("库里只有一场调解会话", len(rows) == 1, str(len(rows)))
+            check(
+                "活跃槽位已写入（<relation>:<inviter>）",
+                bool(rows) and rows[0].mediation_active_slot == "%s:%s" % (rel_id, A_ID),
+                str(rows[0].mediation_active_slot) if rows else "",
+            )
+            db.close()
+    finally:
+        h.destroy()
+
+
+def t_start_idempotent_same_session():
+    """顺序重复 start（响应丢失后客户端重试）返回同一场会话，且不重复发邀请。"""
+    with _env() as (h, db):
+        rel_id = _relation(db).id
+        first = mediation_service.start_mediation(db, A_ID, rel_id)
+        for _ in range(2):
+            again = mediation_service.start_mediation(db, A_ID, rel_id)
+            check(
+                "重复 start 返回同一场会话",
+                again["session_id"] == first["session_id"],
+                "%s vs %s" % (again, first),
+            )
+        check("只在真正新建时发一次邀请", len(h.notify_calls) == 1, str(h.notify_calls))
+        check(
+            "会话数没有增长",
+            db.query(AiChatSession)
+            .filter(AiChatSession.relation_id == rel_id)
+            .count()
+            == 1,
+        )
+
+
 def t_confirm_false_supplement_regenerates():
     with _env() as (h, db):
         sid, _ = _reach_confirming(db)
@@ -465,9 +559,16 @@ def t_confirm_false_supplement_regenerates():
             db, sid, B_ID, False, supplement
         )
         check(
-            "confirm(false) 重新生成后回到 confirming",
-            result.get("mediation_status") == "confirming",
+            "confirm(false) 立即受理（不等 LLM）",
+            result.get("accepted") is True,
             str(result),
+        )
+        # API 进程不执行 LLM：重生成只入队，worker 跑完才回到 confirming
+        ai_task_service.run_due_tasks(db, worker_id="test-worker")
+        check(
+            "confirm(false) 重新生成后回到 confirming",
+            _db_status(db, sid).mediation_status == "confirming",
+            _db_status(db, sid).mediation_status,
         )
         check(
             "改写被重新生成一次",
@@ -539,7 +640,6 @@ def t_missing_own_rewrite_compensation_is_async_and_fails_loudly():
 
         h.driving(broken_rewrite_llm)
         # 只入队、不执行：这样才能确定地观察到「请求已返回、生成还没跑」这一刻
-        ai_task_service.AUTO_KICK = False
         calls_before = len(h.rewrite_calls)
         t0 = time.time()
         try:
@@ -622,7 +722,6 @@ def t_confirm_false_failure_is_visible_not_silent():
             return dict(SUMMARY_STUB)
 
         h.driving(broken_rewrite_llm)
-        ai_task_service.AUTO_KICK = False  # 只入队，本用例自己驱动 worker
         result = mediation_service.confirm_rewrite(db, sid, B_ID, False, "补充一句")
         check(
             "confirm(false) 立即受理（不阻塞等 LLM）",
@@ -667,12 +766,37 @@ def t_confirm_false_failure_is_visible_not_silent():
 # 6. 列表端点语义（§2.3-3）
 # --------------------------------------------------------------------- #
 def t_list_roles():
-    with _env() as (h, db):
-        sid, _ = _reach_confirming(db, partner_first=True)
+    """列表端点语义（§2.3-3）。
 
-        invited_b = mediation_service.list_mediations(db, B_ID, "invited")
-        # 已进 confirming，不再是 inviting；先造一条新邀请
-        started2 = mediation_service.start_mediation(db, A_ID, db.query(CoupleRelation).first().id)
+    P0-5 之后 start **幂等**：同一 (relation, inviter) 只能有一场活跃调解。
+    所以这里先把第一场跑成 completed（释放活跃槽位），才能再发一场新邀请——
+    「同一发起者不能同时开两场」正是 start 幂等要保证的。
+    """
+    with _env() as (h, db):
+        rel_id = _relation(db).id
+
+        # 第一场：跑到 completed（结束的调解不占活跃槽位）
+        sid_done = mediation_service.start_mediation(db, A_ID, rel_id)["session_id"]
+        mediation_service.accept_mediation(db, sid_done, B_ID)
+        mediation_service.submit_input(db, sid_done, A_ID, INPUT_A)
+        mediation_service.submit_input(db, sid_done, B_ID, INPUT_B)
+        ai_task_service.run_due_tasks(db, worker_id="test-worker")  # 改写
+        mediation_service.confirm_rewrite(db, sid_done, A_ID, True)
+        mediation_service.confirm_rewrite(db, sid_done, B_ID, True)
+        ai_task_service.run_due_tasks(db, worker_id="test-worker")  # 总结 → completed
+        check(
+            "第一场调解已完成",
+            _db_status(db, sid_done).mediation_status == "completed",
+            _db_status(db, sid_done).mediation_status,
+        )
+
+        # 第二场：A 重新发起，B 未回应 → inviting（此刻的 invited 列表才有内容）
+        started2 = mediation_service.start_mediation(db, A_ID, rel_id)
+        check(
+            "start 幂等：已完成的不阻塞新一场",
+            started2["session_id"] != sid_done,
+            str(started2),
+        )
         invited_b = mediation_service.list_mediations(db, B_ID, "invited")
         check(
             "invited = partner 侧 inviting 会话",
@@ -717,15 +841,16 @@ def t_list_roles():
         hist_a = mediation_service.list_mediations(db, A_ID, "history")
         check(
             "history 只含已完成",
-            hist_a["total"] == 1
-            and hist_a["items"][0]["session_id"] == started2["session_id"],
+            hist_a["total"] == 2
+            and {i["session_id"] for i in hist_a["items"]} == {sid_done, started2["session_id"]}
+            and all(i["mediation_status"] == "completed" for i in hist_a["items"]),
             str(hist_a),
         )
         hist_b = mediation_service.list_mediations(db, B_ID, "history")
         check(
             "history 对参与方同样可见（我的角色=partner）",
-            hist_b["total"] == 1
-            and hist_b["items"][0]["my_role"] == "partner",
+            hist_b["total"] == 2
+            and all(i["my_role"] == "partner" for i in hist_b["items"]),
             str(hist_b),
         )
         invited_b2 = mediation_service.list_mediations(db, B_ID, "invited")
@@ -843,6 +968,8 @@ def _reach_completed(db):
     sid, _ = _reach_confirming(db, partner_first=False)
     mediation_service.confirm_rewrite(db, sid, A_ID, True)
     mediation_service.confirm_rewrite(db, sid, B_ID, True)
+    # 双方确认后总结任务入队，显式跑 worker 完成生成
+    ai_task_service.run_due_tasks(db, worker_id="test-worker")
     return sid
 
 
@@ -881,6 +1008,39 @@ def t_completed_reviewable():
 # --------------------------------------------------------------------- #
 # 10. §8.5-9 四个真实角色场景
 # --------------------------------------------------------------------- #
+def t_continue_reopens_and_holds_slot():
+    """「继续沟通」重新打开会话时必须**重新占用活跃槽位**。
+
+    不变量：同一 (relation, inviter) 最多一场活跃调解。completed 时槽位已释放，
+    若继续沟通不再占用，用户就能一边接着谈这一场、一边再发起新的一场。
+    """
+    with _env() as (h, db):
+        sid = _reach_completed(db)
+        rel_id = db.query(CoupleRelation).first().id
+        check(
+            "completed 时槽位已释放",
+            _db_status(db, sid).mediation_active_slot is None,
+            str(_db_status(db, sid).mediation_active_slot),
+        )
+
+        r = mediation_service.next_step(db, sid, A_ID, "continue")
+        check("继续沟通回到 inputting", r["mediation_status"] == "inputting", str(r))
+        check(
+            "重新占用活跃槽位",
+            _db_status(db, sid).mediation_active_slot == "%s:%s" % (rel_id, A_ID),
+            str(_db_status(db, sid).mediation_active_slot),
+        )
+        again = mediation_service.start_mediation(db, A_ID, rel_id)
+        check("继续沟通后 start 幂等返回同一场", again["session_id"] == sid, str(again))
+
+        mediation_service.next_step(db, sid, A_ID, "end")
+        check(
+            "结束调解后槽位再次释放",
+            _db_status(db, sid).mediation_active_slot is None,
+            str(_db_status(db, sid).mediation_active_slot),
+        )
+
+
 def t_partner_first_order():
     """提交顺序相反：参与方先提交 → 第一方进等待态，第二方提交后才进改写。"""
     with _env() as (h, db):
@@ -890,7 +1050,6 @@ def t_partner_first_order():
         mediation_service.accept_mediation(db, sid, B_ID)
 
         # 观察「第二方提交 → rewriting」这一段中间态：只入队，不执行
-        ai_task_service.AUTO_KICK = False
         first = mediation_service.submit_input(db, sid, B_ID, INPUT_B)
         check(
             "第一方（参与方）提交后停在等待态 inputting，不进确认页（§8.5-2）",
@@ -978,6 +1137,8 @@ def t_duplicate_submit():
             )
         check("重复提交不触发改写", h.rewrite_calls == [], str(h.llm_calls))
         mediation_service.submit_input(db, sid, B_ID, INPUT_B)
+        # API 进程不执行 LLM：第二人提交只入队，由 worker 跑出改写
+        ai_task_service.run_due_tasks(db, worker_id="test-worker")
         check(
             "第二个人提交后才生成改写（重复提交不加速）",
             len(h.rewrite_calls) == 1,
@@ -992,6 +1153,8 @@ def t_duplicate_submit():
         mediation_service.confirm_rewrite(db, sid, A_ID, True)
         mediation_service.confirm_rewrite(db, sid, A_ID, True)
         mediation_service.confirm_rewrite(db, sid, B_ID, True)
+        # 双方确认只入队，总结由 worker 跑
+        ai_task_service.run_due_tasks(db, worker_id="test-worker")
         check(
             "重复确认不产生第二个总结",
             len(h.summary_calls) == 1,
@@ -1015,6 +1178,8 @@ def t_single_side_offline():
         # B 提交后就「掉线」（不再有任何 B 的请求）
         mediation_service.submit_input(db, sid, B_ID, INPUT_B)
         mediation_service.submit_input(db, sid, A_ID, INPUT_A)
+        # API 进程不执行 LLM：双方提交只入队，由 worker 跑出改写 → confirming
+        ai_task_service.run_due_tasks(db, worker_id="test-worker")
 
         # A 全程不停：确认
         mediation_service.confirm_rewrite(db, sid, A_ID, True)
@@ -1043,6 +1208,8 @@ def t_single_side_offline():
             str(st_b.get("my_rewrite")),
         )
         mediation_service.confirm_rewrite(db, sid, B_ID, True)
+        # 双方确认只入队，总结由 worker 跑完才 completed
+        ai_task_service.run_due_tasks(db, worker_id="test-worker")
         session2 = _db_status(db, sid)
         check(
             "掉线方补上确认后正常完成",
@@ -1137,6 +1304,7 @@ def t_input_not_revealed_before_finish():
 
         # 进入 confirming 后仍不公开
         mediation_service.submit_input(db, sid, A_ID, INPUT_A)
+        ai_task_service.run_due_tasks(db, worker_id="test-worker")  # 改写 → confirming
         st_a2 = mediation_service.get_status(db, sid, A_ID)
         check(
             "confirming 时 A 仍看不到 B 的原始输入",
@@ -1164,7 +1332,6 @@ def t_generation_not_blocking():
             return dict(STUBS[scene_key])
 
         h.driving(slow_llm)
-        ai_task_service.AUTO_KICK = False  # 完全交给调度器路径
 
         t0 = time.time()
         result = mediation_service.submit_input(db, sid, A_ID, INPUT_A)
@@ -1212,6 +1379,8 @@ def t_generation_not_blocking():
 def main() -> int:
     print("[调解身份/状态机] 契约 §2.3/§2.4/§8.5 回归")
     t_start_my_role_and_notify()
+    t_concurrent_start_single_mediation()
+    t_start_idempotent_same_session()
     t_both_submitted_by_distinct_user()
     t_single_user_double_submit_not_confirming()
     t_get_status_identity_parsing()
@@ -1225,6 +1394,7 @@ def main() -> int:
     t_home_active_mediation_filter()
     t_ws_source_contract()
     t_completed_reviewable()
+    t_continue_reopens_and_holds_slot()
     t_partner_first_order()
     t_duplicate_submit()
     t_single_side_offline()

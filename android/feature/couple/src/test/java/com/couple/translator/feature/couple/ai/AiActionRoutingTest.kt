@@ -2,6 +2,7 @@ package com.couple.translator.feature.couple.ai
 
 import com.couple.translator.core.data.model.HomeDto
 import com.couple.translator.core.navigation.Screen
+import com.couple.translator.core.ui.components.AiRiskLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -257,6 +258,67 @@ class AiActionRoutingTest {
         )
         assertFalse(AiAction.START_MEDIATION in ordered)
         assertEquals(AiAction.COPY_REPLY, ordered.first())
+    }
+
+    // ------------------------------------------------------------------ #
+    // §8.2 高风险安全门控（P0-6 客户端侧）
+    // ------------------------------------------------------------------ #
+
+    @Test
+    fun `高风险等级判定：控制暴力自伤挡，情绪激动与未知不挡`() {
+        assertTrue(mediationBlockedByRisk(AiRiskLevel.MANIPULATION_RISK))
+        assertTrue(mediationBlockedByRisk(AiRiskLevel.ABUSE_RISK))
+        assertTrue(mediationBlockedByRisk(AiRiskLevel.SELF_HARM_RISK))
+        // 双方情绪激动正是调解要处理的场景，不能一起挡掉
+        assertFalse(mediationBlockedByRisk(AiRiskLevel.HEATED_CONFLICT))
+        // 解析不出等级（normal / 未知 / null）不许把正常用户的路堵死
+        assertFalse(mediationBlockedByRisk(null))
+    }
+
+    @Test
+    fun `高风险下调解动作完全不进候选队列`() {
+        // 后端也会阻断产物；这里挡的是「先看到按钮、点进去才发现走不通」——
+        // 行动行是在离开页之前就渲染好的，只在后端挡等于给用户一段残缺流程。
+        val ordered = orderedActionsFor(
+            sceneKey = "private_advisor",
+            structured = structured(suggestedReply = "x", suggestMediation = true),
+            suggestMediation = true,
+            riskLevel = AiRiskLevel.ABUSE_RISK,
+        )
+        assertFalse("高风险不得把人拉进同一场会话", AiAction.START_MEDIATION in ordered)
+        assertFalse(AiAction.INVITE_DUAL in ordered)
+        // 自己这一侧的出口（复制/分享/写信）不挡：那是让当事人自己把话说好
+        assertTrue(AiAction.COPY_REPLY in ordered)
+        assertTrue(AiAction.MAKE_LETTER in ordered)
+    }
+
+    @Test
+    fun `高风险下邀请双视角也被挡掉`() {
+        val normal = orderedActionsFor(
+            sceneKey = "private_advisor",
+            structured = structured(suggestedReply = "x"),
+            suggestMediation = false,
+        )
+        assertTrue(AiAction.INVITE_DUAL in normal)
+        val risky = orderedActionsFor(
+            sceneKey = "private_advisor",
+            structured = structured(suggestedReply = "x"),
+            suggestMediation = false,
+            riskLevel = AiRiskLevel.SELF_HARM_RISK,
+        )
+        assertFalse(AiAction.INVITE_DUAL in risky)
+    }
+
+    @Test
+    fun `情绪激动不触发高风险门控`() {
+        val ordered = orderedActionsFor(
+            sceneKey = "private_advisor",
+            structured = structured(suggestedReply = "x"),
+            suggestMediation = true,
+            riskLevel = AiRiskLevel.HEATED_CONFLICT,
+        )
+        assertEquals(AiAction.START_MEDIATION, ordered.first())
+        assertTrue(AiAction.INVITE_DUAL in ordered)
     }
 
     // ------------------------------------------------------------------ #

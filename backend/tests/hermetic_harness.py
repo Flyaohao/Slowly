@@ -3,18 +3,19 @@
 
 ## 为什么需要它
 
-整改 B4.1 之后生成全部走「持久化任务 + worker」，生产路径里有两处
-`threading.Thread(daemon=True)`（`ai_task_service.kick()` 与
-`notification_service.schedule_notify`）。测试里直接跑真线程有两个问题：
+整改 B4.2 之后生成全部走「持久化任务 + 独立 worker」：API 进程**绝不**执行
+任何 LLM（`kick()` 是空唤醒占位），执行只能由 `run_due_tasks` 承担——
+测试里由用例显式调用，等价于生产里 `ai-task-worker` 容器走的那条路。
+唯一还起线程的是 `notification_service.send_push_notification`（邮件
+fire-and-forget）。测试里直接跑真线程有两个问题：
 
 1. **结果不可断言**：断言只能靠 sleep 赌线程调度，PASS 可能只是「还没跑到」；
 2. 线程里的异常打到 stderr，`python -X dev` 下尤其吵，而且没人接住。
 
 所以这里提供一个 `threading.Thread` 替身：`start()` 时**同步执行** `run()`，
 异常原样抛给调用方。被测的仍是**生产那条路径**（`run_due_tasks`），没有开任何
-内联开关，只是把异步执行换成同步执行，让断言有确定的时间点。
-需要观察「入队后、执行前」的中间态时，把 `AUTO_KICK` 置 False 并手动
-调用 `run_due_tasks`——那也是生产里调度器容器走的那条路。
+内联开关。因为「请求只入队、执行靠 worker」就是生产语义，观察「入队后、
+执行前」的中间态不需要任何开关——入队后不调 `run_due_tasks` 就是那个中间态。
 
 ## 库为什么是文件而不是 `:memory:`
 
@@ -113,10 +114,10 @@ class MediationHarness:
     """把一个 SQLite 测试库接到应用上：SessionLocal / 任务 worker / 通知全绑过去。
 
     `sync_threads=True`（默认）时把 `threading.Thread` 换成同步替身——
-    「请求侧踢 worker」这一步在请求返回前就跑完，断言有确定的时间点。
+    邮件通知这类 fire-and-forget 在调用点同步跑完，断言有确定的时间点。
     并发用例要的是**真并发**，那时必须 `sync_threads=False`：
-    由测试自己开线程，并把 `ai_task_service.AUTO_KICK` 置 False，
-    之后手动调用 `run_due_tasks`（生产里调度器容器走的也是这条路）。
+    由测试自己开线程。生成任务一律由用例显式调用 `run_due_tasks`
+    （生产里 `ai-task-worker` 容器走的也是这条路）。
     """
 
     def __init__(self, prefix="mediation_test_", sync_threads=True):
@@ -150,11 +151,9 @@ class MediationHarness:
         core_db.SessionLocal.configure(bind=self.engine)
         core_db.engine = self.engine
 
-        # 2) 任务层的会话工厂与「踢一脚」开关
+        # 2) 任务层的会话工厂（worker 每个任务用的 Session 也指到测试库）
         self._orig_factory = ai_task_service._SESSION_FACTORY
         ai_task_service.use_session_factory(self.Session)
-        self._orig_auto_kick = ai_task_service.AUTO_KICK
-        ai_task_service.AUTO_KICK = True  # 保持生产语义：请求侧入队后踢一脚
 
         # 3) LLM 桩（各用例自己接）
         self._orig_call_llm = mediation_service._call_llm
@@ -174,10 +173,12 @@ class MediationHarness:
         mediation_service.notify_mediation_invite = fake_notify
         mediation_service.manager.broadcast_to_session = fake_broadcast
 
-        # 5) 线程替身：这些模块**引用**的 threading 换成代理（全局不受影响）
+        # 5) 线程替身：这些模块**引用**的 threading 换成代理（全局不受影响）。
+        # 整改 B4.2 之后 ai_task_service 已不 import threading（daemon 线程移除），
+        # 只有 notification_service（邮件 fire-and-forget）还需要同步化。
         self._orig_threading = []
         if self.sync_threads:
-            for module in (ai_task_service, notification_service):
+            for module in (notification_service,):
                 self._orig_threading.append((module, module.threading))
                 module.threading = _ThreadingProxy(threading)
         return self
@@ -193,7 +194,6 @@ class MediationHarness:
         mediation_service.manager.broadcast_to_session = self._orig_broadcast
         mediation_service._call_llm = self._orig_call_llm
 
-        ai_task_service.AUTO_KICK = self._orig_auto_kick
         ai_task_service.use_session_factory(self._orig_factory)
         core_db.engine = self.original_engine
         core_db.SessionLocal.configure(bind=self._orig_bind)

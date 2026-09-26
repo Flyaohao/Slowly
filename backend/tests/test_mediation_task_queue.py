@@ -41,7 +41,7 @@ sys.path.insert(0, HERE)
 from hermetic_harness import MediationHarness  # noqa: E402
 
 from app.models.couple_relation import CoupleRelation  # noqa: E402
-from app.repositories import ai_task_repo  # noqa: E402
+from app.repositories import ai_repo, ai_task_repo  # noqa: E402
 from app.services import ai_task_service, mediation_service  # noqa: E402
 from app.services.llm_client import LlmError  # noqa: E402
 
@@ -93,10 +93,15 @@ def _reach_inputting(h, db):
 
 
 def _reach_confirming(h, db):
-    """双方输入后停在 confirming（改写已生成）。"""
+    """双方输入后停在 confirming（改写已生成）。
+
+    整改 B4.2 之后 API 进程不执行任何 LLM：入队后必须显式跑 worker
+    （生产里 `ai-task-worker` 容器走的就是 `run_due_tasks`）改写才会落地。
+    """
     sid = _reach_inputting(h, db)
     mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
     mediation_service.submit_input(db, sid, A_ID, "A 的倾诉")
+    ai_task_service.run_due_tasks(db, worker_id="test-worker")
     return sid
 
 
@@ -130,7 +135,6 @@ def t_task_persisted_before_execution():
     try:
         with h:
             h.driving(STUBS)
-            ai_task_service.AUTO_KICK = False  # 只入队，不执行
             db = h.db()
             sid = _reach_inputting(h, db)
             mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
@@ -184,10 +188,11 @@ def t_worker_is_the_only_executor():
 
     task_src = Path(ai_task_service.__file__).read_text(encoding="utf-8")
     check(
-        "唯一的线程是「踢一脚」加速器",
-        task_src.count("threading.Thread") == 1,
+        "任务服务不再起任何线程（daemon 执行线程已移除）",
+        task_src.count("threading.Thread") == 0,
         str(task_src.count("threading.Thread")),
     )
+    check("AUTO_KICK 已彻底移除", "AUTO_KICK" not in task_src)
     check("任务服务不再提供 retry_task 复用旧行", not hasattr(ai_task_service, "retry_task"))
 
 
@@ -207,7 +212,6 @@ def t_concurrent_submit_single_task():
     try:
         with h:
             h.driving(STUBS)
-            ai_task_service.AUTO_KICK = False
             db = h.db()
             sid = _reach_inputting(h, db)
             mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
@@ -287,7 +291,6 @@ def t_concurrent_confirm_single_summary():
             db = h.db()
             sid = _reach_confirming(h, db)  # 改写由请求侧那一脚同步跑完 → confirming
             db.close()
-            ai_task_service.AUTO_KICK = False  # 确认阶段只入队，执行由本用例驱动
 
             barrier = threading.Barrier(2, timeout=20)
             results = {}
@@ -348,7 +351,6 @@ def t_worker_claim_mutual_exclusion():
     try:
         with h:
             h.driving(STUBS)
-            ai_task_service.AUTO_KICK = False
             db = h.db()
             sid = _reach_inputting(h, db)
             mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
@@ -401,8 +403,14 @@ def t_duplicate_submit_idempotent():
                 r = mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
                 check("单人重复提交停在 inputting", r["mediation_status"] == "inputting", str(r))
             check("重复提交不建任务", _tasks(db, sid) == [], str(_tasks(db, sid)))
+            b_msgs = [
+                m for m in ai_repo.get_messages_by_session(db, sid)
+                if m.role == "user" and m.user_id == B_ID
+            ]
+            check("重复输入不追加三份相同消息", len(b_msgs) == 1, str([m.content for m in b_msgs]))
             mediation_service.submit_input(db, sid, A_ID, "A 的倾诉")
             check("第二个人提交才建任务", len(_tasks(db, sid, "mediation_rewrite")) == 1)
+            ai_task_service.run_due_tasks(db, worker_id="test-worker")
             check("改写只跑一次", len(h.rewrite_calls) == 1, str(h.llm_calls))
 
             # 确认阶段：同一人连点三次
@@ -413,6 +421,7 @@ def t_duplicate_submit_idempotent():
                 check("重复确认不建总结任务", _tasks(db, sid, "mediation_summary") == [])
             mediation_service.confirm_rewrite(db, sid, B_ID, True)
             check("双方确认后只建一个总结任务", len(_tasks(db, sid, "mediation_summary")) == 1)
+            ai_task_service.run_due_tasks(db, worker_id="test-worker")
             check("总结只跑一次", len(h.summary_calls) == 1, str(h.llm_calls))
             db.close()
     finally:
@@ -429,6 +438,8 @@ def t_completed_state_not_regressed():
             sid = _reach_confirming(h, db)
             mediation_service.confirm_rewrite(db, sid, A_ID, True)
             mediation_service.confirm_rewrite(db, sid, B_ID, True)
+            # API 进程不执行 LLM：双方确认只入队，总结由 worker 跑
+            ai_task_service.run_due_tasks(db, worker_id="test-worker")
             check("会话已完成", _session(db, sid).mediation_status == "completed")
 
             before = [(t.id, t.task_type, t.state) for t in _tasks(db, sid)]
@@ -472,6 +483,8 @@ def t_llm_failure_schedules_retry_then_succeeds():
             sid = _reach_inputting(h, db)
             mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
             mediation_service.submit_input(db, sid, A_ID, "A 的倾诉")
+            # API 进程不执行 LLM：入队后由 worker 跑第一次（本次必失败）
+            ai_task_service.run_due_tasks(db, worker_id="test-worker")
 
             task = _tasks(db, sid, "mediation_rewrite")[0]
             check("首次失败后任务回到 pending", task.state == "pending", task.state)
@@ -525,7 +538,6 @@ def t_retry_exhausted_terminal_failure():
                 raise LlmError("模型不可用（测试桩）")
 
             h.driving(always_fail)
-            ai_task_service.AUTO_KICK = False  # 由本用例显式驱动 worker
             db = h.db()
             sid = _reach_inputting(h, db)
             mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
@@ -608,7 +620,6 @@ def t_summary_failure_is_visible_and_retryable():
             h.driving(fail_summary)
             db = h.db()
             sid = _reach_confirming(h, db)
-            ai_task_service.AUTO_KICK = False  # 由本用例显式驱动 worker
             mediation_service.confirm_rewrite(db, sid, A_ID, True)
             mediation_service.confirm_rewrite(db, sid, B_ID, True)
             for _ in range(3):
@@ -651,7 +662,6 @@ def t_degraded_llm_counts_as_failure():
                 return {"raw_text": "AI 服务暂时不可用，请稍后再试", "summary": ""}
 
             h.driving(degraded)
-            ai_task_service.AUTO_KICK = False  # 由本用例显式驱动 worker
             db = h.db()
             sid = _reach_inputting(h, db)
             mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
@@ -683,7 +693,6 @@ def t_crash_recovery_on_restart():
     try:
         with h:
             h.driving(STUBS)
-            ai_task_service.AUTO_KICK = False
             db = h.db()
             sid = _reach_inputting(h, db)
             mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
@@ -727,7 +736,6 @@ def t_lease_not_expired_keeps_running():
     try:
         with h:
             h.driving(STUBS)
-            ai_task_service.AUTO_KICK = False
             db = h.db()
             sid = _reach_inputting(h, db)
             mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
@@ -738,7 +746,9 @@ def t_lease_not_expired_keeps_running():
             task.locked_until = datetime.utcnow() + timedelta(seconds=600)
             db.commit()
 
-            check("租约内不被回收", ai_task_repo.recover_stale_tasks(db) == 0)
+            # recover_stale_tasks 返回 (recovered, exhausted)，租约内两者都应为空
+            _recovered, _exhausted = ai_task_repo.recover_stale_tasks(db)
+            check("租约内不被回收", _recovered == 0 and _exhausted == [], str((_recovered, _exhausted)))
             check("租约内不被领取", ai_task_service.run_due_tasks(db, worker_id="w2") == 0)
             check("会话仍停在 rewriting", _session(db, sid).mediation_status == "rewriting")
             check("没有产出", h.rewrite_calls == [], str(h.llm_calls))
@@ -753,7 +763,6 @@ def t_stale_executor_cannot_fail_healthy_task():
     try:
         with h:
             h.driving(STUBS)
-            ai_task_service.AUTO_KICK = False
             db = h.db()
             sid = _reach_inputting(h, db)
             mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
@@ -802,7 +811,6 @@ def t_stale_task_does_not_overwrite_new_revision():
     try:
         with h:
             h.driving(STUBS)
-            ai_task_service.AUTO_KICK = False
             db = h.db()
             sid = _reach_inputting(h, db)
             mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
@@ -840,6 +848,8 @@ def t_new_revision_gets_its_own_task():
 
             # 「需要修改」：只重生成 B 那一侧
             mediation_service.confirm_rewrite(db, sid, B_ID, False, "补充一句")
+            # API 进程不执行 LLM：重生成只入队，由 worker 跑
+            ai_task_service.run_due_tasks(db, worker_id="test-worker")
             rows = _tasks(db, sid)  # 全部类型：重生成是 mediation_regenerate
             check("重生成产生第二行任务", len(rows) == 2, str([(t.id, t.task_type, t.state) for t in rows]))
             check("两行类型不同（rewrite / regenerate）",
@@ -882,7 +892,6 @@ def t_fastapi_contract_processing_semantics():
                 return dict(STUBS[scene_key])
 
             h.driving(slow_llm)
-            ai_task_service.AUTO_KICK = False  # 由本用例手动跑 worker
 
             db = h.db()
             sid = _reach_inputting(h, db)
@@ -1026,6 +1035,188 @@ def t_identity_and_authorization_still_enforced():
         h.destroy()
 
 
+# --------------------------------------------------------------------------- #
+# 9. 阻断项：过期执行者 / 崩溃耗尽 / 高风险
+# --------------------------------------------------------------------------- #
+def t_duplicate_executor_cannot_double_write():
+    """P0-2：同一任务的产出只能写回一次。
+
+    模拟「租约过期后同一个任务被第二个执行者重复执行」：两个执行者都会走到
+    `_commit_generation_result`，但会话状态 CAS 只让第一个写成功——第二个的
+    产出必须被丢弃，绝不能在确认页上再写一份改写。
+    """
+    h = MediationHarness()
+    try:
+        with h:
+            h.driving(STUBS)
+            db = h.db()
+            sid = _reach_inputting(h, db)
+            mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
+            mediation_service.submit_input(db, sid, A_ID, "A 的倾诉")
+
+            first = ai_task_repo.claim_next_task(db, "w1")
+            check("w1 领到任务", first is not None and first.locked_by == "w1", str(first))
+            mediation_service._commit_generation_result(
+                db, first, dict(REWRITE_STUB), "confirming"
+            )
+            check("第一次写回落地（会话 confirming）",
+                  _session(db, sid).mediation_status == "confirming")
+            assistant = [
+                m for m in ai_repo.get_messages_by_session(db, sid) if m.role == "assistant"
+            ]
+            check("只落一份改写", len(assistant) == 1, str(len(assistant)))
+
+            # 旧执行者手里的任务快照：会话版本没变，但它已不持有这一行
+            class _StaleSnapshot:
+                pass
+
+            stale = _StaleSnapshot()
+            stale.id = first.id
+            stale.session_id = sid
+            stale.revision = first.revision
+            stale.locked_by = "w2"
+
+            mediation_service._commit_generation_result(
+                db, stale, dict(REWRITE_STUB), "confirming"
+            )
+            assistant2 = [
+                m for m in ai_repo.get_messages_by_session(db, sid) if m.role == "assistant"
+            ]
+            check("第二个执行者的产出被丢弃（不写第二份）",
+                  len(assistant2) == 1, str(len(assistant2)))
+            check("会话状态不被回退",
+                  _session(db, sid).mediation_status == "confirming",
+                  _session(db, sid).mediation_status)
+            db.close()
+    finally:
+        h.destroy()
+
+
+def t_crash_exhaustion_terminates():
+    """P0-3：反复崩溃同样受 `max_attempts` 限制，不允许无限重跑。"""
+    h = MediationHarness()
+    try:
+        with h:
+            h.driving(STUBS)
+            db = h.db()
+            sid = _reach_inputting(h, db)
+            mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
+            mediation_service.submit_input(db, sid, A_ID, "A 的倾诉")
+
+            # 模拟连续三次「领走即崩溃」：running + 过期租约
+            for _ in range(3):
+                task = _tasks(db, sid, "mediation_rewrite")[0]
+                task.state = "running"
+                task.locked_by = "dead-worker"
+                task.locked_until = datetime.utcnow() - timedelta(seconds=60)
+                task.attempt = int(task.attempt or 0) + 1
+                db.commit()
+                ai_task_service.recover_stale_tasks(db)
+
+            task = _tasks(db, sid, "mediation_rewrite")[0]
+            check("耗尽后任务 failed", task.state == "failed", task.state)
+            check("attempt 不超过 max_attempts",
+                  int(task.attempt) <= int(task.max_attempts),
+                  "%s/%s" % (task.attempt, task.max_attempts))
+            check("耗尽行不再被领取", ai_task_service.run_due_tasks(db, worker_id="w1") == 0)
+            session = _session(db, sid)
+            check("会话进明确失败态", session.mediation_status == "rewrite_failed",
+                  session.mediation_status)
+            check("失败码=终态", session.mediation_failure_code == "TASK_EXHAUSTED",
+                  str(session.mediation_failure_code))
+            db.close()
+    finally:
+        h.destroy()
+
+
+def t_high_risk_blocks_mediation():
+    """P0-6：模型判定高风险（控制/暴力/自伤）时**禁止产出双人调解结果**。
+
+    同时验证「归一化先于门控」：桩返回的是 ` Abuse_Risk `（大小写+空格），
+    必须归一化成 `abuse_risk` 才命中阻断，否则门控会被一个格式差异绕过。
+    """
+    h = MediationHarness()
+    try:
+        with h:
+            def high_risk(prompt, scene_key):
+                return {
+                    "rewrite_a": "（不该落库的改写 A）",
+                    "rewrite_b": "（不该落库的改写 B）",
+                    "risk_level": " Abuse_Risk ",
+                }
+
+            h.driving(high_risk)
+            db = h.db()
+            sid = _reach_inputting(h, db)
+            mediation_service.submit_input(db, sid, B_ID, "B 的倾诉")
+            mediation_service.submit_input(db, sid, A_ID, "A 的倾诉")
+            ai_task_service.run_due_tasks(db, worker_id="test-worker")
+
+            session = _session(db, sid)
+            check("高风险会话被终止为 completed",
+                  session.mediation_status == "completed", session.mediation_status)
+            check("不是失败态（不该给用户「重试」）",
+                  session.mediation_failure_code is None,
+                  str(session.mediation_failure_code))
+            check("活跃槽位已释放", session.mediation_active_slot is None,
+                  str(session.mediation_active_slot))
+
+            assistant = [
+                m for m in ai_repo.get_messages_by_session(db, sid) if m.role == "assistant"
+            ]
+            check("只落一条安全提示消息", len(assistant) == 1, str(len(assistant)))
+            so = (assistant[0].structured_output or {}) if assistant else {}
+            check("没有落任何调解改写",
+                  "rewrite_a" not in so and "rewrite_b" not in so, str(so))
+            check("消息带安全资源正文", bool(so.get("safety_response")), str(so))
+            check("消息风险等级已落库（归一化后）",
+                  bool(assistant) and assistant[0].risk_level == "abuse_risk",
+                  str(assistant[0].risk_level) if assistant else "")
+
+            st = mediation_service.get_status(db, sid, A_ID)
+            risks = [
+                m.get("risk_level") for m in st.get("messages") or []
+                if m.get("role") == "assistant"
+            ]
+            check("GET {id} 下发风险等级（客户端据此渲染安全卡）",
+                  risks == ["abuse_risk"], str(risks))
+            db.close()
+    finally:
+        h.destroy()
+
+
+def t_risk_payload_normalized():
+    """结构化输出归一化：字段类型与等级一律在写库前收敛。"""
+    normalized = mediation_service._normalize_generation_payload(
+        {"rewrite_a": None, "rewrite_b": 3, "risk_level": "Heated_Conflict"},
+        summary=False,
+    )
+    check("改写两侧收敛成 str",
+          normalized["rewrite_a"] == "" and normalized["rewrite_b"] == "3",
+          str(normalized))
+    check("等级归一化", normalized["risk_level"] == "heated_conflict", str(normalized))
+
+    bad = mediation_service._normalize_generation_payload(
+        {"rewrite_a": "a", "rewrite_b": "b", "risk_level": "HIGH"}, summary=False
+    )
+    check("未知等级按 normal 处理", bad["risk_level"] == "normal", str(bad))
+
+    summary = mediation_service._normalize_generation_payload(
+        {
+            "common_points": "只有一条",
+            "differences": None,
+            "next_actions": ["a", None, " "],
+            "risk_level": "normal",
+        },
+        summary=True,
+    )
+    check("总结列表收敛成 List[str]",
+          summary["common_points"] == ["只有一条"]
+          and summary["differences"] == []
+          and summary["next_actions"] == ["a"],
+          str(summary))
+
+
 def main() -> int:
     print("[调解可靠任务队列] 整改 B4.1 P0-1~P0-4 验收")
     t_task_persisted_before_execution()
@@ -1048,6 +1239,10 @@ def main() -> int:
     t_fastapi_contract_processing_semantics()
     t_api_state_matches_db_state()
     t_identity_and_authorization_still_enforced()
+    t_duplicate_executor_cannot_double_write()
+    t_crash_exhaustion_terminates()
+    t_high_risk_blocks_mediation()
+    t_risk_payload_normalized()
     print("========== 结果 ==========")
     if FAILURES:
         print("失败 %d 项：%s" % (len(FAILURES), FAILURES))
