@@ -1,5 +1,6 @@
 package com.couple.translator.feature.couple.relation
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,25 +10,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.People
-import androidx.compose.material.icons.outlined.Psychology
-import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.ViewSidebar
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
@@ -47,8 +48,11 @@ import com.couple.translator.core.ui.theme.AppSpacing
  *
  * 结构：
  * 1. 待处理 —— 调解邀请、双视角「我未提交」、解绑确认状态
- * 2. 关系背景 —— 纪念日、绑定信息（love_days）、关系画像摘要、信件入口（原「空间/信箱」tab 的有用内容迁入）
- * 3. 阶段四占位 —— 当前议题 / 共同约定 / 关系模式 / 关系脉络（收敛期不建端点，仅占位）
+ * 2. 关系背景 —— 纪念日、绑定信息（love_days）、关系画像摘要、深度表达入口
+ *
+ * 整改 §8.4：原先「更多」区块里的当前议题 / 共同约定 / 关系模式 / 关系脉络
+ * 四个占位行已删除——它们全是「阶段四开放」的假功能，点了没有任何反应。
+ * 未建完整议题模型前**不伪造**入口（§8.7 同款要求）。
  *
  * 所有跳转走根路由（[onNavigateToRoute]），子页压在壳之上、可返回。
  */
@@ -60,6 +64,23 @@ fun RelationScreen(
     viewModel: RelationViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+
+    // 整改 §8.4：返回本页必须重新拉取。
+    //
+    // 这里用 LaunchedEffect(Unit) 而不是 lifecycle ON_RESUME：本页在壳的内层
+    // NavHost 里，去写信 / 复盘 / 双视角等根级页面时本 composable 会离开组合，
+    // 回来时重新进入组合 → 这个 effect 会再跑一次；ViewModel 却按 back stack
+    // entry 存活，所以正好是「数据保留、状态刷新」。
+    // 首帧不会重复请求：init 里的 load() 已把 isLoading 置位，刷新分支会跳过。
+    LaunchedEffect(Unit) {
+        viewModel.load(isRefresh = true)
+    }
+
+    // 刷新失败（页面已有内容、不整页报错）只弹一次性提示，不动已渲染的数据。
+    LaunchedEffect(Unit) {
+        viewModel.messages.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+    }
 
     Scaffold(
         containerColor = AppBackground,
@@ -79,7 +100,8 @@ fun RelationScreen(
             )
 
             if (uiState.loadError) {
-                // M3：整页数据全挂时给错误 + 重试，不能静默渲染成「暂无待处理事项」
+                // 整页失败：关键源（home + couples/me）都没回来，页面无从渲染——
+                // 给错误 + 重试，不能静默渲染成「暂无待处理事项」。
                 AppEmptyState(
                     icon = Icons.Outlined.Info,
                     title = "关系页加载失败",
@@ -103,6 +125,7 @@ fun RelationScreen(
             PendingSection(
                 uiState = uiState,
                 onNavigateToRoute = onNavigateToRoute,
+                onRetry = { viewModel.load() },
             )
 
             // ---------- 2. 关系背景 ----------
@@ -111,38 +134,6 @@ fun RelationScreen(
                 uiState = uiState,
                 onNavigateToRoute = onNavigateToRoute,
             )
-
-            // ---------- 3. 阶段四占位 ----------
-            SectionTitle("更多")
-            AppCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = AppSpacing.screenH),
-            ) {
-                AppListItem(
-                    title = "当前议题",
-                    subtitle = "你们最近反复出现的冲突主题（阶段四开放）",
-                    leadingIcon = Icons.Outlined.Psychology,
-                )
-                AppListItemDivider()
-                AppListItem(
-                    title = "共同约定",
-                    subtitle = "两个人谈妥并确认的相处规则（阶段四开放）",
-                    leadingIcon = Icons.Outlined.StarOutline,
-                )
-                AppListItemDivider()
-                AppListItem(
-                    title = "关系模式",
-                    subtitle = "依恋与互动模式的长期画像（阶段四开放）",
-                    leadingIcon = Icons.Outlined.Analytics,
-                )
-                AppListItemDivider()
-                AppListItem(
-                    title = "关系脉络",
-                    subtitle = "重要节点串成的关系时间线（阶段四开放）",
-                    leadingIcon = Icons.Outlined.History,
-                )
-            }
 
             Spacer(modifier = Modifier.height(AppSpacing.block))
         }
@@ -153,6 +144,7 @@ fun RelationScreen(
 private fun PendingSection(
     uiState: RelationUiState,
     onNavigateToRoute: (String) -> Unit,
+    onRetry: () -> Unit,
 ) {
     if (uiState.isLoading) {
         Column(
@@ -167,6 +159,18 @@ private fun PendingSection(
     }
 
     if (uiState.pendingCount == 0) {
+        // 整改 §8.4：读不到 ≠ 没有。任何一类「待处理」源失败时都不能说
+        // 「暂无待处理事项」——那会让用户以为真的没事要做（曾经邀请接口一挂
+        // 就是这样），也给一个就地重试的出口。
+        if (!uiState.pendingReliable) {
+            AppEmptyState(
+                icon = Icons.Outlined.Info,
+                title = "待处理状态没读出来",
+                subtitle = "网络或服务异常，重试一次试试",
+                action = { AppPrimaryButton(text = "重试", onClick = onRetry) },
+            )
+            return
+        }
         AppEmptyState(
             icon = Icons.Outlined.Favorite,
             title = "暂无待处理事项",
@@ -253,10 +257,14 @@ private fun BackgroundSection(
                 days <= 0 -> "就在今天"
                 else -> "还有 $days 天"
             }
+            // 整改 §8.8：日期说明与列表页共用同一套规则（每年 X 月 X 日 · 下次 …），
+            // 不再直接把原始日期贴在「还有 N 天」旁边——那正是契约点名的年份冲突。
+            val dateText = anniversary.nextOccurrenceDate?.takeIf { it.isNotBlank() }
+                ?.let { "下次 $it" }
+                ?: anniversary.anniversaryDate.takeIf { it.isNotBlank() }
             AppListItem(
                 title = anniversary.title,
-                subtitle = listOfNotNull(daysText, anniversary.anniversaryDate.takeIf { it.isNotBlank() })
-                    .joinToString(" · "),
+                subtitle = listOfNotNull(daysText, dateText).joinToString(" · "),
                 leadingIcon = Icons.Outlined.Event,
                 showChevron = true,
                 onClick = { onNavigateToRoute(Screen.AnniversaryList.route) },
@@ -297,14 +305,33 @@ private fun BackgroundSection(
             onClick = { onNavigateToRoute(Screen.Understanding.route) },
         )
 
-        // 信件收件箱（深度表达入口）
+        // 深度表达（原「信件收件箱」）：进内层信箱 tab（tab_mailbox），
+        // 由 CoupleShell 拦截该路由转内层导航——根导航没有 tab_mailbox 目的地。
+        // 未读计数是真实数据（inboxCount），照旧展示。
         AppListItemDivider()
         AppListItem(
-            title = "信件收件箱",
+            title = "深度表达",
             subtitle = if (uiState.inboxCount > 0) "${uiState.inboxCount} 封信在等你" else "写下来，比说出来容易",
             leadingIcon = Icons.Outlined.MailOutline,
             showChevron = true,
-            onClick = { onNavigateToRoute(Screen.LetterList.route) },
+            onClick = { onNavigateToRoute(BottomTab.Mailbox.route) },
         )
+
+        // §8.5-6「能回看」：已完成的调解必须有一条**用户看得见**的路——
+        // 后端已把 completed 保留在 mine/all 里（不拒绝访问），但客户端此前
+        // 没有任何入口能列出它们：用户想回头看看上次谈成了什么，无处可去。
+        // 这里复用调解邀请列表同一个端点（role=mine 含已完成），失败就整行不显示，
+        // 不新增会报错的入口。
+        val pastMediations = uiState.completedMediations
+        if (pastMediations.isNotEmpty()) {
+            AppListItemDivider()
+            AppListItem(
+                title = "调解回看",
+                subtitle = "已完成的沟通总结（${pastMediations.size} 次）",
+                leadingIcon = Icons.Outlined.History,
+                showChevron = true,
+                onClick = { onNavigateToRoute(Screen.MediationHistory.route) },
+            )
+        }
     }
 }

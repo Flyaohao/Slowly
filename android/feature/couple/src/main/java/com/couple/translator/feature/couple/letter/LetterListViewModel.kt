@@ -45,8 +45,8 @@ class LetterListViewModel @Inject constructor(
     }
 
     fun refresh() {
-        val tabs = listOf("全部", "收到", "发出", "草稿", "未来", "冷静", "未说出口", "私密")
-        val tabName = tabs.getOrElse(uiState.value.selectedTab) { "全部" }
+        // 与界面可见 tab 同源：未来/私密已冻结移除，索引对不上的刷新会取错数据
+        val tabName = visibleCoupleTabs().getOrElse(uiState.value.selectedTab) { "全部" }
         _uiState.update { it.copy(isRefreshing = true, error = "") }
         viewModelScope.launch {
             val result = when (tabName) {
@@ -54,10 +54,8 @@ class LetterListViewModel @Inject constructor(
                 "收到" -> letterRepository.getInbox()
                 "发出" -> letterRepository.getLetters(direction = "sent")
                 "草稿" -> letterRepository.getDrafts()
-                "未来" -> letterRepository.getLetters(type = "future")
                 "冷静" -> letterRepository.getLetters(type = "calm")
                 "未说出口" -> letterRepository.getLetters(type = "unsaid")
-                "私密" -> letterRepository.getLetters(type = "private")
                 "收藏" -> letterRepository.getLetters().map { resp ->
                     resp?.copy(items = resp.items.filter { it.isFavorite })
                 }
@@ -90,15 +88,13 @@ class LetterListViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true, error = "") }
         viewModelScope.launch {
             val result = when (tabName) {
-                // Couple mode tabs
+                // Couple mode tabs（未来/私密已随可见 tab 一并冻结移除）
                 "全部" -> letterRepository.getLetters()
                 "收到" -> letterRepository.getInbox()
                 "发出" -> letterRepository.getLetters(direction = "sent")
                 "草稿" -> letterRepository.getDrafts()
-                "未来" -> letterRepository.getLetters(type = "future")
                 "冷静" -> letterRepository.getLetters(type = "calm")
                 "未说出口" -> letterRepository.getLetters(type = "unsaid")
-                "私密" -> letterRepository.getLetters(type = "private")
                 // Diary mode tabs (client-side filtering)
                 "收藏" -> letterRepository.getLetters().map { resp ->
                     resp?.copy(items = resp.items.filter { it.isFavorite })

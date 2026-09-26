@@ -28,11 +28,15 @@ enum class Screen(val route: String) {
     LetterDetail("letter_detail"),
     ComposeLetter("compose_letter"),
     RelationshipReview("relationship_review"),
+    /** 整改 §8.7：复盘历史回看（所有留档，不再只有最新一条）。 */
+    ReviewHistory("review_history"),
     MediationInvite("mediation_invite"),
     MediationInput("mediation_input"),
     MediationConfirm("mediation_confirm"),
     MediationResult("mediation_result"),
     MediationExplanation("mediation_explanation"),
+    /** 整改 §8.5-6：已完成的调解回看列表（「能回看」的用户入口）。 */
+    MediationHistory("mediation_history"),
     Memory("memory"),
     DualPerspectiveList("dual_perspective_list"),
     DualPerspectiveDetail("dual_perspective_detail"),
@@ -55,6 +59,10 @@ enum class Screen(val route: String) {
     // 收敛期新增页（W4.3 画像三合一 / W4.4 军师设置；仅新增，既有路由字符串不动）
     Understanding("understanding"),
     AdvisorSettings("advisor_settings"),
+
+    // 整改 §8.3：AI 建议采用后回填结果的待反馈页（首页 feedback_outcome 任务卡入口）
+    // sessionId 可空：从首页任务卡进（只知会话）；带 messageId 时直接定位到那条建议
+    FeedbackOutcome("feedback_outcome"),
 
     // 单身模式专属
     DiaryList("diary_list"),

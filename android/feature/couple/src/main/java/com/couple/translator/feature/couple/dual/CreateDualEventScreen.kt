@@ -40,9 +40,14 @@ import com.couple.translator.core.ui.theme.AppSurface
 fun CreateDualEventScreen(
     onNavigateBack: () -> Unit,
     onNavigateToSubmitRecord: (Long) -> Unit,
+    /** 军师行动行「邀请 TA 补充双视角」进来时为 true（路由 /create_dual_event/invite） */
+    invite: Boolean = false,
     viewModel: CreateDualEventViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    // 入口参数只喂一次（VM 内部挡重复），之后由用户输入驱动
+    LaunchedEffect(invite) { viewModel.initialize(invite) }
 
     LaunchedEffect(uiState.created) {
         if (uiState.created) {
@@ -113,10 +118,34 @@ fun CreateDualEventScreen(
                 singleLine = true,
             )
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 整改 §8.6：邀请语。填了就在创建后通知伴侣一起来写；
+            // 留空 = 自己先记着，不打扰对方（后端据此决定发不发实时帧）。
+            OutlinedTextField(
+                value = uiState.inviteMessage,
+                onValueChange = { viewModel.updateInviteMessage(it) },
+                label = { Text("邀请 TA 一起写（选填）") },
+                placeholder = { Text("比如：我想听听你当时是怎么想的") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = AppAccent,
+                    unfocusedBorderColor = AppBorderLight,
+                    focusedContainerColor = AppSurface,
+                    unfocusedContainerColor = AppSurface,
+                ),
+                minLines = 2,
+            )
+
             Spacer(modifier = Modifier.height(32.dp))
 
             AppAccentButton(
-                text = "创建并记录我的视角",
+                text = if (uiState.inviteMessage.isBlank()) {
+                    "创建并记录我的视角"
+                } else {
+                    "创建并邀请 TA 一起写"
+                },
                 onClick = { viewModel.createEvent() },
             )
         }

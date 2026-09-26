@@ -1,6 +1,7 @@
 package com.couple.translator.feature.couple
 
 import android.Manifest
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -323,6 +324,18 @@ fun CoupleShell(
                             onNavigateToRoute("relationship_review")
                         },
                         onNavigateToRoute = onNavigateToRoute,
+                        // 整改 §8.3：反馈行的「填写实际结果」→ 待反馈页（带 messageId）
+                        onNavigateToFeedbackOutcome = { messageId ->
+                            onNavigateToRoute(
+                                "${Screen.FeedbackOutcome.route}?messageId=$messageId",
+                            )
+                        },
+                        // 整改 §8.2：「整理成一封信」→ 写信页预填这段表达
+                        onNavigateToComposeLetter = { text ->
+                            onNavigateToRoute(
+                                "${Screen.ComposeLetter.route}?content=${Uri.encode(text)}",
+                            )
+                        },
                         identity = topBarIdentity,
                         tabBarVisible = !hideTabBar,
                         onToggleTabBar = { hideTabBar = !hideTabBar },
@@ -332,7 +345,18 @@ fun CoupleShell(
                 composable(BottomTab.Relation.route) {
                     RelationScreen(
                         onOpenDrawer = openDrawer,
-                        onNavigateToRoute = onNavigateToRoute,
+                        // 关系页 → 信箱（tab_mailbox）走内层导航：该路由只注册在本壳的
+                        // 内层 NavHost，根导航够不到会崩；其余路由（letter_list /
+                        // compose_letter 等）仍走根导航，压在壳之上可返回。
+                        // 刻意不 popUpTo(startDestination)：系统返回键要能从信箱退回关系页。
+                        // 隐藏 ≠ 删除：tab_mailbox 的 composable、抽屉与回调全部复用。
+                        onNavigateToRoute = { route ->
+                            if (route == BottomTab.Mailbox.route) {
+                                tabNavController.navigate(route) { launchSingleTop = true }
+                            } else {
+                                onNavigateToRoute(route)
+                            }
+                        },
                         identity = topBarIdentity,
                     )
                 }

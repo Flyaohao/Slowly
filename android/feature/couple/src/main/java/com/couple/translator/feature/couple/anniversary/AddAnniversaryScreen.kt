@@ -1,6 +1,7 @@
 package com.couple.translator.feature.couple.anniversary
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,11 +14,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -146,6 +149,36 @@ fun AddAnniversaryScreen(
                     unfocusedContainerColor = AppSurface,
                 ),
             )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 整改 §8.8：一次性 vs 每年重复必须由用户显式选择。
+            // 此前没有这一项，服务端一律按年滚动，于是「去年的一次性纪念」被
+            // 算成明年的「还有 N 天」，和旁边印着的年份打架——契约点名的冲突。
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "每年重复",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = if (uiState.repeatAnnually) {
+                            "每年到这天都会提醒，例如生日、在一起的纪念日"
+                        } else {
+                            "只算这一次，过期后不再显示「还有几天」"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextSecondary,
+                    )
+                }
+                Switch(
+                    checked = uiState.repeatAnnually,
+                    onCheckedChange = { viewModel.updateRepeatAnnually(it) },
+                )
+            }
 
             Spacer(modifier = Modifier.height(32.dp))
 

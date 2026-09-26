@@ -38,7 +38,7 @@ import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.feature.couple.data.model.LetterDto
 
 /**
- * 信箱（情侣模式）/ 我的日记（单身模式）。
+ * 深度表达（情侣模式，原「信箱」）/ 我的日记（单身模式）。
  *
  * 排版原则和首页对齐：**顶栏只放叠头像入口，标题交给正文大标题**；
  * 列表不再是「裸行 + 全宽分隔线」，而是收进卡片里 —— 分组一看就清楚，
@@ -114,7 +114,8 @@ private fun CoupleMailboxContent(
     val pending = uiState.receivedLetters.size
 
     AppPageHeader(
-        title = "信箱",
+        title = "深度表达",
+        // 副标题保持数据驱动（未读数）与能力描述，不提「信箱」旧名
         subtitle = when {
             pending > 0 -> "有 $pending 封信在等你打开"
             else -> "认真写下的句子，会一直留在这里。"

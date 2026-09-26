@@ -66,15 +66,19 @@ fun ComposeLetterScreen(
     onNavigateBack: () -> Unit,
     onLetterSent: () -> Unit,
     isCoupleMode: Boolean = true,
+    // 从别处带入的预填正文（默认空 = 不预填，根图旧注册点无需改动即可编译）
+    content: String = "",
     viewModel: ComposeLetterViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showSendConfirm by remember { mutableStateOf(false) }
     var showTemplates by remember { mutableStateOf(false) }
 
-    LaunchedEffect(draftId) {
-        if (draftId != null && draftId > 0) {
-            viewModel.loadDraft(draftId)
+    LaunchedEffect(draftId, content) {
+        when {
+            // 草稿优先：已有草稿时绝不用外部正文覆盖（prefillContent 内还有双保险）
+            draftId != null && draftId > 0 -> viewModel.loadDraft(draftId)
+            content.isNotBlank() -> viewModel.prefillContent(content)
         }
     }
 
@@ -374,9 +378,11 @@ private fun ComposeBottomBar(
 
 private fun letterTypeName(type: String): String = when (type) {
     "normal" -> "普通信"
-    "future" -> "未来信"
+    // 冻结类型（未来/私密）：徽标显示中性的「信件」，不出现冻结字样
+    // （正常流程只会循环 normal/unsaid/calm，这里只为历史草稿兜底）
+    "future" -> "信件"
     "calm" -> "冷静信"
     "unsaid" -> "未说出口"
-    "private" -> "私密信"
+    "private" -> "信件"
     else -> type
 }

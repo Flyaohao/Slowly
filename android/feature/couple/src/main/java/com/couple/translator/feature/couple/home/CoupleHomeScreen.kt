@@ -702,7 +702,10 @@ private fun HomeStatusCards(homeData: HomeDto.HomeResponse) {
     //     cards.add(Icons.Outlined.Schedule to ("未来信" to "解锁于 ${it.unlockTime?.take(10) ?: "待定"}"))
     // }
     homeData.upcomingAnniversary?.let {
-        cards.add(Icons.Outlined.StarOutline to (it.title to "${it.daysUntil} 天后"))
+        // 整改 §8.8：天数由服务端算（服务端已保证这里不会是「一次性且已过」的
+        // 纪念日），当天说「就是今天」而不是「0 天后」。
+        val daysText = if (it.daysUntil <= 0) "就是今天" else "${it.daysUntil} 天后"
+        cards.add(Icons.Outlined.StarOutline to (it.title to daysText))
     }
     // [W1 隐藏] 纪念馆状态卡（模块冻结 10006）
     // if (homeData.recentMuseumItems.isNotEmpty()) {

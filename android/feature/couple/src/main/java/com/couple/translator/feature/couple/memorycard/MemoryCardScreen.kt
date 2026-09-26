@@ -39,8 +39,11 @@ import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 
 /**
- * 回忆卡片页：纪念日 / 愿望的 AI 长文，一段叙事 + 三个重访问题。
+ * 回忆卡片页：一条记录（目前是纪念日）的 AI 长文，一段叙事 + 三个重访问题。
  * 从列表页带 targetType/targetId/itemTitle 进入，一条条目一张卡片。
+ *
+ * 后端 memory-card 端点本身在收敛期冻结（10006），页面保留备查；文案里
+ * 不再出现「愿望」——愿望清单已随博物馆/练习一起冻结，不得再宣传。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -164,7 +167,7 @@ fun MemoryCardScreen(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "把这条${if (uiState.targetType == "anniversary") "纪念日" else "愿望"}写成一张回忆卡片，配上三个适合你们一起聊的问题",
+                                text = "把这条${if (uiState.targetType == "anniversary") "纪念日" else "记录"}写成一张回忆卡片，配上三个适合你们一起聊的问题",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = AppTextSecondary,
                                 textAlign = TextAlign.Center,

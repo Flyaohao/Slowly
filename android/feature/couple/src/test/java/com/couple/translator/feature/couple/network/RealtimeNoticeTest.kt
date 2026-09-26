@@ -22,11 +22,13 @@ class RealtimeNoticeTest {
         content: String? = null,
         letterId: Long? = null,
         sessionId: Long? = null,
+        eventId: Long? = null,
     ) = RealtimeEvent(
         notificationType = type,
         content = content,
         letterId = letterId,
         sessionId = sessionId,
+        eventId = eventId,
     )
 
     // ---------- 收信 ----------
@@ -105,6 +107,41 @@ class RealtimeNoticeTest {
         assertEquals("对方想让你陪一会儿", notice.notificationText)
     }
 
+    // ---------- 双视角邀请（整改 §8.6） ----------
+
+    @Test
+    fun `双视角邀请带事件 id 时直达那件事`() {
+        // §8.0：「能返回」——对方收到邀请后必须点得到那件事本身，
+        // 否则只能自己在列表里翻。event_id 与 letter_id/session_id 是同一套约定。
+        val notice = event("dual_invite", content = "我想听听你怎么想的", eventId = 88L).toNotice()!!
+        assertEquals(AppNotifications.ID_DUAL_INVITE, notice.notificationId)
+        assertEquals("${Screen.DualPerspectiveDetail.route}/88", notice.route)
+    }
+
+    @Test
+    fun `双视角邀请缺事件 id 时退回列表页而不是点了没反应`() {
+        val notice = event("dual_invite").toNotice()!!
+        assertEquals(Screen.DualPerspectiveList.route, notice.route)
+        // 老服务端可能给 0 而不是不给
+        assertEquals(Screen.DualPerspectiveList.route, event("dual_invite", eventId = 0L).toNotice()!!.route)
+    }
+
+    @Test
+    fun `双视角邀请的邀请语进文案但绝不进正文字段`() {
+        // 邀请语是发起人写给伴侣看的话；双方各自的**视角正文**由服务端过滤把守，
+        // 不可能进通知。这里钉住的是「别把 content 当成视角内容来展示」。
+        val notice = event("dual_invite", content = "我想听听你怎么想的").toNotice()!!
+        assertTrue(notice.snackbarText.contains("我想听听你怎么想的"))
+        assertEquals("我想听听你怎么想的", notice.notificationText)
+    }
+
+    @Test
+    fun `双视角邀请没带邀请语时用兜底文案`() {
+        val notice = event("dual_invite").toNotice()!!
+        assertFalse(notice.snackbarText.endsWith("："))
+        assertTrue(notice.notificationText!!.isNotBlank())
+    }
+
     // ---------- 刻意不进通知栏的事件 ----------
 
     @Test
@@ -132,6 +169,7 @@ class RealtimeNoticeTest {
     fun `有通知栏的分支文案都不为空`() {
         val types = listOf(
             "letter_received", "mediation_invite", "unbind_requested", "companion_request",
+            "dual_invite",
         )
         for (type in types) {
             val notice = event(type).toNotice() ?: error("$type 应有序表")
@@ -142,7 +180,7 @@ class RealtimeNoticeTest {
     }
 
     @Test
-    fun `四个通知 id 两两不同`() {
+    fun `五个通知 id 两两不同`() {
         // 同 id 的新通知会覆盖旧的（连收三封信在通知栏里只留一条）；
         // id 撞车则会让两类事件互相覆盖
         val ids = listOf(
@@ -150,6 +188,7 @@ class RealtimeNoticeTest {
             AppNotifications.ID_MEDIATION_INVITE,
             AppNotifications.ID_UNBIND_REQUESTED,
             AppNotifications.ID_COMPANION_REQUEST,
+            AppNotifications.ID_DUAL_INVITE,
         )
         assertEquals(ids.size, ids.toSet().size)
     }

@@ -11,6 +11,15 @@ object AnniversaryDto {
         @Json(name = "relation_id") val relationId: Long,
         @Json(name = "title") val title: String,
         @Json(name = "anniversary_date") val anniversaryDate: String,
+        /** 整改 §8.8：true = 每年重复；false = 一次性（过了就不再算「下一次」）。 */
+        @Json(name = "repeat_annually") val repeatAnnually: Boolean = true,
+        /**
+         * 下一次发生的日期，由**服务端**算好下发。
+         * 一次性且已过时为 null——此时不要自己编一个「明年」出来。
+         */
+        @Json(name = "next_occurrence_date") val nextOccurrenceDate: String? = null,
+        /** 距下一次还有几天（服务端算）。null = 不会再发生。 */
+        @Json(name = "days_until") val daysUntil: Int? = null,
         @Json(name = "description") val description: String? = null,
         @Json(name = "created_at") val createdAt: String? = null,
     )
@@ -19,6 +28,7 @@ object AnniversaryDto {
     data class CreateAnniversaryRequest(
         @Json(name = "title") val title: String,
         @Json(name = "anniversary_date") val anniversaryDate: String,
+        @Json(name = "repeat_annually") val repeatAnnually: Boolean = true,
         @Json(name = "description") val description: String? = null,
     )
 
@@ -26,6 +36,7 @@ object AnniversaryDto {
     data class UpdateAnniversaryRequest(
         @Json(name = "title") val title: String? = null,
         @Json(name = "anniversary_date") val anniversaryDate: String? = null,
+        @Json(name = "repeat_annually") val repeatAnnually: Boolean? = null,
         @Json(name = "description") val description: String? = null,
     )
 

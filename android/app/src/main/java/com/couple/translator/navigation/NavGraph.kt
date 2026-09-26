@@ -31,8 +31,10 @@ import com.couple.translator.core.ui.theme.ThemeMode
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
 import com.couple.translator.feature.couple.ai.AiSessionListScreen
+import com.couple.translator.feature.couple.ai.FeedbackOutcomeScreen
 import com.couple.translator.feature.couple.ai.MemoryScreen
 import com.couple.translator.feature.couple.ai.PendingSessionHolder
+import com.couple.translator.feature.couple.ai.ReviewHistoryScreen
 import com.couple.translator.feature.couple.ai.ReviewScreen
 import com.couple.translator.feature.couple.anniversary.AddAnniversaryScreen
 import com.couple.translator.feature.couple.anniversary.AnniversaryListScreen
@@ -55,9 +57,11 @@ import com.couple.translator.feature.couple.letter.LetterDetailScreen
 import com.couple.translator.feature.couple.letter.LetterListScreen
 import com.couple.translator.feature.couple.mediation.MediationExplanationScreen
 import com.couple.translator.feature.couple.mediation.MediationConfirmScreen
+import com.couple.translator.feature.couple.mediation.MediationHistoryScreen
 import com.couple.translator.feature.couple.mediation.MediationInputScreen
 import com.couple.translator.feature.couple.mediation.MediationInviteScreen
 import com.couple.translator.feature.couple.mediation.MediationResultScreen
+import com.couple.translator.feature.couple.mediation.MediationStep
 import com.couple.translator.feature.couple.museum.AddMuseumItemScreen
 import com.couple.translator.feature.couple.museum.MuseumItemDetailScreen
 import com.couple.translator.feature.couple.museum.MuseumScreen
@@ -80,7 +84,10 @@ import com.couple.translator.feature.single.diary.ComposeDiaryScreen
 import com.couple.translator.feature.single.practice.SelfPracticeListScreen
 import com.couple.translator.feature.single.SingleShell
 import com.couple.translator.feature.couple.CoupleShell
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 @Composable
@@ -366,6 +373,11 @@ fun NavGraph(
                     navController.navigate("${Screen.LetterDetail.route}/$letterId")
                 },
                 isCoupleMode = isCoupleMode,
+                // 整改 §8.1：列表页右下角「写一封信」FAB 的真实去处——
+                // 不接线则空态承诺的「右下角按钮」是死的
+                onNavigateToCompose = {
+                    navController.navigate(Screen.ComposeLetter.route)
+                },
             )
         }
 
@@ -387,17 +399,25 @@ fun NavGraph(
         }
 
         composable(
-            route = "${Screen.ComposeLetter.route}?draftId={draftId}",
+            // 整改 §8.1：content = 「整理成一封信」等入口带来的正文预填（Uri.encode）；
+            // draftId 与 content 互斥语义在页内处理：有草稿只 loadDraft，无草稿才 prefill。
+            route = "${Screen.ComposeLetter.route}?draftId={draftId}&content={content}",
             arguments = listOf(
                 navArgument("draftId") {
                     type = NavType.LongType
                     defaultValue = 0L
                 },
+                navArgument("content") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
             ),
         ) { backStackEntry ->
             val draftId = backStackEntry.arguments?.getLong("draftId") ?: 0L
+            val prefillContent = backStackEntry.arguments?.getString("content").orEmpty()
             ComposeLetterScreen(
                 draftId = if (draftId > 0) draftId else null,
+                content = prefillContent,
                 onNavigateBack = { navController.popBackStack() },
                 onLetterSent = {
                     navController.navigate(Screen.Main.route) {
@@ -423,8 +443,69 @@ fun NavGraph(
             )
         }
 
+        // 关系复盘（整改 §8.7）：`reviewId` 走**必填路径段**而不是可选 query——
+        // 同一 composable 的多个目的地共享同一个 SavedStateHandle，带 query 的那次
+        // 导航会复用旧 handle 里的值（首页回访卡点进来看到上一条复盘），
+        // 用不同 route 字符串区分才能保证参数从 back stack entry 真读对。
         composable(Screen.RelationshipReview.route) {
-            ReviewScreen(onBack = { navController.popBackStack() })
+            ReviewScreen(
+                onBack = { navController.popBackStack() },
+                onOpenHistory = { navController.navigate(Screen.ReviewHistory.route) },
+                onOpenReview = { reviewId ->
+                    navController.navigate("${Screen.RelationshipReview.route}/$reviewId")
+                },
+            )
+        }
+
+        composable(
+            route = "${Screen.RelationshipReview.route}/{reviewId}",
+            arguments = listOf(navArgument("reviewId") { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val reviewId = backStackEntry.arguments?.getLong("reviewId") ?: 0L
+            ReviewScreen(
+                reviewId = reviewId,
+                onBack = { navController.popBackStack() },
+                onOpenHistory = { navController.navigate(Screen.ReviewHistory.route) },
+                onOpenReview = { id ->
+                    navController.navigate("${Screen.RelationshipReview.route}/$id")
+                },
+            )
+        }
+
+        // 复盘历史列表：注册在根导航上，凡是能选复盘的地方都点得进来（§8.0 可达性）
+        composable(Screen.ReviewHistory.route) {
+            ReviewHistoryScreen(
+                onBack = { navController.popBackStack() },
+                onOpenReview = { reviewId ->
+                    navController.navigate("${Screen.RelationshipReview.route}/$reviewId")
+                },
+                onCreateReview = {
+                    navController.navigate(Screen.RelationshipReview.route)
+                },
+            )
+        }
+
+        // 整改 §8.3：待反馈结果页。两种进入方式：
+        // - 首页 feedback_outcome 任务卡 → sessionId（后端约定卡的 id 即会话 id）
+        // - 会话内反馈行「填写实际结果」→ messageId（直接落到该条编辑态）
+        composable(
+            route = "${Screen.FeedbackOutcome.route}?sessionId={sessionId}&messageId={messageId}",
+            arguments = listOf(
+                navArgument("sessionId") {
+                    type = NavType.LongType
+                    defaultValue = 0L
+                },
+                navArgument("messageId") {
+                    type = NavType.LongType
+                    defaultValue = 0L
+                },
+            ),
+        ) { backStackEntry ->
+            FeedbackOutcomeScreen(
+                onNavigateBack = { navController.popBackStack() },
+                sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L,
+                messageId = backStackEntry.arguments?.getLong("messageId") ?: 0L,
+            )
         }
 
         composable(
@@ -445,12 +526,14 @@ fun NavGraph(
             MediationInviteScreen(
                 sessionId = sessionId,
                 isInviter = isInviter,
-                onNavigateToInput = { id ->
-                    navController.navigate("${Screen.MediationInput.route}?sessionId=$id") {
-                        popUpTo(Screen.MediationInvite.route) { inclusive = true }
-                    }
-                },
+                onNavigateToInput = { id -> navigateToMediationStep(navController, id, MediationStep.INPUT) },
                 onNavigateBack = { navController.popBackStack() },
+                // §8.5-1：对方接受后由服务端状态裁决落点（不再假设「接受 = 双方都去输入页」）
+                onNavigateToStep = { id, step -> navigateToMediationStep(navController, id, step) },
+                statusFrames = realtimeSocketManager?.statusFrames
+                    ?.filter { it.sessionId == sessionId }
+                    ?.map { it.status }
+                    ?: emptyFlow(),
             )
         }
 
@@ -466,12 +549,14 @@ fun NavGraph(
             val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L
             MediationInputScreen(
                 sessionId = sessionId,
-                onSubmitSuccess = { id ->
-                    navController.navigate("${Screen.MediationConfirm.route}?sessionId=$id") {
-                        popUpTo(Screen.MediationInput.route) { inclusive = true }
-                    }
-                },
+                // §8.5-2：提交后去哪由 MediationFlow 按服务端状态裁决，
+                // 第一方落等待态（此前直接跳确认页 → 看到空白改写）。
+                onMoveToStep = { id, step -> navigateToMediationStep(navController, id, step) },
                 onNavigateBack = { navController.popBackStack() },
+                statusFrames = realtimeSocketManager?.statusFrames
+                    ?.filter { it.sessionId == sessionId }
+                    ?.map { it.status }
+                    ?: emptyFlow(),
             )
         }
 
@@ -487,12 +572,13 @@ fun NavGraph(
             val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L
             MediationConfirmScreen(
                 sessionId = sessionId,
-                onConfirmed = { id ->
-                    navController.navigate("${Screen.MediationResult.route}?sessionId=$id") {
-                        popUpTo(Screen.MediationConfirm.route) { inclusive = true }
-                    }
-                },
+                // §8.5-5：只有双方都确认（或总结已生成）才会发 RESULT
+                onMoveToStep = { id, step -> navigateToMediationStep(navController, id, step) },
                 onNavigateBack = { navController.popBackStack() },
+                statusFrames = realtimeSocketManager?.statusFrames
+                    ?.filter { it.sessionId == sessionId }
+                    ?.map { it.status }
+                    ?: emptyFlow(),
             )
         }
 
@@ -509,6 +595,17 @@ fun NavGraph(
             MediationResultScreen(
                 sessionId = sessionId,
                 onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        // 整改 §8.5-6：已完成的调解回看列表（关系页「调解回看」的落点）。
+        // 详情直接复用结果页——它按 sessionId 读服务端总结，不区分「刚谈完」还是「一个月前」。
+        composable(Screen.MediationHistory.route) {
+            MediationHistoryScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenSession = { sessionId ->
+                    navController.navigate("${Screen.MediationResult.route}?sessionId=$sessionId")
+                },
             )
         }
 
@@ -539,12 +636,31 @@ fun NavGraph(
             )
         }
 
+        // 创建双视角事件（整改 §8.6）。
+        //
+        // `invite` 走**可选路径段**而不是 query：与 `/pair` 的两个目的地同理，
+        // NavHost 按 route 字符串匹配，`create_dual_event` 与
+        // `create_dual_event/invite` 是两个不同目的地，参数不会互相串。
+        // 不这样拆的话，「从军师行动行带邀请进来」会在下一次从列表页进创建页时
+        // 被复用（SavedStateHandle 是 per-destination 的），把普通创建也说成邀请。
         composable(Screen.CreateDualEvent.route) {
             CreateDualEventScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToSubmitRecord = { eventId ->
                     navController.navigate("${Screen.SubmitDualRecord.route}/$eventId") {
                         popUpTo(Screen.CreateDualEvent.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable("${Screen.CreateDualEvent.route}/invite") {
+            CreateDualEventScreen(
+                invite = true,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSubmitRecord = { eventId ->
+                    navController.navigate("${Screen.SubmitDualRecord.route}/$eventId") {
+                        popUpTo("${Screen.CreateDualEvent.route}/invite") { inclusive = true }
                     }
                 },
             )
@@ -821,5 +937,69 @@ fun NavGraph(
             navController.navigate(target) { launchSingleTop = true }
         }
         onDeepLinkConsumed()
+    }
+}
+
+/**
+ * 调解流程里「下一步该去哪个页面」的唯一映射（整改 §8.5-2 / §8.5-5 / §8.5-7）。
+ *
+ * 落点由 [MediationStep] 给出（[MediationFlow] 按服务端状态裁决），这里只负责
+ * 把 step 变成一次导航。三条硬规则写在注释里，改的时候别走散：
+ *
+ * 1. **每一步都 popUpTo 当前步**：调解是一条直线流程，用户不该用返回键
+ *    退回到「已提交的输入页」再提交一次（§8.5 的重复提交）。
+ * 2. **往前的落点才 pop**：[MediationStep.STAY]（停在原页继续等）与
+ *    「从结果页往回看」都不动回退栈。
+ * 3. **等待态是同一个页面的另一种形态**，不是新目的地：`WAITING_PARTNER`
+ *    回到输入页（它自己渲染等待卡片），其余等待态回确认页——
+ *    这样「等对方确认」不会因为多注册一个路由而需要单独维护一套状态。
+ */
+private fun navigateToMediationStep(
+    navController: NavHostController,
+    sessionId: Long,
+    step: MediationStep,
+) {
+    when (step) {
+        MediationStep.STAY -> Unit
+
+        MediationStep.INPUT -> navigateSingleStep(
+            navController,
+            from = Screen.MediationInvite.route,
+            to = "${Screen.MediationInput.route}?sessionId=$sessionId",
+        )
+
+        MediationStep.WAITING_PARTNER -> navigateSingleStep(
+            navController,
+            from = Screen.MediationInput.route,
+            to = "${Screen.MediationInput.route}?sessionId=$sessionId",
+        )
+
+        MediationStep.WAITING_REWRITE,
+        MediationStep.WAITING_PARTNER_CONFIRM,
+        -> navigateSingleStep(
+            navController,
+            from = Screen.MediationConfirm.route,
+            to = "${Screen.MediationConfirm.route}?sessionId=$sessionId",
+        )
+
+        MediationStep.CONFIRM -> navigateSingleStep(
+            navController,
+            from = Screen.MediationInput.route,
+            to = "${Screen.MediationConfirm.route}?sessionId=$sessionId",
+        )
+
+        MediationStep.RESULT -> navController.navigate(
+            "${Screen.MediationResult.route}?sessionId=$sessionId"
+        ) {
+            // 结果页是这条线的终点：把前面几步一起清掉，返回即离开调解。
+            // 不清的话用户能从结果页退回到确认页再点一次确认（§8.5-5）。
+            popUpTo(Screen.MediationInvite.route) { inclusive = true }
+        }
+    }
+}
+
+private fun navigateSingleStep(navController: NavHostController, from: String, to: String) {
+    navController.navigate(to) {
+        popUpTo(from) { inclusive = true }
     }
 }

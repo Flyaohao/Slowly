@@ -40,6 +40,72 @@ object AiDto {
     data class ReviewRequest(
         @Json(name = "description") val description: String,
         @Json(name = "context") val context: String? = null,
+        /** 事件发生时间（选填，`YYYY-MM-DD` / ISO8601）。格式写错后端不报错、只回落创建时间。 */
+        @Json(name = "event_time") val eventTime: String? = null,
+    )
+
+    /** 「后来怎么样了」（§8.7 后续结果）：回填之后回访任务随之消失。 */
+    @JsonClass(generateAdapter = true)
+    data class ReviewOutcomeRequest(
+        @Json(name = "outcome") val outcome: String,
+    )
+
+    /**
+     * 一次复盘的**留档**（整改 §8.7，对应 `ai_relationship_review` 表）。
+     *
+     * 与 [ReviewResult] 分开的原因：`ReviewResult` 是**一次生成**的结构化输出，
+     * 这张是**一条历史**——含用户原始输入（「重新复盘一次」要恢复它）、六项留档
+     * 字段、以及后续结果与回访时间。字段名与
+     * `backend/app/services/relationship_review_service.to_payload` 逐字对应。
+     */
+    @JsonClass(generateAdapter = true)
+    data class ReviewRecord(
+        @Json(name = "review_id") val reviewId: Long = 0,
+        /** streaming / done / interrupted / failed */
+        @Json(name = "status") val status: String = "",
+        /** 用户当初输入的经过原文（历史回看时的「当时发生了什么」） */
+        @Json(name = "description") val description: String = "",
+        @Json(name = "context") val context: String = "",
+        // ---- 契约 §8.7 六项 ----
+        @Json(name = "summary") val summary: String = "",
+        @Json(name = "trigger") val trigger: String = "",
+        @Json(name = "own_need") val ownNeed: String = "",
+        @Json(name = "partner_need") val partnerNeed: String = "",
+        @Json(name = "suggested_expression") val suggestedExpression: String = "",
+        @Json(name = "event_time") val eventTime: String? = null,
+        // ---- 后续结果 ----
+        @Json(name = "outcome") val outcome: String? = null,
+        @Json(name = "outcome_at") val outcomeAt: String? = null,
+        /** 回访到点时间；已回填结果后被清空（回访任务随之消失） */
+        @Json(name = "recall_at") val recallAt: String? = null,
+        // ---- 生成侧 ----
+        @Json(name = "content") val content: String = "",
+        @Json(name = "structured_output") val structuredOutput: Map<String, Any?>? = null,
+        @Json(name = "risk_level") val riskLevel: String = "normal",
+        @Json(name = "created_at") val createdAt: String? = null,
+        @Json(name = "updated_at") val updatedAt: String? = null,
+    ) {
+        /** 是否拿到了可展示的结果（含正文兜底），与 `relationship_review_service` 同口径。 */
+        val hasResult: Boolean get() = summary.isNotBlank() || content.isNotBlank()
+    }
+
+    /** `GET /ai/review/history` 的列表项（只给列表需要的字段，详情再取）。 */
+    @JsonClass(generateAdapter = true)
+    data class ReviewHistoryItem(
+        @Json(name = "review_id") val reviewId: Long = 0,
+        @Json(name = "status") val status: String = "",
+        @Json(name = "summary") val summary: String = "",
+        @Json(name = "event_time") val eventTime: String? = null,
+        @Json(name = "outcome") val outcome: String? = null,
+        @Json(name = "created_at") val createdAt: String? = null,
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class ReviewHistoryResponse(
+        @Json(name = "total") val total: Int = 0,
+        @Json(name = "items") val items: List<ReviewHistoryItem> = emptyList(),
+        @Json(name = "page") val page: Int = 1,
+        @Json(name = "page_size") val pageSize: Int = 20,
     )
 
     /** 双视角对照总结请求：要总结的事件 id（双方都已提交才可用）。 */
@@ -86,23 +152,75 @@ object AiDto {
      * 刻意用 `Map` 承载 structured_output：不同 generation_kind 的结构化字段
      * 形状各不相同（信件解读 / 表达改写 / 关系复盘 …），用具体 data class 会
      * 在字段不匹配时把值静默解析成空对象。由各 ViewModel 自行按 key 取用。
+     *
+     * ⚠️ 整改 §8.7：**不复用本类型做关系复盘**。复盘详情走
+     * `GET /ai/review/{review_id}`（`ReviewRecord`）——`ai_generation` 是按
+     * key 覆盖式的，靠它回读历史只能读到最新一条，这正是复盘「只存最新一次」
+     * 的病灶。本类型保留给「一件事只留一份产物」的场景（画像报告等）。
      */
     @JsonClass(generateAdapter = true)
     data class GenerationPayload(
         @Json(name = "generation_id") val generationId: Long = 0,
         @Json(name = "status") val status: String = "",
         @Json(name = "content") val content: String = "",
-        @Json(name = "thinking") val thinking: String = "",
         @Json(name = "structured_output") val structuredOutput: Map<String, Any?>? = null,
         @Json(name = "risk_level") val riskLevel: String = "normal",
         @Json(name = "updated_at") val updatedAt: String? = null,
     )
 
+    /**
+     * 反馈请求（整改契约 §8.3）。
+     *
+     * 全部字段可空：Moshi 默认不序列化 null 字段，因此「不传」= 服务端保持原值
+     * （`ai_repo.create_feedback` 的 upsert 语义是 None=不改），这正是「先采纳、
+     * 稍后回填结果」两次调用落在**同一行**上的前提。
+     */
     @JsonClass(generateAdapter = true)
     data class FeedbackRequest(
-        @Json(name = "rating") val rating: Int,
+        /** 1-5 分；「有帮助 / 没帮助」按钮映射为 5 / 1 */
+        @Json(name = "rating") val rating: Int? = null,
         @Json(name = "feedback_tag") val feedbackTag: String? = null,
         @Json(name = "feedback_text") val feedbackText: String? = null,
+        /** 建议是否被采用；null = 不改（不是「未采用」） */
+        @Json(name = "adopted") val adopted: Boolean? = null,
+        /** 实际结果 / 对方的反应（§8.3 回访） */
+        @Json(name = "outcome") val outcome: String? = null,
+        /**
+         * 反馈落在哪条 AI 消息上；不传则服务端回落到「会话最后一条 AI 消息」。
+         * 带 message_id 才能给**历史消息**补填采用/结果（服务端校验归属，越权 50002）。
+         */
+        @Json(name = "message_id") val messageId: Long? = null,
+    )
+
+    /** 反馈回读（提交响应 + 会话消息列表的 `feedback` 字段）。 */
+    @JsonClass(generateAdapter = true)
+    data class FeedbackOut(
+        @Json(name = "message_id") val messageId: Long = 0L,
+        @Json(name = "rating") val rating: Int? = null,
+        @Json(name = "adopted") val adopted: Boolean? = null,
+        @Json(name = "outcome") val outcome: String? = null,
+        @Json(name = "feedback_tag") val feedbackTag: String? = null,
+        @Json(name = "feedback_text") val feedbackText: String? = null,
+    )
+
+    /** `GET /ai/feedback/pending` 的 data（§8.3 待回访列表，服务端已去重） */
+    @JsonClass(generateAdapter = true)
+    data class PendingFeedbackResponse(
+        @Json(name = "total") val total: Int = 0,
+        @Json(name = "items") val items: List<PendingFeedbackItem> = emptyList(),
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class PendingFeedbackItem(
+        @Json(name = "session_id") val sessionId: Long = 0L,
+        @Json(name = "scene_key") val sceneKey: String = "",
+        @Json(name = "title") val title: String? = null,
+        @Json(name = "rating") val rating: Int? = null,
+        @Json(name = "adopted") val adopted: Boolean? = null,
+        /** 恒为 null（筛选条件就是 outcome 为空），保留字段只为形状稳定 */
+        @Json(name = "outcome") val outcome: String? = null,
+        @Json(name = "message_id") val messageId: Long = 0L,
+        @Json(name = "created_at") val createdAt: String? = null,
     )
 
     // ---------- 响应 ----------
@@ -210,6 +328,18 @@ object AiDto {
          * 不是所有场景都有（非推理模型 / 非流式链路为 null）。
          */
         @Json(name = "thinking") val thinking: String? = null,
+        // ---- 客户端侧附加字段（非 wire 契约）----
+        /**
+         * 本条建议关联的双人调解会话 id（若后端在结构化输出里给出）；null 表示
+         * 没有可跳转的调解，行动行的「发起双人调解」按 §8.2 门控**不渲染**。
+         */
+        @Json(ignore = true) val mediationId: Long? = null,
+        /**
+         * 原始结构化 Map（不参与序列化）：行动行需要读后端某场景独有的键
+         * （opening_lines / rewrites / event_id …），逐个补字段会漏；由
+         * `AiRepository.parseStructured()` 填充，卡片按需读取。
+         */
+        @Json(ignore = true) val raw: Map<String, Any?>? = null,
     )
 
     @JsonClass(generateAdapter = true)
@@ -267,6 +397,11 @@ object AiDto {
         @Json(name = "structured_output") val structuredOutput: StructuredOutput? = null,
         @Json(name = "risk_level") val riskLevel: String? = null,
         @Json(name = "created_at") val createdAt: String? = null,
+        /**
+         * 整改契约 §8.3：这条消息上**我的**反馈（别人看不到）。
+         * 仅 assistant 消息可能非空；已填 outcome 时用于「回看已填结果」。
+         */
+        @Json(name = "feedback") val feedback: FeedbackOut? = null,
     )
 
     @JsonClass(generateAdapter = true)
@@ -323,6 +458,13 @@ object AiDto {
         @Json(name = "content") val content: String = "",
         // P-C3 §3.2：落库后的最新用量（0 = 服务端未带/落库失败，客户端不覆盖）
         @Json(name = "token_total") val tokenTotal: Int = 0,
+        /**
+         * 整改契约 §8.2：流式正文提取出的**场景结构化行动字段**
+         * （suggested_reply / do_not_say / next_step / opening_lines …）。
+         * 用 `Map` 而非 [StructuredOutput]：不同场景键不同，宽表会静默丢新键。
+         * 提取失败/超时 → 服务端不带此键 → null → 卡片降级为纯正文。
+         */
+        @Json(name = "structured") val structured: Map<String, Any?>? = null,
     )
 
     @JsonClass(generateAdapter = true)
@@ -355,6 +497,8 @@ object AiDto {
             val content: String,
             /** P-C3 §3.2：落库后最新用量；0 表示服务端未带，不覆盖现值 */
             val tokenTotal: Int = 0,
+            /** §8.2：done 帧带来的场景结构化字段；null = 提取失败/超时，卡片降级 */
+            val structured: Map<String, Any?>? = null,
         ) : ChatStreamEvent
 
         data class Failure(val code: Int, val message: String) : ChatStreamEvent

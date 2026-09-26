@@ -39,6 +39,90 @@ data class QuoteChip(
 /** 「＋」二级引用选择器的三种来源 */
 enum class QuotePickerType { MESSAGE, LETTER, ANNIVERSARY }
 
+/**
+ * 整改 §8.2：一条 AI 回复上「可发起的行动」。
+ *
+ * 刻意不在 UI 里写死按钮：同一行按钮在不同场景/语境下既不该全都在，也不该都没有。
+ * [actionsFor] 是唯一的裁决点，可单测；调解按钮受 [FeatureGate.MEDIATION] 门控
+ * （§8.5 未过验收前不许暴露残缺流程）。
+ */
+enum class AiAction(val label: String) {
+    COPY_REPLY("复制这段表达"),
+    SHARE_REPLY("分享这段表达"),
+    MAKE_LETTER("整理成一封信"),
+    INVITE_DUAL("邀请 TA 补充双视角"),
+    START_MEDIATION("发起双人调解"),
+    SAVE_REVIEW("记录为关系复盘"),
+    FEEDBACK("告诉军师有没有用"),
+}
+
+object FeatureGate {
+    /**
+     * 调解门控（§8.2 / §8.5）：正式入口继续隐藏，直到状态机·隐私·异步九条全过。
+     * 置 true 前必须完成 §8.5 全部验收——这是产品级红线，不是开关偏好。
+     */
+    const val MEDIATION = false
+}
+
+/** 「这段表达」的可复制文本：优先可直接发送的建议，其次破冰开场白，最后没有。 */
+fun copyableReplyOf(structured: AiDto.StructuredOutput?, content: String): String? {
+    structured?.suggestedReply?.takeIf { it.isNotBlank() }?.let { return it }
+    structured?.openingLines?.firstOrNull { it.isNotBlank() }?.let { return it }
+    structured?.rewrites?.firstOrNull()?.content?.takeIf { it.isNotBlank() }?.let { return it }
+    return content.takeIf { it.isNotBlank() }
+}
+
+/**
+ * 场景/语境 → 行动行（§8.2「按场景给上下文动作，非永久全按钮」）。
+ *
+ * 依据来自各场景的结构化字段：有 `suggested_reply`/`rewrites` 才谈得上复制分享；
+ * 有破冰话术或建议表达才谈得上「整理成一封信」；`relationship_review` 场景本身
+ * 就是复盘，不再重复给「记录为复盘」。调解永远受门控。
+ */
+fun actionsFor(sceneKey: String, structured: AiDto.StructuredOutput?): List<AiAction> {
+    val hasReply = copyableReplyOf(structured, "") != null
+    return buildList {
+        if (hasReply) add(AiAction.COPY_REPLY)
+        if (hasReply) add(AiAction.SHARE_REPLY)
+        if (hasReply) add(AiAction.MAKE_LETTER)
+        if (sceneKey != "relationship_review") add(AiAction.INVITE_DUAL)
+        if (sceneKey != "relationship_review") add(AiAction.SAVE_REVIEW)
+        if (FeatureGate.MEDIATION && structured?.mediationId != null) add(AiAction.START_MEDIATION)
+        add(AiAction.FEEDBACK)
+    }
+}
+
+/** 待回访条目在会话语境下的最小形态（§8.3 反馈页与任务卡共用） */
+data class PendingFeedback(
+    val sessionId: Long,
+    val messageId: Long,
+    val sceneKey: String,
+    val title: String?,
+    val adopted: Boolean?,
+    val createdAt: String?,
+)
+
+/**
+ * §8.3：一次 AI 回复上「已落库的反馈形态」，供行动行与反馈行自处。
+ * 与 [AiAction] 一起决定一行按钮怎么渲染（见 [FeedbackRowMode]）。
+ */
+enum class FeedbackRowMode {
+    /** 还没表态：有帮助 / 没帮助 */
+    ASK,
+
+    /** 已采纳但没结果：提醒可补填结果 + 立即填写 */
+    OUTCOME_DUE,
+
+    /** 已填结果：回看已填内容，不再提供按钮 */
+    DONE,
+}
+
+fun feedbackRowModeOf(feedback: AiDto.FeedbackOut?): FeedbackRowMode = when {
+    feedback?.outcome?.isNotBlank() == true -> FeedbackRowMode.DONE
+    feedback?.adopted == true -> FeedbackRowMode.OUTCOME_DUE
+    else -> FeedbackRowMode.ASK
+}
+
 data class AiChatUiState(
     val sessionId: Long? = null,
     val sceneKey: String = "private_advisor",
@@ -118,6 +202,9 @@ data class AiChatUiState(
 
 sealed class AiChatUiEvent {
     data class ShowError(val message: String) : AiChatUiEvent()
+
+    /** §8.3：轻量操作回执（已标记采用 / 已提交反馈），成功路径不该弹错误框 */
+    data class ShowToast(val message: String) : AiChatUiEvent()
 }
 
 @HiltViewModel
@@ -747,6 +834,9 @@ class AiChatViewModel @Inject constructor(
             role = "assistant",
             content = finalText,
             riskLevel = ev.riskLevel,
+            // 整改 §8.2：done 帧带来的场景结构化字段直接挂到消息上——
+            // 不这样做的话卡片要等重新拉消息列表才出现（用户看不到刚拿到的行动建议）。
+            structuredOutput = aiRepository.parseStructured(ev.structured),
         )
         _uiState.update {
             it.copy(
@@ -787,6 +877,80 @@ class AiChatViewModel @Inject constructor(
     /** 用户关掉 80% 提示（已 markHinted，本段不再弹）。 */
     fun dismissUsageHint() {
         _uiState.update { it.copy(usageHintVisible = false) }
+    }
+
+    // ------------------------------------------------------------------ #
+    // 整改 §8.3：采用与结果反馈闭环
+    // ------------------------------------------------------------------ #
+
+    /**
+     * 标记「这条建议我采用了」（可带 1-5 星，或不带评分）。
+     *
+     * 服务端是 upsert（同一消息同一用户原地更新），所以「先采纳、稍后回填结果」
+     * 两次调用落在同一行；这里也把回执写回列表，用户不必重新进会话才看到。
+     */
+    fun markAdopted(messageId: Long, adopted: Boolean, rating: Int? = null) {
+        val sessionId = _uiState.value.sessionId ?: return
+        viewModelScope.launch {
+            aiRepository.submitFeedback(
+                sessionId,
+                AiDto.FeedbackRequest(
+                    rating = rating,
+                    adopted = adopted,
+                    messageId = messageId,
+                ),
+            ).fold(
+                onSuccess = { fb ->
+                    _uiState.update { state ->
+                        state.copy(
+                            messages = state.messages.map { msg ->
+                                if (msg.id != messageId) msg
+                                else msg.copy(feedback = fb)
+                            },
+                        )
+                    }
+                    _event.emit(
+                        AiChatUiEvent.ShowToast(if (adopted) "已记为采用" else "已记为没用上"),
+                    )
+                },
+                onFailure = { e ->
+                    _event.emit(AiChatUiEvent.ShowError(e.message ?: "反馈提交失败"))
+                },
+            )
+        }
+    }
+
+    /** §8.3：立即回填结果（也可稍后在「待反馈」页补填，同一行原地更新）。 */
+    fun submitOutcome(messageId: Long, outcome: String) {
+        val sessionId = _uiState.value.sessionId ?: return
+        val text = outcome.trim()
+        if (text.isEmpty()) {
+            // 非 suspend 函数里不能直接 emit；空文本只提示、不发请求，丢进 scope 即可
+            viewModelScope.launch {
+                _event.emit(AiChatUiEvent.ShowError("说说后来怎么样了"))
+            }
+            return
+        }
+        viewModelScope.launch {
+            aiRepository.submitFeedback(
+                sessionId,
+                AiDto.FeedbackRequest(messageId = messageId, outcome = text),
+            ).fold(
+                onSuccess = { fb ->
+                    _uiState.update { state ->
+                        state.copy(
+                            messages = state.messages.map { msg ->
+                                if (msg.id != messageId) msg else msg.copy(feedback = fb)
+                            },
+                        )
+                    }
+                    _event.emit(AiChatUiEvent.ShowToast("已记录结果，谢谢反馈"))
+                },
+                onFailure = { e ->
+                    _event.emit(AiChatUiEvent.ShowError(e.message ?: "结果提交失败"))
+                },
+            )
+        }
     }
 
     private fun keepPartialThenFail(message: String) {

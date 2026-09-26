@@ -1,5 +1,7 @@
 package com.couple.translator.feature.couple.ai
 
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -66,9 +68,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.common.copyToClipboard
 import com.couple.translator.core.data.model.AiDto
+import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.ui.components.AiRiskLevel
 import com.couple.translator.core.ui.components.AiStreamingText
 import com.couple.translator.core.ui.components.AiThinkingPanel
@@ -107,6 +112,13 @@ fun NewAiChatScreen(
      * 带默认值——遗留壳 MainScreen.kt 仍按旧签名实例化本页（隐藏 ≠ 删除，W6 才清理）。
      */
     onNavigateToRoute: (String) -> Unit = {},
+    /**
+     * 整改 §8.3：「填写实际结果」的去处（待反馈页，带 messageId 直接落到该条）。
+     * 默认空实现只为旧壳不传时仍能编译；接线后反馈闭环才成立。
+     */
+    onNavigateToFeedbackOutcome: (Long) -> Unit = {},
+    /** 整改 §8.2：「整理成一封信」把建议表达带进写信页（Uri 编码后作路由参数）。 */
+    onNavigateToComposeLetter: (String) -> Unit = {},
     identity: TopBarIdentity = TopBarIdentity(),
     /** 沉浸模式：false = 底部 Tab 栏已隐藏（状态由 CoupleShell 持有） */
     tabBarVisible: Boolean = true,
@@ -166,9 +178,15 @@ fun NewAiChatScreen(
 
     // P-A §2.1：错误呈现（ShowError 事件 + uiState.error 合并，只弹一个）
     var errorMessage by remember { mutableStateOf("") }
+    // §8.3：轻量操作回执（「已记为采用」）走 Toast——成功路径弹错误框是噪音
+    val screenContext = LocalContext.current
     LaunchedEffect(Unit) {
         viewModel.event.collect { ev ->
-            if (ev is AiChatUiEvent.ShowError) errorMessage = ev.message
+            when (ev) {
+                is AiChatUiEvent.ShowError -> errorMessage = ev.message
+                is AiChatUiEvent.ShowToast ->
+                    Toast.makeText(screenContext, ev.message, Toast.LENGTH_SHORT).show()
+            }
         }
     }
     val dialogMessage = errorMessage.ifBlank { uiState.error }
@@ -190,6 +208,44 @@ fun NewAiChatScreen(
             AiSceneTarget.CHAT -> viewModel.selectScene(scene)
         }
     }
+
+    /**
+     * 整改 §8.2：行动行分派。每个动作都要有**真实去处**，不能是装饰按钮：
+     * 复制 → 剪贴板；分享 → Android 系统分享（可发微信等）；整理成一封信 → 写信页
+     * 预填；邀请双视角 → 创建事件页；记录为复盘 → 复盘页并预填这段建议；
+     * 反馈 → 进会话内的反馈行（本函数不发请求，只做导航/副作用）。
+     */
+    val handleAction: (AiAction, AiDto.MessageResponse, AiDto.StructuredOutput) -> Unit =
+        { action, message, structured ->
+            val reply = copyableReplyOf(structured, message.content).orEmpty()
+            when (action) {
+                AiAction.COPY_REPLY -> screenContext.copyToClipboard(reply)
+
+                AiAction.SHARE_REPLY -> {
+                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, reply)
+                    }
+                    screenContext.startActivity(
+                        Intent.createChooser(sendIntent, "分享这段表达"),
+                    )
+                }
+
+                AiAction.MAKE_LETTER -> onNavigateToComposeLetter(reply)
+
+                AiAction.INVITE_DUAL -> onNavigateToRoute("${Screen.CreateDualEvent.route}/invite")
+
+                // 门控在 actionsFor 里；走到这里说明开关已开，真实跳转说明页
+                AiAction.START_MEDIATION -> onNavigateToMediation()
+
+                // 整改 §8.7：进复盘**页**（不是直落表单）——有历史时页面上有
+                // 最近一条入口与历史按钮，没有历史才是空白表单。
+                AiAction.SAVE_REVIEW -> onNavigateToRoute(Screen.RelationshipReview.route)
+
+                // 反馈行的三个按钮在下方 AiFeedbackRow 里，这里只把视图滚到它
+                AiAction.FEEDBACK -> Unit
+            }
+        }
 
     Column(
         modifier = Modifier
@@ -274,6 +330,55 @@ fun NewAiChatScreen(
             items(uiState.messages) { message ->
                 if (message.role == "user") {
                     UserBubble(content = message.content)
+                    return@items
+                }
+                // 整改 §8.2：结构化输出必须真正渲染（AiMessageCard 此前零调用）。
+                // 有结构化字段 → 卡片（理解判断/建议表达/不要说什么/下一步）；
+                // 只有正文 → 保持原有气泡（含 risk 卡与 thinking 回读）。
+                val structured = message.structuredOutput
+                if (structured != null) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // 思考面板：历史消息里由 structured_output.thinking 回读
+                        if (!structured.thinking.isNullOrBlank()) {
+                            AiThinkingPanel(
+                                thinking = structured.thinking.orEmpty(),
+                                isLive = false,
+                                modifier = Modifier.padding(start = 15.dp),
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        val risk = AiRiskLevel.fromWire(message.riskLevel)
+                        if (risk != null) {
+                            SafetyWarningCard(riskLevel = risk)
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        AiMessageCard(
+                            content = message.content,
+                            structuredOutput = structured,
+                        )
+                        // §8.2 行动行：按场景给上下文动作（调解受门控，不出残缺流程）
+                        val actions = actionsFor(uiState.sceneKey, structured)
+                        if (actions.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            AiActionRow(
+                                actions = actions,
+                                onAction = { action ->
+                                    handleAction(action, message, structured)
+                                },
+                            )
+                        }
+                        // §8.3 反馈行：未表态 / 已采纳待结果 / 已填结果三态
+                        Spacer(modifier = Modifier.height(10.dp))
+                        AiFeedbackRow(
+                            feedback = message.feedback,
+                            onRate = { adopted, rating ->
+                                viewModel.markAdopted(message.id, adopted, rating)
+                            },
+                            onFillOutcome = {
+                                onNavigateToFeedbackOutcome(message.id)
+                            },
+                        )
+                    }
                 } else {
                     AiReplyBubble(
                         content = message.content,

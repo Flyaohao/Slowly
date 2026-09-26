@@ -160,6 +160,9 @@ interface CoupleApiService {
     /**
      * 回读上次的关系复盘结果（[kind] = `relationship_review`）。
      * `data` 为 null 表示还没复盘过。
+     *
+     * 整改 §8.7 起**新代码不要再用它读复盘**（它只回得到最新一条，见
+     * [reviewHistory] / [reviewDetail]）；保留给画像报告等「只留一份产物」的场景。
      */
     @GET("api/v1/couple/ai/generations/{kind}")
     suspend fun getGeneration(
@@ -167,6 +170,34 @@ interface CoupleApiService {
         @Query("target_type") targetType: String = "none",
         @Query("target_id") targetId: Long? = null,
     ): ApiResponse<AiDto.GenerationPayload>
+
+    /**
+     * 关系复盘历史（整改 §8.7）。倒序分页，每项只含列表需要的字段。
+     *
+     * 后端路由必须声明在 `/review/{review_id}` 之前，否则 "history" 会被当成
+     * 路径参数解析成整数——服务端已按此顺序注册。
+     */
+    @GET("api/v1/couple/ai/review/history")
+    suspend fun reviewHistory(
+        @Query("page") page: Int = 1,
+        @Query("page_size") pageSize: Int = 20,
+    ): ApiResponse<AiDto.ReviewHistoryResponse>
+
+    /**
+     * 单次复盘详情。除了六项留档字段，还带回用户当初输入的原文——
+     * 「重新复盘一次」靠它恢复输入状态，而不是把输入框清空。
+     */
+    @GET("api/v1/couple/ai/review/{review_id}")
+    suspend fun reviewDetail(
+        @Path("review_id") reviewId: Long,
+    ): ApiResponse<AiDto.ReviewRecord>
+
+    /** 回填「后来怎么样了」。提交后该复盘的待回访任务消失。 */
+    @POST("api/v1/couple/ai/review/{review_id}/outcome")
+    suspend fun submitReviewOutcome(
+        @Path("review_id") reviewId: Long,
+        @Body body: AiDto.ReviewOutcomeRequest,
+    ): ApiResponse<AiDto.ReviewRecord>
 
     /**
      * 回读已保存的 AI 理解。
@@ -437,7 +468,16 @@ interface CoupleApiService {
     suspend fun submitFeedback(
         @Path("id") sessionId: Long,
         @Body body: AiDto.FeedbackRequest,
-    ): ApiResponse<Unit>
+    ): ApiResponse<AiDto.FeedbackOut>
+
+    /**
+     * 整改 §8.3：待回访反馈（服务端已按消息去重、已排除「明确未采用」）。
+     * 首页 `feedback_outcome` 任务卡与本页共用同一数据源。
+     */
+    @GET("api/v1/couple/ai/feedback/pending")
+    suspend fun getPendingFeedback(
+        @Query("days") days: Int = 7,
+    ): ApiResponse<AiDto.PendingFeedbackResponse>
 
     @DELETE("api/v1/couple/ai/sessions/{id}")
     suspend fun deleteSession(@Path("id") sessionId: Long): ApiResponse<Unit>

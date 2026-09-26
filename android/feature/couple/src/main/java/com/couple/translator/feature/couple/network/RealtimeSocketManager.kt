@@ -26,16 +26,83 @@ import javax.inject.Singleton
  * unbind_requested / unbind_confirmed / letter_received / mediation_invite /
  * partner_moment / companion_request / system_notice ...
  *
- * 除事件类型本身外，只额外保留两个**跳转必需**的标识（信件 id、调解会话 id）：
- * 系统通知的点击跳转要用到它们，而 data 里的其余字段（发送者昵称、信件标题等）
- * 是纯展示内容，不该进通知（隐私），所以不往这里搬。
+ * 除事件类型本身外，只额外保留三个**跳转必需**的标识（信件 id、调解会话 id、
+ * 双视角事件 id）：系统通知的点击跳转要用到它们，而 data 里的其余字段
+ * （发送者昵称、信件标题等）是纯展示内容，不该进通知（隐私），所以不往这里搬。
  */
 data class RealtimeEvent(
     val notificationType: String,
     val content: String?,
     val letterId: Long? = null,
     val sessionId: Long? = null,
+    /** 整改 §8.6：双视角事件 id，用于把「邀请 TA 一起写」的通知点到那件事上。 */
+    val eventId: Long? = null,
 )
+
+/**
+ * 调解状态帧（契约 §2.3-4）：服务端在会话状态变更时推
+ * `{"type":"mediation_status","session_id":N,"status":"..."}`，动作本身仍走 REST。
+ *
+ * 客户端此前**收到就丢**（`when` 里没有这一支），于是调解各页只能靠自己轮询，
+ * 服务端明明推了状态、界面却不响应——§8.5-1「发起方等待页必须能获知对方接受」
+ * 也就落不了地。这里把它接出来，轮询退居兜底。
+ */
+data class MediationStatusFrame(val sessionId: Long, val status: String)
+
+/** 入站帧的解析结果（纯数据，便于单测；见 [parseIncomingFrame]）。 */
+internal sealed interface IncomingFrame {
+    /** 服务端心跳，须回 pong。 */
+    data object Ping : IncomingFrame
+    /** 业务通知帧。 */
+    data class Notification(val event: RealtimeEvent) : IncomingFrame
+    /** 调解状态帧。 */
+    data class MediationStatus(val sessionId: Long, val status: String) : IncomingFrame
+    /** 与本端无关或解析不出内容的帧。 */
+    data object Ignored : IncomingFrame
+}
+
+/**
+ * 解析一帧入站文本。抽成纯函数是**为了能单测**：解析错一格的代价是
+ * 「通知弹出来了但点进去落错页」或者「状态帧被静默丢弃」，
+ * 而后者（调解状态帧）在修复前正是无人察觉的静默失败。
+ */
+internal fun parseIncomingFrame(text: String): IncomingFrame {
+    val obj = try {
+        JSONObject(text)
+    } catch (_: Exception) {
+        return IncomingFrame.Ignored
+    }
+    return when (obj.optString("type")) {
+        "ping" -> IncomingFrame.Ping
+        "notification" -> {
+            val nt = obj.optString("notification_type")
+            if (nt.isBlank()) {
+                IncomingFrame.Ignored
+            } else {
+                val data = obj.optJSONObject("data")
+                IncomingFrame.Notification(
+                    RealtimeEvent(
+                        notificationType = nt,
+                        content = data?.optString("content"),
+                        letterId = data?.optLong("letter_id")?.takeIf { it > 0L },
+                        sessionId = data?.optLong("session_id")?.takeIf { it > 0L },
+                        eventId = data?.optLong("event_id")?.takeIf { it > 0L },
+                    )
+                )
+            }
+        }
+        "mediation_status" -> {
+            val sid = obj.optLong("session_id")
+            val status = obj.optString("status")
+            if (sid > 0L && status.isNotBlank()) {
+                IncomingFrame.MediationStatus(sid, status)
+            } else {
+                IncomingFrame.Ignored
+            }
+        }
+        else -> IncomingFrame.Ignored
+    }
+}
 
 /**
  * 实时通道（WebSocket）客户端管理器。
@@ -45,6 +112,7 @@ data class RealtimeEvent(
  * - 服务端 30s 静默后下发 {"type":"ping"}，客户端必须回 {"type":"pong"}，
  *   60s 内不回即判死连接
  * - 服务端事件帧：{"type":"notification","notification_type":"...","data":{...}}
+ * - 调解状态帧：{"type":"mediation_status","session_id":N,"status":"..."}
  *
  * 生命周期：进入情侣模式（CoupleShell 挂载）时 start，退出/注销时 stop。
  * 断线自动重连（指数退避 5s→60s 封顶，连接成功即复位）；App 切后台不断开——
@@ -59,6 +127,9 @@ class RealtimeSocketManager @Inject constructor(
 
     private val _events = MutableSharedFlow<RealtimeEvent>(extraBufferCapacity = 16)
     val events: SharedFlow<RealtimeEvent> = _events.asSharedFlow()
+
+    private val _statusFrames = MutableSharedFlow<MediationStatusFrame>(extraBufferCapacity = 16)
+    val statusFrames: SharedFlow<MediationStatusFrame> = _statusFrames.asSharedFlow()
 
     @Volatile
     private var started = false
@@ -131,27 +202,12 @@ class RealtimeSocketManager @Inject constructor(
     }
 
     private fun handleMessage(text: String, webSocket: WebSocket) {
-        val obj = try {
-            JSONObject(text)
-        } catch (_: Exception) {
-            return
-        }
-        when (obj.optString("type")) {
-            "ping" -> webSocket.send("{\"type\":\"pong\"}")
-            "notification" -> {
-                val nt = obj.optString("notification_type")
-                if (nt.isNotBlank()) {
-                    val data = obj.optJSONObject("data")
-                    _events.tryEmit(
-                        RealtimeEvent(
-                            notificationType = nt,
-                            content = data?.optString("content"),
-                            letterId = data?.optLong("letter_id")?.takeIf { it > 0L },
-                            sessionId = data?.optLong("session_id")?.takeIf { it > 0L },
-                        )
-                    )
-                }
-            }
+        when (val frame = parseIncomingFrame(text)) {
+            IncomingFrame.Ping -> webSocket.send("{\"type\":\"pong\"}")
+            is IncomingFrame.Notification -> _events.tryEmit(frame.event)
+            is IncomingFrame.MediationStatus ->
+                _statusFrames.tryEmit(MediationStatusFrame(frame.sessionId, frame.status))
+            IncomingFrame.Ignored -> Unit
         }
     }
 }

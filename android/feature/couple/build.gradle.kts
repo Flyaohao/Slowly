@@ -92,6 +92,10 @@ dependencies {
     // 纯 JVM 单测：RealtimeNotice 的「事件 → 文案/跳转」映射是纯函数，
     // 但分支多且改文案时最容易漏改一处，必须有测试兜住
     testImplementation("junit:junit:4.13.2")
+    // WS 入站帧解析用的 org.json：这是 Android 平台自带的类，纯 JVM 单测里
+    // 必须显式补一份（否则 IncomingFrameTest 会 NoClassDefFoundError）。
+    // testImplementation 只进单测 classpath，不进 APK。
+    testImplementation("org.json:json:20231013")
 }
 
 kapt {

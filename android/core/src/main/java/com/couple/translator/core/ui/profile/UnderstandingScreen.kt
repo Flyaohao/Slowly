@@ -41,7 +41,9 @@ import kotlin.math.roundToInt
  * - 我的画像：GET /profiles/me（summary + confidence）
  * - 判断来自哪里：GET /profiles/me/dimensions（逐维度 explanation + confidence）
  * - 关系画像：GET /profiles/couple（summary + conflict_pattern，缺失即降级提示）
- * - 我要纠正军师：既有记忆治理页（Screen.Memory）
+ * - 记忆治理：既有记忆治理页（Screen.Memory）。整改 §8.8 起文案与真实能力对齐
+ *   ——「查看、调整可见范围或删除」，不再叫「我要纠正军师」（那会让人以为
+ *   能直接改写军师的判断，而实际能改的是它记住的内容）。
  * 旧路由 ProfileResult / QuestionnaireIntro / CoupleProfile / QuestionnaireHistory 全部保留。
  */
 @Composable
@@ -196,8 +198,8 @@ fun UnderstandingScreen(
                     .padding(horizontal = AppSpacing.screenH),
             ) {
                 AppListItem(
-                    title = "我要纠正军师",
-                    subtitle = "逐条查看、修改或删除军师记住的内容",
+                    title = "查看、调整或删除军师记住的内容",
+                    subtitle = "逐条查看军师记住了什么，改可见范围，或直接删掉",
                     leadingIcon = Icons.Outlined.Edit,
                     showChevron = true,
                     onClick = { onNavigateToRoute(Screen.Memory.route) },

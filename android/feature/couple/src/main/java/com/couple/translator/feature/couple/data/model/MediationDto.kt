@@ -17,6 +17,11 @@ object MediationDto {
         @Json(name = "mediation_status") val mediationStatus: String = "inviting",
         // 契约 §2.3-1：start 响应带 my_role（"inviter"）。后端未落地前为 null，FE 降级。
         @Json(name = "my_role") val myRole: String? = null,
+        // 整改 §8.5-5：confirm / input 的响应带回「双方各自」的确认与提交状态，
+        // 页面据此渲染「等对方确认」等待态，不必再补一次 GET。
+        @Json(name = "my_confirmed") val myConfirmed: Boolean? = null,
+        @Json(name = "partner_confirmed") val partnerConfirmed: Boolean? = null,
+        @Json(name = "partner_submitted") val partnerSubmitted: Boolean? = null,
     )
 
     @JsonClass(generateAdapter = true)
@@ -68,7 +73,20 @@ object MediationDto {
         // 后端未落地前为 null，FE 用 userId==我 降级推导（隐藏 ≠ 删除：导航参数仍作兜底）
         @Json(name = "my_role") val myRole: String? = null,
         @Json(name = "partner_submitted") val partnerSubmitted: Boolean? = null,
+        // §8.5-7：我是否已提交。断线重进时「输入框 or 等待态」的判定依据——
+        // 我是第一方时会话状态一直停在 inputting，只看状态分不出「还没写」和「写了在等」。
+        @Json(name = "my_submitted") val mySubmitted: Boolean? = null,
         @Json(name = "updated_at") val updatedAt: String? = null,
+        // ---- 整改 §8.5-4：改写由**服务端按身份**解析好再下发 ----
+        // `my_rewrite` 是「我」那一侧（服务端按 my_role 从 rewrite_a/b 取），
+        // 客户端不许再自己按 a/b 位置取——它的语义是「发起方/参与方」而不是
+        // 「发言顺序」，本地硬编码读 rewrite_a 会把角色搞反，还会在未公开时
+        // 把对方那一侧读出来（§8.5-3 由服务端过滤，这里只是消费过滤后的结果）。
+        @Json(name = "my_rewrite") val myRewrite: MediationRewrite? = null,
+        @Json(name = "partner_rewrite") val partnerRewrite: MediationRewrite? = null,
+        // §8.5-5：双方各自的确认状态（断线重进按它恢复步骤）
+        @Json(name = "my_confirmed") val myConfirmed: Boolean? = null,
+        @Json(name = "partner_confirmed") val partnerConfirmed: Boolean? = null,
     )
 
     /** 契约 §2.3-3 列表条目（DEV 确认字段）。全默认值，形状漂移时整表降级为空。 */
@@ -111,19 +129,11 @@ object MediationDto {
 // 为什么用扩展属性：Moshi 的 kapt 代码生成器会扫描 @JsonClass data class **类体内**
 // 定义的所有属性，并尝试为它们生成序列化代码；类体内放的派生属性会让编译直接失败
 // （"property xxx is not visible"）。扩展属性不产生成员，Moshi 完全看不到。
-
-/** 后端改写消息只区分 rewrite_a/rewrite_b，无法得知当前用户是哪一侧，取 a 侧作为「我的改写」 */
-val MediationDto.MediationDetailResponse.myRewrite: MediationDto.MediationRewrite?
-    get() = messages.lastOrNull { it.structuredOutput?.rewriteA != null }
-        ?.structuredOutput
-        ?.rewriteA
-        ?.let { MediationDto.MediationRewrite(rewritten = it) }
-
-val MediationDto.MediationDetailResponse.partnerRewrite: MediationDto.MediationRewrite?
-    get() = messages.lastOrNull { it.structuredOutput?.rewriteB != null }
-        ?.structuredOutput
-        ?.rewriteB
-        ?.let { MediationDto.MediationRewrite(rewritten = it) }
+//
+// 整改 §8.5-4：`myRewrite` / `partnerRewrite` **不再是派生属性**——改由服务端
+// 按身份解析后直出（见 [MediationDto.MediationDetailResponse] 的字段注释）。
+// 此前这里用「取最后一条含 rewrite_a 的消息」拼 myRewrite，等于把发起方那一侧
+// 硬编码成「我的改写」：参与方看到的会是对方的话。禁止再按 a/b 位置本地取值。
 
 private val MediationDto.MediationDetailResponse.summaryOutput: MediationDto.MediationStructuredOutput?
     get() = messages.lastOrNull {

@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.Hearing
 import androidx.compose.material.icons.outlined.Icecream
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Person
@@ -140,7 +141,9 @@ fun GuideScreen(
             }
 
             Spacer(modifier = Modifier.height(28.dp))
-            SectionTitle("AI 军师", "整个 App 的核心，共 7 个场景")
+            // 场景数与下方实际列出的行一致（6 行：日常/听懂 TA/帮我表达/冷静一下/
+            // 信件解读/信件改写——双人调解入口 W1 隐藏后不再计入）
+            SectionTitle("AI 军师", "整个 App 的核心，共 6 个场景")
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "进入底部「军师」，点左上角可切换场景。每个场景的回答结构和侧重点都不同。",
@@ -200,8 +203,8 @@ fun GuideScreen(
             GuideCard {
                 GuideEntryRow(
                     icon = Icons.Outlined.MailOutline,
-                    title = "信箱",
-                    desc = "写信、存草稿、收到对方的信。可以收藏，也可以让 AI 帮你解读或改写。",
+                    title = "深度表达",
+                    desc = "写信、存草稿、收发往来。可以收藏，也可以让 AI 帮你解读或改写。",
                     route = Screen.LetterList.route,
                     onNavigateToRoute = onNavigateToRoute,
                 )
@@ -231,8 +234,8 @@ fun GuideScreen(
                 // GuideDivider()
                 GuideEntryRow(
                     icon = Icons.Outlined.StarOutline,
-                    title = "愿望与纪念日",
-                    desc = "记录在一起的每一个日子，以及两个人想一起完成的事。",
+                    title = "纪念日",
+                    desc = "记下对你们有意义的日子，可以设成每年重复，也可以只算一次。",
                     route = Screen.AnniversaryList.route,
                     onNavigateToRoute = onNavigateToRoute,
                 )
@@ -266,8 +269,17 @@ fun GuideScreen(
                 GuideEntryRow(
                     icon = Icons.Outlined.Person,
                     title = "军师如何理解我们",
-                    desc = "画像、问卷、关系画像三合一，含「判断来自哪里」与「我要纠正军师」。",
+                    desc = "画像、问卷、关系画像三合一，含「判断来自哪里」。",
                     route = Screen.Understanding.route,
+                    onNavigateToRoute = onNavigateToRoute,
+                )
+                // 整改 §8.8：正式「记忆与隐私」入口（此前只能从画像页绕进去）
+                GuideDivider()
+                GuideEntryRow(
+                    icon = Icons.Outlined.Lock,
+                    title = "记忆与隐私",
+                    desc = "军师记住了什么，逐条可查、可改可见范围、可删除。",
+                    route = Screen.Memory.route,
                     onNavigateToRoute = onNavigateToRoute,
                 )
                 // [W4.3 合并] 了解自己并入上方「军师如何理解我们」

@@ -36,6 +36,8 @@ class AiRepository @Inject constructor(
     private val doneAdapter by lazy { moshi.adapter(AiDto.StreamDonePayload::class.java) }
     private val errorAdapter by lazy { moshi.adapter(AiDto.StreamErrorPayload::class.java) }
     private val evidenceAdapter by lazy { moshi.adapter(AiDto.EvidencePayload::class.java) }
+    /** §8.2：done 帧通用 Map → 宽表（保留 raw 供场景独有键取用） */
+    private val structuredAdapter by lazy { moshi.adapter(AiDto.StructuredOutput::class.java) }
 
     /** 表达改写 / 画像报告等新流式端点共用的通用解码器（ai_generation 协议） */
     private val generationDecoder = GenerationStreamDecoder(moshi)
@@ -66,9 +68,13 @@ class AiRepository @Inject constructor(
      * （触发点 / 双方需求 / 误解处 / 升级话术 / 降温话术 / 下次可用表达），
      * 由 `ReviewViewModel.parseReview()` 收口成 DTO。
      */
-    fun reviewStream(description: String, context: String? = null): Flow<GenerationStreamEvent> =
+    fun reviewStream(
+        description: String,
+        context: String? = null,
+        eventTime: String? = null,
+    ): Flow<GenerationStreamEvent> =
         generationStreamFlow(generationDecoder) {
-            apiService.reviewStream(AiDto.ReviewRequest(description, context))
+            apiService.reviewStream(AiDto.ReviewRequest(description, context, eventTime))
         }
 
     /**
@@ -159,6 +165,56 @@ class AiRepository @Inject constructor(
     }
 
     /**
+     * 复盘历史（整改 §8.7）。倒序分页，每项只含列表需要的字段。
+     *
+     * 与 [getSavedReview] 的根本区别：那条路读 `ai_generation`，一个用户只有
+     * **一行**、写一次覆盖一次；这条路读追加式留档表，历史真的能回看。
+     */
+    suspend fun reviewHistory(page: Int = 1, pageSize: Int = 20): Result<AiDto.ReviewHistoryResponse?> {
+        return try {
+            val response = apiService.reviewHistory(page, pageSize)
+            if (response.isSuccess) {
+                Result.success(response.data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** 单次复盘详情（含当初输入的原文与后续结果）。 */
+    suspend fun reviewDetail(reviewId: Long): Result<AiDto.ReviewRecord?> {
+        return try {
+            val response = apiService.reviewDetail(reviewId)
+            if (response.isSuccess) {
+                Result.success(response.data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** 回填「后来怎么样了」；成功后该复盘的待回访任务消失。 */
+    suspend fun submitReviewOutcome(reviewId: Long, outcome: String): Result<AiDto.ReviewRecord?> {
+        return try {
+            val response = apiService.submitReviewOutcome(
+                reviewId,
+                AiDto.ReviewOutcomeRequest(outcome),
+            )
+            if (response.isSuccess) {
+                Result.success(response.data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * 把 `Finished.structured` 的通用 Map 收口成 [AiDto.ReviewResult]。
      *
      * 走 Moshi 而不是手写取字段：手写容易漏掉「模型把数组写成字符串」这类
@@ -171,6 +227,43 @@ class AiRepository @Inject constructor(
         } catch (_: Exception) {
             null
         }
+    }
+
+    /**
+     * 留档行（`ReviewRecord`）→ 卡片模型 [AiDto.ReviewResult]。
+     *
+     * 历史回看复用的是同一套卡片渲染，靠这层把「六项留档字段」映射过去；
+     * 留档表里没有分组项（误解处 / 升级降温话术），它们仍在 `structured_output`
+     * 里，所以解析后要用留档字段覆盖一遍——否则历史页会丢掉那三组内容。
+     */
+    fun reviewResultOf(record: AiDto.ReviewRecord): AiDto.ReviewResult? {
+        val fromStructured = parseReview(record.structuredOutput)
+        if (fromStructured == null) {
+            // 模型没吐结构化 JSON：六项留档字段够不够撑起卡片，由调用方用 hasResult 判断。
+            // 留档里的 suggested_expression 就是生成时的 next_time_scripts 首条（§8.7 六项之一），
+            // 放回「下次可以提前说」那张卡——否则这条留档会唯独丢掉「建议表达」。
+            return if (record.hasResult) {
+                AiDto.ReviewResult(
+                    summary = record.summary,
+                    trigger = record.trigger,
+                    ownNeed = record.ownNeed,
+                    partnerNeed = record.partnerNeed,
+                    nextTimeScripts = record.suggestedExpression
+                        .takeIf { it.isNotBlank() }
+                        ?.let { listOf(it) }
+                        ?: emptyList(),
+                    riskLevel = record.riskLevel,
+                )
+            } else {
+                null
+            }
+        }
+        return fromStructured.copy(
+            summary = record.summary.ifBlank { fromStructured.summary },
+            trigger = record.trigger.ifBlank { fromStructured.trigger },
+            ownNeed = record.ownNeed.ifBlank { fromStructured.ownNeed },
+            partnerNeed = record.partnerNeed.ifBlank { fromStructured.partnerNeed },
+        )
     }
 
     companion object {
@@ -318,17 +411,66 @@ class AiRepository @Inject constructor(
     suspend fun submitFeedback(
         sessionId: Long,
         feedback: AiDto.FeedbackRequest,
-    ): Result<Unit> {
+    ): Result<AiDto.FeedbackOut> {
         return try {
             val response = apiService.submitFeedback(sessionId, feedback)
-            if (response.isSuccess) {
-                Result.success(Unit)
+            val data = response.data
+            if (response.isSuccess && data != null) {
+                Result.success(data)
             } else {
                 Result.failure(Exception(response.message))
             }
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /** §8.3：近 N 天真正待回访的 AI 建议（服务端已去重、已排除明确未采用）。 */
+    suspend fun getPendingFeedback(days: Int = 7): Result<AiDto.PendingFeedbackResponse> {
+        return try {
+            val response = apiService.getPendingFeedback(days)
+            val data = response.data
+            if (response.isSuccess && data != null) {
+                Result.success(data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 把流式 `done` 帧的通用 Map 折进宽表 [AiDto.StructuredOutput]。
+     *
+     * 为什么不能只留 Map：卡片要按类型读字段，宽表是既有渲染层的既有形态；
+     * 为什么又要保留 Map（[AiDto.StructuredOutput.raw]）：场景独有的键
+     * （opening_lines / rewrites / event_id …）宽表里没有，逐个补会一直漏。
+     * 解析失败返回 null —— 卡片降级为纯正文，不影响正文本身。
+     */
+    fun parseStructured(structured: Map<String, Any?>?): AiDto.StructuredOutput? {
+        if (structured.isNullOrEmpty()) return null
+        return try {
+            structuredAdapter.fromJson(mapAdapter.toJson(structured))
+                ?.copy(raw = structured)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** 与 [parseStructured] 同源：读 Map 里的任意键（场景独有字段） */
+    fun structuredString(map: Map<String, Any?>?, key: String): String? =
+        (map?.get(key) as? String)?.takeIf { it.isNotBlank() }
+
+    /** 读 Map 里的字符串数组（opening_lines / avoid_reminders …） */
+    fun structuredStrings(map: Map<String, Any?>?, key: String): List<String> =
+        (map?.get(key) as? List<*>)?.mapNotNull { it as? String }.orEmpty()
+
+    /** 读 Map 里的 id（事件 id 等）；后端可能给 Int 或 String，两种都认 */
+    fun structuredId(map: Map<String, Any?>?, key: String): Long? = when (val v = map?.get(key)) {
+        is Number -> v.toLong()
+        is String -> v.toLongOrNull()
+        else -> null
     }
 
     suspend fun deleteSession(sessionId: Long): Result<Unit> {
@@ -403,6 +545,7 @@ class AiRepository @Inject constructor(
                         blocked = p.blocked,
                         content = p.content,
                         tokenTotal = p.tokenTotal,
+                        structured = p.structured,
                     )
                 }
 

@@ -15,6 +15,11 @@ import javax.inject.Inject
 data class AddAnniversaryUiState(
     val title: String = "",
     val date: String = "",
+    /**
+     * 整改 §8.8：是否每年重复。默认 true——与存量「纪念日按年滚动」的语义一致，
+     * 也让最常见的「在一起纪念日」不用改设置。
+     */
+    val repeatAnnually: Boolean = true,
     val description: String = "",
     val isLoading: Boolean = false,
     val error: String = "",
@@ -42,6 +47,10 @@ class AddAnniversaryViewModel @Inject constructor(
         _uiState.update { it.copy(date = date) }
     }
 
+    fun updateRepeatAnnually(repeat: Boolean) {
+        _uiState.update { it.copy(repeatAnnually = repeat) }
+    }
+
     fun updateDescription(description: String) {
         _uiState.update { it.copy(description = description) }
     }
@@ -56,12 +65,19 @@ class AddAnniversaryViewModel @Inject constructor(
             _uiState.update { it.copy(error = "请输入日期") }
             return
         }
+        if (!isValidDate(state.date)) {
+            // 契约 §8.8：日期语义是本轮整改的重点，不能把「2026-13-45」这种
+            // 交给服务端去拒——用户在这里就要知道格式错了。
+            _uiState.update { it.copy(error = "日期格式应为 YYYY-MM-DD，例如 2024-11-20") }
+            return
+        }
         _uiState.update { it.copy(isLoading = true, error = "") }
         viewModelScope.launch {
             repository.createAnniversary(
                 AnniversaryDto.CreateAnniversaryRequest(
                     title = state.title,
                     anniversaryDate = state.date,
+                    repeatAnnually = state.repeatAnnually,
                     description = state.description.ifBlank { null },
                 ),
             ).fold(
@@ -76,4 +92,8 @@ class AddAnniversaryViewModel @Inject constructor(
             )
         }
     }
+
+    private fun isValidDate(text: String): Boolean = runCatching {
+        java.time.LocalDate.parse(text.trim())
+    }.isSuccess
 }

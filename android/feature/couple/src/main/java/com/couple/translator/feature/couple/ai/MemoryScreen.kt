@@ -67,7 +67,7 @@ fun MemoryScreen(
         topBar = {
             AppBackTopBar(
                 onBack = onNavigateBack,
-                title = "AI 记忆管理",
+                title = "记忆与隐私",
             )
         },
     ) { padding ->
@@ -77,6 +77,19 @@ fun MemoryScreen(
             modifier = Modifier.padding(padding),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
+                // 整改 §8.8：入口改名为「记忆与隐私」后，页面自己要把隐私规则说清楚
+                // ——「军师记住了什么」是用户最该一眼看到的事，不能只靠空态文案暗示。
+                Text(
+                    text = "这里列出军师记住的关于你们的内容。标记为「仅自己」的，伴侣看不到；" +
+                        "每条都可以改可见范围或直接删除。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextTertiary,
+                    modifier = Modifier.padding(
+                        start = AppSpacing.screenH,
+                        end = AppSpacing.screenH,
+                        top = AppSpacing.md,
+                    ),
+                )
                 // P-C3 §4.3：来源 / 时间 / 重要度 筛选（改任一项即重拉，服务端过滤）
                 MemoryFilterSection(
                     sourceFilter = uiState.sourceFilter,

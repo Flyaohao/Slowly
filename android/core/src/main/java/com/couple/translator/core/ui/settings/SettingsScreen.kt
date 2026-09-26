@@ -230,7 +230,9 @@ fun SettingsScreen(
             }
 
             // 关于
-            SectionTitle(text = "关于")
+            // 整改 §8.8：抽屉里的「账号与设置」指的就是这一页，标题必须一致，
+            // 否则用户点「账号与设置」看到「设置」会以为点错了。
+            SectionTitle(text = "账号与设置")
             AppCard(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(0.dp),

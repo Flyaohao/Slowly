@@ -75,5 +75,20 @@ fun RealtimeEvent.toNotice(): RealtimeNotice? = when (notificationType) {
 
     "unbind_cancelled" -> RealtimeNotice(snackbarText = "对方取消了解绑申请")
 
+    // 整改 §8.6：军师/伴侣发起的双视角邀请。有回应义务（对方在等你写），所以进通知栏。
+    "dual_invite" -> RealtimeNotice(
+        // 邀请语是发起人写给你看的，带上它对方才知道「为什么现在写这个」；
+        // 双方各自的**视角正文**不会出现在通知里（服务端可见性过滤 §2.1-1 把守）。
+        snackbarText = "对方邀请你一起写这件事的视角" + (content?.let { "：$it" } ?: ""),
+        notificationId = AppNotifications.ID_DUAL_INVITE,
+        notificationTitle = "双视角邀请",
+        notificationText = content ?: "对方想让你补充自己的视角，点开写下来",
+        // 有 event_id 就直达那件事；没有（老服务端）退回列表页——
+        // 列表在根导航上，够得着，比「点了没反应」强。
+        route = eventId?.takeIf { it > 0L }
+            ?.let { "${Screen.DualPerspectiveDetail.route}/$it" }
+            ?: Screen.DualPerspectiveList.route,
+    )
+
     else -> null
 }

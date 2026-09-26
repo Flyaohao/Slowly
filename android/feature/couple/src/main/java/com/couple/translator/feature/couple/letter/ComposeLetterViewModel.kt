@@ -83,6 +83,18 @@ class ComposeLetterViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 外部带入的预填正文。只在「无草稿且编辑器为空」时生效——
+     * 已有草稿或用户已写的内容绝不覆盖。预填后照常可编辑、可发送、
+     * 可存草稿（返回键的 saveDraft 会兜底保存）。
+     */
+    fun prefillContent(content: String) {
+        if (content.isBlank()) return
+        val state = _uiState.value
+        if (state.letterId != null || state.content.isNotBlank()) return
+        _uiState.update { it.copy(content = content) }
+    }
+
     fun onTitleChange(title: String) {
         _uiState.update { it.copy(title = title) }
         scheduleAutoSave()

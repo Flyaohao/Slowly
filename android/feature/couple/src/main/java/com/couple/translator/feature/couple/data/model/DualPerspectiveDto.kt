@@ -24,6 +24,11 @@ object DualPerspectiveDto {
          * 传 null 会直接 422。UI 里虽是选填输入框，但由 ViewModel 归一化后兜底为当前时间。
          */
         @Json(name = "event_time") val eventTime: String,
+        /**
+         * 整改 §8.6：邀请语。非空 = 创建后通知伴侣「一起来写」；
+         * 空（Moshi 不序列化 null）= 用户自己先记着，不打扰对方。
+         */
+        @Json(name = "invite_message") val inviteMessage: String? = null,
     )
 
     @JsonClass(generateAdapter = true)

@@ -1,5 +1,6 @@
 package com.couple.translator.feature.couple.letter
 
+import android.content.Intent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,8 +33,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.common.copyToClipboard
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppTopBarAction
 import com.couple.translator.core.ui.components.ErrorDialog
@@ -189,6 +192,29 @@ fun LetterDetailScreen(
                 )
             }
 
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // 正文头部的轻操作：复制全文 / 系统分享（纯 Intent，不需要任何权限）。
+            // 与下方「回应 / AI 帮我理解」并存，不互相替代。
+            val context = LocalContext.current
+            Row {
+                TextButton(onClick = { context.copyToClipboard(letter.content ?: "") }) {
+                    Text("复制", color = AppAccent)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(
+                    onClick = {
+                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, buildShareText(letter.title, letter.content))
+                        }
+                        context.startActivity(Intent.createChooser(sendIntent, "分享信件"))
+                    },
+                ) {
+                    Text("分享", color = AppAccent)
+                }
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
@@ -239,13 +265,21 @@ fun LetterDetailScreen(
     }
 }
 
+/** 分享文案：有标题时「标题 + 换行 + 正文」，没有标题只发正文。 */
+private fun buildShareText(title: String?, content: String?): String {
+    val trimmedTitle = title?.takeIf { it.isNotBlank() } ?: return content.orEmpty()
+    return "$trimmedTitle\n${content.orEmpty()}"
+}
+
 private fun letterTypeName(type: String): String = when (type) {
     "normal" -> "普通信"
-    "future" -> "未来信"
+    // 冻结类型（未来/私密/纪念，创建已禁用）：徽标只显示中性的「信件」，
+    // 不再出现「未来信/私密信/纪念信」字样（历史数据仍可能带这些 type）
+    "future" -> "信件"
     "calm" -> "冷静信"
     "unsaid" -> "未说出口"
-    "private" -> "私密信"
-    "anniversary" -> "纪念信"
+    "private" -> "信件"
+    "anniversary" -> "信件"
     "shared" -> "共同信"
     "reconcile" -> "和好信"
     else -> type

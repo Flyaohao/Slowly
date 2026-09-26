@@ -92,6 +92,14 @@ fun DrawerContent(
             label = "军师如何理解我们",
             onClick = { onNavigateToRoute(Screen.Understanding.route) },
         )
+        // 整改 §8.8：正式「记忆与隐私」入口。
+        // 记忆此前只能从「军师如何理解我们 → 我要纠正军师」绕进去，用户找不到；
+        // 而契约把「AI 记忆必须可查看、可删除」定为隐私硬规则，入口就不该是暗门。
+        DrawerNavItem(
+            icon = Icons.Outlined.Lock,
+            label = "记忆与隐私",
+            onClick = { onNavigateToRoute(Screen.Memory.route) },
+        )
         // [W4.3 合并] 了解自己入口并入上方「军师如何理解我们」
         // DrawerNavItem(
         //     icon = Icons.Outlined.Analytics,
@@ -113,11 +121,14 @@ fun DrawerContent(
             //     label = "纪念馆",
             //     onClick = { onNavigateToRoute(Screen.Museum.route) },
             // )
-            DrawerNavItem(
-                icon = Icons.Outlined.StarOutline,
-                label = "愿望与纪念日",
-                onClick = { onNavigateToRoute(Screen.AnniversaryList.route) },
-            )
+            // 整改 §8.8：抽屉一级入口移除——纪念日改由「关系页 → 关系背景」进入，
+            // 并作为 AI 可引用的数据（军师聊天里「附上一个纪念日」仍在）。
+            // 「愿望与纪念日」这个命名同时作废：愿望清单已冻结 10006，不得再宣传。
+            // DrawerNavItem(
+            //     icon = Icons.Outlined.StarOutline,
+            //     label = "愿望与纪念日",
+            //     onClick = { onNavigateToRoute(Screen.AnniversaryList.route) },
+            // )
             // [W1 隐藏] 双视角记录入口（机制保留，由军师推荐触发）
             // DrawerNavItem(
             //     icon = Icons.Outlined.FavoriteBorder,
@@ -182,6 +193,17 @@ fun DrawerContent(
             onClick = { onNavigateToRoute(Screen.Guide.route) },
         )
 
+        // 整改 §8.8：抽屉底部的两个「设置」必须一眼分得清——
+        // 「军师设置」在上方功能区（军师怎么说话、怎么称呼、给不给看依据），
+        // 这里是账号与 App 自身（个人信息、主题、通知、关于、退出登录）。
+        HorizontalDivider(color = AppBorderLight)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "账号与设置",
+            style = MaterialTheme.typography.labelMedium,
+            color = AppTextTertiary,
+            modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+        )
         DrawerNavItem(
             icon = Icons.Outlined.Settings,
             label = "设置",

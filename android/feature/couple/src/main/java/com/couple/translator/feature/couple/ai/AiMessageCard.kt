@@ -189,6 +189,94 @@ fun AiMessageCard(
                 }
             }
 
+            // 冷战开解（scene_key = cold_war）：这一场景的「建议表达」不是
+            // suggested_reply 而是 opening_lines（破冰话术）。此前卡片只认
+            // 通用字段，选中"冷静一下"看到的是一张残缺卡——行动行能复制到
+            // 破冰话术，卡片里却一个字都不显示。
+            structuredOutput.goalAnalysis?.let { goal ->
+                CollapsibleSection(title = "他的目标是什么") {
+                    Text(
+                        text = goal,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = AppTextSecondary,
+                    )
+                }
+            }
+
+            structuredOutput.faceVsNeed?.let { faceVsNeed ->
+                CollapsibleSection(title = "面子背后的需求") {
+                    Text(
+                        text = faceVsNeed,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = AppTextSecondary,
+                    )
+                }
+            }
+
+            structuredOutput.approach?.let { approach ->
+                CollapsibleSection(title = "建议怎么做") {
+                    Text(
+                        text = approach,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = AppTextSecondary,
+                    )
+                    structuredOutput.approachReason?.let { reason ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = reason,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTextTertiary,
+                        )
+                    }
+                }
+            }
+
+            structuredOutput.openingLines?.takeIf { it.isNotEmpty() }?.let { lines ->
+                CollapsibleSection(title = "破冰话术", defaultExpanded = true) {
+                    lines.forEach { line ->
+                        Surface(
+                            color = AppAccentLight,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                        ) {
+                            Text(
+                                text = line,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = AppAccent,
+                                modifier = Modifier.padding(12.dp),
+                            )
+                        }
+                    }
+                }
+            }
+
+            structuredOutput.avoidReminders?.takeIf { it.isNotEmpty() }?.let { reminders ->
+                CollapsibleSection(title = "别踩的坑") {
+                    reminders.forEach { reminder ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.Top,
+                        ) {
+                            Text(
+                                text = "·",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = com.couple.translator.core.ui.theme.AppErrorRed,
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = reminder,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = com.couple.translator.core.ui.theme.AppErrorRed,
+                            )
+                        }
+                    }
+                }
+            }
+
             structuredOutput.rewrites?.let { rewrites ->
                 if (rewrites.isNotEmpty()) {
                     CollapsibleSection(title = "改写版本") {

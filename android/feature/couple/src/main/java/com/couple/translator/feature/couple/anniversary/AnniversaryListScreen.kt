@@ -138,11 +138,26 @@ private fun AnniversaryListItem(
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
+                // 整改 §8.8：禁止出现「还有 55 天 · 2025-11-20」这种年份冲突。
+                // 一律先说**语义**（每年 X 月 X 日 / 一次性），再说下次是哪天，
+                // 天数一律用服务端算好的那个（客户端不再自己推日期）。
                 Text(
-                    text = anniversary.anniversaryDate,
+                    text = anniversaryDateText(anniversary),
                     style = MaterialTheme.typography.bodySmall,
                     color = AppAccent,
                 )
+                val days = anniversary.daysUntil
+                if (anniversary.repeatAnnually && days != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = when {
+                            days <= 0 -> "就是今天"
+                            else -> "还有 $days 天"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextTertiary,
+                    )
+                }
                 if (anniversary.description != null) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -166,4 +181,27 @@ private fun AnniversaryListItem(
             }
         }
     }
+}
+
+/**
+ * 纪念日的日期说明（整改 §8.8 的文案要求，抽出来是为了能被单测钉住）。
+ *
+ * 契约给的正例是「每年 11 月 20 日 / 下次 2026-11-20」——把**语义**和**下一次**
+ * 分开说，用户不会看到「还有 55 天」配着一个明显属于过去的年份。
+ *
+ * - 每年重复：`每年 11 月 20 日 · 下次 2026-11-20`
+ * - 一次性且还没到：`2027-05-01（一次性）`
+ * - 一次性且已过去：`2025-11-20（一次性，已过去）`——**不编造**「下一次」
+ */
+internal fun anniversaryDateText(item: AnniversaryDto.AnniversaryResponse): String {
+    val raw = item.anniversaryDate
+    if (!item.repeatAnnually) {
+        val suffix = if (item.nextOccurrenceDate == null) "一次性，已过去" else "一次性"
+        return "$raw（$suffix）"
+    }
+    val monthDay = raw.split("-").takeIf { it.size == 3 }
+        ?.let { "${it[1].trimStart('0')} 月 ${it[2].trimStart('0')} 日" }
+        ?: raw
+    val next = item.nextOccurrenceDate
+    return if (next.isNullOrBlank()) "每年 $monthDay" else "每年 $monthDay · 下次 $next"
 }

@@ -88,6 +88,10 @@ object HomeDto {
         @Json(name = "id") val id: Long,
         @Json(name = "title") val title: String,
         @Json(name = "anniversary_date") val anniversaryDate: String? = null,
+        /** 整改 §8.8：true = 每年重复；false = 一次性。 */
+        @Json(name = "repeat_annually") val repeatAnnually: Boolean = true,
+        /** 下一次发生的日期（服务端算）；一次性且已过时不会出现在这里。 */
+        @Json(name = "next_occurrence_date") val nextOccurrenceDate: String? = null,
         @Json(name = "days_until") val daysUntil: Int = 0,
     )
 

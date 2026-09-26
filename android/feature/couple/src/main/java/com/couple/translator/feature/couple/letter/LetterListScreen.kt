@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -75,8 +76,15 @@ import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
 import com.couple.translator.feature.couple.data.model.LetterDto
 
-private val coupleTabs = listOf("全部", "收到", "发出", "草稿", "未来", "冷静", "未说出口", "私密")
 private val diaryTabs = listOf("全部", "本周", "本月", "收藏")
+
+/**
+ * couple 模式可见的信件分类 tab（纯数据，供导航可达性测试直接断言「无未来/私密」）。
+ *
+ * 「未来」「私密」是冻结类型（创建已被后端 10006 拒绝），列表里同样不再展示：
+ * 看得见却永远建不了的分类就是对用户撒谎。
+ */
+fun visibleCoupleTabs(): List<String> = listOf("全部", "收到", "发出", "草稿", "冷静", "未说出口")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,10 +92,12 @@ fun LetterListScreen(
     onNavigateBack: () -> Unit,
     onNavigateToLetterDetail: (Long) -> Unit,
     isCoupleMode: Boolean = true,
+    // 默认空实现：根图旧注册点暂不传也不会编译错；接线后右下角 FAB 才有去处
+    onNavigateToCompose: () -> Unit = {},
     viewModel: LetterListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val tabs = if (isCoupleMode) coupleTabs else diaryTabs
+    val tabs = if (isCoupleMode) visibleCoupleTabs() else diaryTabs
     val safeTabIndex = uiState.selectedTab.coerceIn(0, tabs.size - 1)
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
@@ -149,6 +159,22 @@ fun LetterListScreen(
                     }
                 },
             )
+        },
+        floatingActionButton = {
+            // 空态文案「点击右下角按钮写一封吧」靠这个 FAB 兑现；
+            // 多选模式下隐藏，避免误触退出删除流程
+            if (!uiState.isSelectionMode) {
+                FloatingActionButton(
+                    onClick = onNavigateToCompose,
+                    containerColor = AppAccent,
+                    contentColor = AppOnAccent,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = "写一封信",
+                    )
+                }
+            }
         },
     ) { padding ->
         PullToRefreshLayout(
@@ -370,11 +396,13 @@ private fun TypeBadge(text: String, color: Color = AppAccent) {
 
 private fun letterTypeName(type: String): String = when (type) {
     "normal" -> "普通信"
-    "future" -> "未来信"
+    // 未来/私密是冻结类型：徽标只显示中性的「信件」，不再出现
+    // 「未来信/私密信」字样（历史数据仍可能带这两个 type，隐藏 ≠ 删除）
+    "future" -> "信件"
     "calm" -> "冷静信"
     "unsaid" -> "未说出口"
-    "private" -> "私密信"
-    "anniversary" -> "纪念信"
+    "private" -> "信件"
+    "anniversary" -> "信件"
     "shared" -> "共同信"
     "reconcile" -> "和好信"
     else -> type

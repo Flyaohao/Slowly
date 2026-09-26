@@ -148,4 +148,7 @@ object AppNotifications {
     const val ID_MEDIATION_INVITE = 2002
     const val ID_UNBIND_REQUESTED = 2003
     const val ID_COMPANION_REQUEST = 2004
+
+    /** 整改 §8.6：双视角邀请。有回应义务（对方等你写），所以进通知栏。 */
+    const val ID_DUAL_INVITE = 2005
 }
