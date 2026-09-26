@@ -65,6 +65,34 @@ class TranslateOutput(BaseModel):
     )
 
 
+class AdvisorOutput(TranslateOutput):
+    """私人军师 / 对方翻译的输出 + 「可以发起双人调解」这一条**建议**。
+
+    整改 B4.1-6（正式入口）：调解的正式入口是「军师识别到冲突语境后，给出一个
+    可点的发起动作」，不是侧边栏里的一级入口。军师要能识别语境，就得有一个
+    模型可控的开关字段——就是 `suggest_mediation`。
+
+    为什么**只给开关、不给 id**：
+
+    - 会话必须由后端在用户**真实点击之后**创建（`POST /ai/mediation/start`），
+      模型凭空产出的 `session_id` 是假的，客户端照着跳只会 404；
+    - 仅仅「AI 觉得你们在吵」不该让伴侣收到一条邀请通知——那是产品动作，
+      不是模型可以代劳的动作（隐私红线：不得让 AI 直接执行外部动作）。
+
+    字段带默认值 False：旧调用方（以及绝大多数非冲突语境）逐字节兼容，
+    只有明确判定为「双方矛盾」时模型才置 true。
+    """
+
+    suggest_mediation: bool = Field(
+        False,
+        description=(
+            "本次对话是否属于需要双方坐下来谈的矛盾（正在争执、冷战、反复为同一件事吵、"
+            "一句话说不好就要吵起来）。只有确实是双方之间的矛盾才置 true；"
+            "单人情绪倾诉、与伴侣无关的困扰、单纯想理解对方某句话，一律 false。"
+        ),
+    )
+
+
 class RewriteOutput(BaseModel):
     """表达改写：一次给出多个风格的版本"""
 
@@ -343,8 +371,11 @@ class MemoryDistillOutput(BaseModel):
 
 #: 场景 → 输出模型。未登记的 scene_key 统一回退到 TranslateOutput。
 SCENE_OUTPUT_MODELS: Dict[str, Any] = {
-    "private_advisor": TranslateOutput,
-    "partner_translate": TranslateOutput,
+    # 私人军师 / 对方翻译用 AdvisorOutput（= TranslateOutput + suggest_mediation）：
+    # 调解的正式入口挂在这两个场景上，模型判定「这是双方矛盾」时给出建议动作。
+    # `cold_war` 有自己的模型（它本来就在讲怎么破冰），不叠这个字段。
+    "private_advisor": AdvisorOutput,
+    "partner_translate": AdvisorOutput,
     "cold_war": ColdWarOutput,
     "expression_rewrite": RewriteOutput,
     "letter_understand": LetterUnderstandOutput,

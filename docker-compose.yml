@@ -110,6 +110,36 @@ services:
     depends_on:
       - backend
 
+  ai-task-worker:
+    # 可靠后台任务执行者（调解改写/重生成/总结）。
+    # 为什么必须独立于 backend：这些生成是分钟级 LLM 调用，跑在请求进程里
+    # 会随容器发布/重启一起丢失，会话就永久停在「生成中」。任务先落库
+    # （ai_task 表），本进程负责领取与执行；它挂了重启后会回收超时任务。
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      DB_URL: ${DB_URL:-mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-root}@db:3306/${MYSQL_DATABASE:-couple_translator}?charset=utf8mb4}
+      DB_CHARSET: utf8mb4
+      # 与 backend 同源，否则 worker 调模型时用的是另一套配置
+      AI_API_KEY: ${AI_API_KEY:?请在仓库根目录的 .env 里设置 AI_API_KEY}
+      AI_MODEL: ${AI_MODEL:-qwen-plus}
+      AI_MEMORY_MODEL: ${AI_MEMORY_MODEL:-qwen-turbo}
+      AI_BASE_URL: ${AI_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      AI_THINKING_BUDGET: ${AI_THINKING_BUDGET:-1024}
+      AI_ENABLE_THINKING: ${AI_ENABLE_THINKING:-true}
+      CHROMA_DIR: /app/data/chroma
+      AI_TASK_IDLE_INTERVAL: ${AI_TASK_IDLE_INTERVAL:-3}
+    volumes:
+      - chroma_data:/app/data/chroma
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # 必须覆盖 entrypoint 而不是 command：镜像的 ENTRYPOINT 是 docker-entrypoint.sh，
+    # 它会无视传入的 CMD 参数强行起 uvicorn（部署时实测踩中，scheduler 变成了空转的 uvicorn）
+    entrypoint: ["python", "-m", "app.tasks.ai_task_worker"]
+    depends_on:
+      - backend
+
   db:
     # 只在显式启用 local-db profile 时启动，避免和宿主机已有 MySQL 抢 3306
     profiles: ["local-db"]

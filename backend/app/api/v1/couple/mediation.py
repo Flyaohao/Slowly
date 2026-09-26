@@ -132,6 +132,31 @@ def confirm_rewrite(
     return ApiResponse(data=result)
 
 
+@router.post("/{session_id}/retry", response_model=ApiResponse)
+def retry_generation(
+    session_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """整改 B4.1-4：生成失败后的重试（`rewrite_failed` / `summary_failed`）。
+
+    失败绝不伪装成一直 processing：会话进明确的失败态，客户端据此给出重试。
+    本端点不新建会话、不丢已有输入——只把失败的那一步重新排进任务队列。
+    """
+    try:
+        result = mediation_service.retry_generation(db, session_id, current_user.id)
+    except ValueError as e:
+        code = str(e)
+        error_map = {
+            "50001": (404, "调解会话不存在"),
+            "50002": (403, "无权参与此调解"),
+            "50003": (400, "调解状态不允许此操作"),
+        }
+        sc, msg = error_map.get(code, (500, "服务异常"))
+        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+    return ApiResponse(data=result)
+
+
 @router.get("/{session_id}", response_model=ApiResponse)
 def get_status(
     session_id: int,

@@ -93,6 +93,21 @@ class AiChatSession(BigIntPKMixin, TimestampMixin, Base):
     confirm_inviter_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     confirm_partner_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
+    # ---- 整改 B4.1：可靠后台任务（ai_task）的会话侧锚点 ----
+    #: 会话内容版本。改写每被重新生成一次 +1；任务只写回「版本仍等于自己那一版」
+    #: 的结果，从而杜绝「旧任务把新改写覆盖掉」。
+    mediation_revision: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    #: 生成终态失败（重试耗尽）的可观测字段。没有它们，失败只能靠日志，
+    #: 客户端只能看到永远 processing——契约 §B4.1-4 明令禁止这种伪装。
+    mediation_failure_code: Mapped[Optional[str]] = mapped_column(String(40))
+    mediation_last_error: Mapped[Optional[str]] = mapped_column(String(500))
+    mediation_failed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    #: 当前改写/总结任务的 id（客户端可据此重试；也便于接口与任务表对账）
+    rewrite_task_id: Mapped[Optional[int]] = mapped_column(BigInteger)
+    summary_task_id: Mapped[Optional[int]] = mapped_column(BigInteger)
+
     messages: Mapped[List["AiChatMessage"]] = relationship(back_populates="session")
 
 

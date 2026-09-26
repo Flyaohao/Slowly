@@ -32,6 +32,7 @@ from app.models.ai import (
     MemoryAssertionUserState,
 )
 from app.models.ai_generation import AiGeneration
+from app.models.ai_task import AiTask
 from app.models.relationship_review import AiRelationshipReview
 from app.models.letter import Letter
 from app.models.dual_perspective import DualPerspectiveEvent, DualPerspectiveRecord
@@ -76,6 +77,7 @@ __all__ = [
     "MemoryAssertionEvidence",
     "MemoryAssertionUserState",
     "AiGeneration",
+    "AiTask",
     "AiRelationshipReview",
     "Letter",
     "DualPerspectiveEvent",

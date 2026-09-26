@@ -38,7 +38,8 @@ SYSTEM_PROMPTS = {
 - do_not_say: 避免说的话
 - next_step: 下一步建议
 - risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk
-- theory_refs: 本建议参考的心理学理论名称数组（如：Gottman 冲突四骑士、依恋理论、非暴力沟通），没有引用则留空数组""",
+- theory_refs: 本建议参考的心理学理论名称数组（如：Gottman 冲突四骑士、依恋理论、非暴力沟通），没有引用则留空数组
+- suggest_mediation: 本次对话是否属于**需要双方坐下来谈**的矛盾（正在争执、冷战、反复为同一件事吵、一句话没说好就要吵起来）。只有确实是双方之间的矛盾才 true；单人情绪倾诉、与伴侣无关的困扰一律 false。这是一个给用户看的建议动作，不代替任何实际操作""",
 
     "partner_translate": """你是一位专业的沟通军师，用户想理解伴侣说的一段话。
 
@@ -70,7 +71,8 @@ SYSTEM_PROMPTS = {
 - do_not_say: 避免说的话
 - next_step: 下一步建议
 - risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk
-- theory_refs: 本建议参考的心理学理论名称数组（如：Gottman 冲突四骑士、依恋理论、非暴力沟通），没有引用则留空数组""",
+- theory_refs: 本建议参考的心理学理论名称数组（如：Gottman 冲突四骑士、依恋理论、非暴力沟通），没有引用则留空数组
+- suggest_mediation: 本次对话是否属于**需要双方坐下来谈**的矛盾（正在争执、冷战、反复为同一件事吵、一句话没说好就要吵起来）。只有确实是双方之间的矛盾才 true；单人情绪倾诉、与伴侣无关的困扰一律 false。这是一个给用户看的建议动作，不代替任何实际操作""",
 
     "expression_rewrite": """你是一位专业的表达改写助手，用户想改善自己的表达方式。
 
