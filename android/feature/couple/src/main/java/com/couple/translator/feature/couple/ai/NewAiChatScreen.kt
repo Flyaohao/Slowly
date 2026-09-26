@@ -241,9 +241,6 @@ fun NewAiChatScreen(
                 // 整改 §8.7：进复盘**页**（不是直落表单）——有历史时页面上有
                 // 最近一条入口与历史按钮，没有历史才是空白表单。
                 AiAction.SAVE_REVIEW -> onNavigateToRoute(Screen.RelationshipReview.route)
-
-                // 反馈行的三个按钮在下方 AiFeedbackRow 里，这里只把视图滚到它
-                AiAction.FEEDBACK -> Unit
             }
         }
 
@@ -356,12 +353,14 @@ fun NewAiChatScreen(
                             content = message.content,
                             structuredOutput = structured,
                         )
-                        // §8.2 行动行：按场景给上下文动作（调解受门控，不出残缺流程）
-                        val actions = actionsFor(uiState.sceneKey, structured)
-                        if (actions.isNotEmpty()) {
+                        // §8.2 行动行：按场景给上下文动作（调解受门控，不出残缺流程）。
+                        // 整改 B4.1-P1：传**分组**不传平铺列表——同屏主动作 ≤2，
+                        // 其余折进「更多」，由 AiActionRow 自己管展开态。
+                        val plan = actionPlanFor(uiState.sceneKey, structured)
+                        if (!plan.isEmpty) {
                             Spacer(modifier = Modifier.height(10.dp))
                             AiActionRow(
-                                actions = actions,
+                                plan = plan,
                                 onAction = { action ->
                                     handleAction(action, message, structured)
                                 },

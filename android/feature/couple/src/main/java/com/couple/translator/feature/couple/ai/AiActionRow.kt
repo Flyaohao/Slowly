@@ -1,5 +1,6 @@
 package com.couple.translator.feature.couple.ai
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -15,15 +16,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -36,6 +42,7 @@ import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppSpacing
+import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextSecondary
 
 /**
@@ -45,17 +52,23 @@ import com.couple.translator.core.ui.theme.AppTextSecondary
  * 建议后**没有任何下一步**。「建议表达」这类内容必须能复制/分享，能顺手变成一封
  * 信，能把伴侣拉进来（双视角），能在事后回填结果。
  *
- * 按钮集合由 [actionsFor] 按场景裁决，这里只负责渲染——不要在 UI 里写死按钮：
+ * 按钮集合由 [actionPlanFor] 按场景裁决，这里只负责渲染——不要在 UI 里写死按钮：
  * 调解按钮受 [FeatureGate.MEDIATION] 门控，未过 §8.5 验收前不得出现。
+ *
+ * 整改 B4.1-P1：接收的是**分组**而不是一个平铺列表。此前六个 chip 无条件铺满一行
+ * （复制/分享/写信/邀请/复盘/反馈），用户面对一堵墙、真正该点的那个被淹掉。
+ * 现在同屏最多 [ActionLimits.PRIMARY_MAX] 个主动作，其余折进「更多」——
+ * 展开是**用户主动**的，不是默认铺开。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AiActionRow(
-    actions: List<AiAction>,
+    plan: AiActionPlan,
     onAction: (AiAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (actions.isEmpty()) return
+    if (plan.isEmpty) return
+    var expanded by rememberSaveable { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
@@ -68,9 +81,61 @@ fun AiActionRow(
             horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
         ) {
-            actions.forEach { action ->
+            plan.primary.forEach { action ->
                 ActionChip(action = action, onClick = { onAction(action) })
             }
+            if (plan.more.isNotEmpty()) {
+                MoreChip(
+                    expanded = expanded,
+                    count = plan.more.size,
+                    onClick = { expanded = !expanded },
+                )
+            }
+        }
+        // 展开后才渲染次级动作：默认不占版面，也不制造「满屏按钮」的观感。
+        if (expanded && plan.more.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(AppSpacing.sm))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+                verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+            ) {
+                plan.more.forEach { action ->
+                    ActionChip(action = action, onClick = { onAction(action) })
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 「更多」：次级动作的折叠开关。
+ *
+ * 用**描边**而不是强调底色：它本身不是动作，只是一扇门；和真正的动作 chip
+ * 长得一样的话，用户会以为「更多」也是一个能做的事情。
+ */
+@Composable
+private fun MoreChip(expanded: Boolean, count: Int, onClick: () -> Unit) {
+    Surface(
+        color = AppSurface,
+        shape = RoundedCornerShape(AppRadius.pill),
+        border = BorderStroke(0.5.dp, AppBorderLight),
+        modifier = Modifier.pressFeedback(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = AppSpacing.md, vertical = AppSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = if (expanded) "收起" else "更多（$count）",
+                style = MaterialTheme.typography.labelMedium,
+                color = AppTextSecondary,
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                contentDescription = null,
+                tint = AppTextSecondary,
+                modifier = Modifier.size(16.dp),
+            )
         }
     }
 }
@@ -110,7 +175,6 @@ private fun AiAction.icon(): ImageVector = when (this) {
     AiAction.INVITE_DUAL -> Icons.Outlined.People
     AiAction.START_MEDIATION -> Icons.Outlined.People
     AiAction.SAVE_REVIEW -> Icons.Outlined.Edit
-    AiAction.FEEDBACK -> Icons.Outlined.StarOutline
 }
 
 /**

@@ -126,4 +126,25 @@ class MediationRepository @Inject constructor(
             Result.failure(e)
         }
     }
+
+    /**
+     * 整改 B4.1-4：生成失败后的手动重试（`rewrite_failed` / `summary_failed`）。
+     *
+     * 服务端会校验状态：不在失败态时返回业务错误（50003），调用方据此提示
+     * 「状态已变化，刷新看看」而不是把用户留在失败页上。
+     */
+    suspend fun retryGeneration(
+        sessionId: Long,
+    ): Result<MediationDto.MediationSessionResponse?> {
+        return try {
+            val response = apiService.retryMediation(sessionId)
+            if (response.isSuccess) {
+                Result.success(response.data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

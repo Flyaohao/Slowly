@@ -32,11 +32,31 @@ data class MediationInputUiState(
     val partnerSubmitted: Boolean = false,
     /** 我已提交、停在等待态（页面显示等待文案）。 */
     val submitted: Boolean = false,
+    /**
+     * 整改 B4.1-4：服务端给出失败态（`rewrite_failed`）。
+     *
+     * 这一页等的是两件事：对方写完 + 改写生成。生成失败时必须停止等待并
+     * 让用户看见——此前失败态落进 `afterSubmit` 的 else，页面继续显示
+     * 「等对方写完」，用户等的是一个永远不会来的改写。
+     *
+     * 注意本页**不渲染**失败卡片：改写的归宿是确认页（那一页才有完整失败态
+     * 与「重试」按钮）。[MediationFlow.afterSubmit] 会把 `rewrite_failed`
+     * 判成 [MediationStep.FAILED_REWRITE]，由导航把人送过去。
+     */
+    val generation: MediationGenerationState = MediationGenerationState(MediationGenerationPhase.IDLE),
+    /**
+     * 整改 B4.1-5：等「人」的窗口用尽后**暂停**轮询（不是失败）。
+     * 对方可能在上班/睡觉；暂停后页面给「继续等待」，点一下重开一轮窗口。
+     */
+    val waitingPaused: Boolean = false,
     val isLoading: Boolean = false,
     val error: String = "",
 ) {
     val isGenerating: Boolean
-        get() = status == "rewriting" || status == "summarizing"
+        get() = status in MediationFlow.GENERATING_STATUSES
+
+    /** 有失败（含自动重试中）：页面必须显式渲染，不许当成"还在等"。 */
+    val hasFailure: Boolean get() = generation.hasFailure
 }
 
 sealed class MediationInputUiEvent {
@@ -74,17 +94,8 @@ class MediationInputViewModel @Inject constructor(
         viewModelScope.launch {
             mediationRepository.getMediation(sessionId).fold(
                 onSuccess = { detail ->
-                    detail?.let {
-                        _uiState.update { state ->
-                            state.copy(
-                                status = it.mediationStatus,
-                                partnerSubmitted = it.partnerSubmitted == true,
-                                // 服务端按作者给出的「我提交过没有」是唯一依据（§8.5-7）
-                                submitted = it.mySubmitted == true || state.submitted,
-                                isLoading = false,
-                            )
-                        }
-                    } ?: _uiState.update { it.copy(isLoading = false) }
+                    detail?.let { applyDetail(it) }
+                        ?: _uiState.update { it.copy(isLoading = false) }
                 },
                 onFailure = { error ->
                     _uiState.update { it.copy(isLoading = false, error = error.message ?: "加载失败") }
@@ -93,27 +104,70 @@ class MediationInputViewModel @Inject constructor(
         }
     }
 
-    /** §8.5-2：提交后停在等待态，靠轮询等服务端推进（对方写完 → 改写 → 确认页）。 */
+    /**
+     * 服务端快照 → UI 状态（加载与轮询共用一份，避免两条路径分叉）。
+     *
+     * `submitted` 用「服务端说的」或「本地已提交过」的或：服务端的
+     * `my_submitted` 是唯一依据（§8.5-7），本地那次只用来兜住响应还没回来的
+     * 一瞬——否则刚点完提交会闪回一张空表单，用户能再提交一遍。
+     */
+    private fun applyDetail(detail: MediationDto.MediationDetailResponse) {
+        _uiState.update { state ->
+            state.copy(
+                status = detail.mediationStatus,
+                partnerSubmitted = detail.partnerSubmitted == true,
+                submitted = detail.mySubmitted == true || state.submitted,
+                generation = generationStateOf(
+                    status = detail.mediationStatus,
+                    failure = detail.failure,
+                    task = detail.task,
+                ),
+                isLoading = false,
+            )
+        }
+    }
+
+    /**
+     * §8.5-2：提交后停在等待态，靠轮询等服务端推进（对方写完 → 改写 → 确认页）。
+     *
+     * 整改 B4.1-5：这一页等的主要是**人**（对方写完自己的部分），所以用
+     * [MediationPolling.HUMAN_WAIT_TOTAL_BUDGET_MS] 这个更宽的窗口；窗口用尽
+     * 只**暂停**（[MediationInputUiState.waitingPaused]），由用户点「继续等待」
+     * 再开一轮——对方在上班/睡觉不等于这场调解坏了。
+     *
+     * 单次请求失败**不终止等待**（网络抖动而已），下一轮接着来；
+     * 只有服务端真的给出新状态才走 [MediationFlow] 裁决的落点。
+     * 失败态（`rewrite_failed`）在 [MediationFlow.afterSubmit] 里直接映射成
+     * 非等待落点，于是循环会立刻退出并交还给用户，不会一直转圈。
+     */
     fun startWaiting() {
         if (pollJob?.isActive == true) return
         val sessionId = _uiState.value.sessionId
+        if (sessionId <= 0) return
+        _uiState.update { it.copy(waitingPaused = false) }
         pollJob = viewModelScope.launch {
+            val startedAt = System.currentTimeMillis()
             while (true) {
-                delay(POLL_INTERVAL_MS)
+                delay(MediationPolling.HUMAN_WAIT_INTERVAL_MS)
                 val detail = mediationRepository.getMediation(sessionId).getOrNull() ?: continue
-                _uiState.update {
-                    it.copy(
-                        status = detail.mediationStatus,
-                        partnerSubmitted = detail.partnerSubmitted == true,
-                    )
-                }
+                applyDetail(detail)
                 val step = MediationFlow.afterSubmit(detail.mediationStatus)
                 if (step != MediationStep.WAITING_PARTNER) {
                     _event.emit(MediationInputUiEvent.MoveTo(step))
                     return@launch
                 }
+                if (MediationPolling.humanWaitExhausted(System.currentTimeMillis() - startedAt)) {
+                    _uiState.update { it.copy(waitingPaused = true) }
+                    return@launch
+                }
             }
         }
+    }
+
+    /** 暂停后点「继续等待」：开新的一轮窗口（状态在服务端，这里只是重新开始轮询）。 */
+    fun resumeWaiting() {
+        _uiState.update { it.copy(waitingPaused = false) }
+        startWaiting()
     }
 
     /** §2.3-4 推送侧：WS 状态帧到达时立即更新（轮询是兜底，不把可达性押在长连接上）。 */
@@ -184,9 +238,5 @@ class MediationInputViewModel @Inject constructor(
     override fun onCleared() {
         stopWaiting()
         super.onCleared()
-    }
-
-    private companion object {
-        const val POLL_INTERVAL_MS = 4_000L
     }
 }

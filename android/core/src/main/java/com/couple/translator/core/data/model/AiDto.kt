@@ -328,12 +328,20 @@ object AiDto {
          * 不是所有场景都有（非推理模型 / 非流式链路为 null）。
          */
         @Json(name = "thinking") val thinking: String? = null,
-        // ---- 客户端侧附加字段（非 wire 契约）----
+        // ---- 调解建议动作（整改 B4.1-6）----
         /**
-         * 本条建议关联的双人调解会话 id（若后端在结构化输出里给出）；null 表示
-         * 没有可跳转的调解，行动行的「发起双人调解」按 §8.2 门控**不渲染**。
+         * 军师是否建议「发起双人调解」（后端 `private_advisor` / `partner_translate`
+         * 的输出字段 `suggest_mediation`）。
+         *
+         * **这里只有「建议」，没有 id**：会话由后端在用户真实点击后创建
+         * （`POST /ai/mediation/start`），模型凭空产出的 id 是假的、照着跳必然 404；
+         * 更不能让模型代替用户发出邀请——那是产品动作，也是隐私红线。
+         *
+         * 此前客户端声明的是 `@Json(ignore = true) val mediationId`，一个**永远为 null
+         * 的非线路字段**：入口条件 `structured?.mediationId != null` 在生产里恒不成立，
+         * 只有测试手工构造得出来，等于把「入口缺失」盖住了。
          */
-        @Json(ignore = true) val mediationId: Long? = null,
+        @Json(name = "suggest_mediation") val suggestMediation: Boolean = false,
         /**
          * 原始结构化 Map（不参与序列化）：行动行需要读后端某场景独有的键
          * （opening_lines / rewrites / event_id …），逐个补字段会漏；由

@@ -262,6 +262,17 @@ interface CoupleApiService {
     @GET("api/v1/couple/ai/mediation/{id}")
     suspend fun getMediation(@Path("id") sessionId: Long): ApiResponse<MediationDto.MediationDetailResponse>
 
+    /**
+     * 整改 B4.1-4：生成失败（`rewrite_failed` / `summary_failed`）后的**用户手动重试**。
+     *
+     * 不新建会话、不丢已有输入：只把失败的那一步重新排进后台任务队列。
+     * 自动退避重试由 worker 负责，这条是「重试也耗尽了」之后唯一的出路。
+     */
+    @POST("api/v1/couple/ai/mediation/{id}/retry")
+    suspend fun retryMediation(
+        @Path("id") sessionId: Long,
+    ): ApiResponse<MediationDto.MediationSessionResponse>
+
     @POST("api/v1/couple/ai/mediation/{id}/next")
     suspend fun mediationNext(
         @Path("id") sessionId: Long,

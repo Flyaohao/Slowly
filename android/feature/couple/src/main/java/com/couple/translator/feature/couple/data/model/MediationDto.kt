@@ -61,6 +61,42 @@ object MediationDto {
         @Json(name = "created_at") val createdAt: String? = null,
     )
 
+    /**
+     * 生成失败的可观察信息（整改 B4.1-4，后端 `failure`）。
+     *
+     * 为什么必须下发到客户端：失败此前只写在服务端日志里，用户看到的是
+     * 「AI 正在生成」一直转——永远等一个不会来的结果。现在失败让用户看得见、
+     * 点得动（[retryable] 为 true 时给「重试」按钮）。
+     */
+    @JsonClass(generateAdapter = true)
+    data class MediationFailure(
+        /** `TASK_RETRY_SCHEDULED`（还会自动重试）/ `TASK_EXHAUSTED`（要用户手动重试）。 */
+        @Json(name = "code") val code: String? = null,
+        /** 失败原因（**不含用户正文**，服务端只截取异常类型与短消息）。 */
+        @Json(name = "message") val message: String? = null,
+        @Json(name = "failed_at") val failedAt: String? = null,
+        @Json(name = "retryable") val retryable: Boolean = true,
+    ) {
+        /** 自动退避重试中：文案是「正在重试」，不必催用户点。 */
+        val isAutoRetrying: Boolean get() = code == "TASK_RETRY_SCHEDULED"
+
+        /** 重试已耗尽：必须由用户手动发起，不给按钮就永远停在这。 */
+        val isExhausted: Boolean get() = code == "TASK_EXHAUSTED"
+    }
+
+    /** 当前后台任务的可观测摘要（后端 `task`；只暴露计数，不含载荷）。 */
+    @JsonClass(generateAdapter = true)
+    data class MediationTaskInfo(
+        @Json(name = "id") val id: Long = 0,
+        /** mediation_rewrite / mediation_regenerate / mediation_summary */
+        @Json(name = "type") val type: String = "",
+        /** pending / running / succeeded / failed / superseded */
+        @Json(name = "state") val state: String = "",
+        @Json(name = "attempt") val attempt: Int = 0,
+        @Json(name = "max_attempts") val maxAttempts: Int = 0,
+        @Json(name = "next_retry_at") val nextRetryAt: String? = null,
+    )
+
     @JsonClass(generateAdapter = true)
     data class MediationDetailResponse(
         @Json(name = "session_id") val sessionId: Long = 0,
@@ -77,6 +113,13 @@ object MediationDto {
         // 我是第一方时会话状态一直停在 inputting，只看状态分不出「还没写」和「写了在等」。
         @Json(name = "my_submitted") val mySubmitted: Boolean? = null,
         @Json(name = "updated_at") val updatedAt: String? = null,
+        // ---- 整改 B4.1-4：后台任务的可观察状态 ----
+        /** 会话内容版本：每次重新生成 +1；客户端拿到新版本号即说明这一稿已不是旧稿。 */
+        @Json(name = "revision") val revision: Int = 0,
+        /** 生成失败信息（无失败为 null）。 */
+        @Json(name = "failure") val failure: MediationFailure? = null,
+        /** 当前任务进度（第几次尝试 / 上限 / 下次重试时间）。 */
+        @Json(name = "task") val task: MediationTaskInfo? = null,
         // ---- 整改 §8.5-4：改写由**服务端按身份**解析好再下发 ----
         // `my_rewrite` 是「我」那一侧（服务端按 my_role 从 rewrite_a/b 取），
         // 客户端不许再自己按 a/b 位置取——它的语义是「发起方/参与方」而不是

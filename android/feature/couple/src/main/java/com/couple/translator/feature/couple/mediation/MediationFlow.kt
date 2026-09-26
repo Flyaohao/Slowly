@@ -18,6 +18,16 @@ object MediationFlow {
     /** 服务端在后台生成（§8.5-8）：客户端只显示等待，不报错也不空白。 */
     val GENERATING_STATUSES = setOf("rewriting", "summarizing")
 
+    /**
+     * 生成失败的终态（整改 B4.1-4）：`rewrite_failed` / `summary_failed`。
+     *
+     * 这两个状态此前没有任何分支认识它们，于是落进 `afterSubmit` 的 `else`——
+     * 和「对方还没写完」走同一条路。结果是**失败被伪装成一直在处理**：
+     * 用户对着等待页转圈，永远等不到结果，也没有任何可点的出路。
+     * 现在所有等待循环都必须在看到它们时停下来交还用户。
+     */
+    val FAILURE_STATUSES = setOf("rewrite_failed", "summary_failed")
+
     /** 已见终局（§8.5-6）：completed 仍可回看，但不再有任何推进动作。 */
     const val COMPLETED = "completed"
 
@@ -34,6 +44,11 @@ object MediationFlow {
         "rewriting" -> MediationStep.WAITING_REWRITE
         "confirming" -> MediationStep.CONFIRM
         "summarizing", COMPLETED -> MediationStep.RESULT
+        // 整改 B4.1-4：失败必须离开等待态。留在这里的话页面会一直显示
+        // 「等对方写完 / AI 正在生成」，而服务端其实已经停了——用户等一个
+        // 永远不来的结果。落点是**能给出重试**的那个页面。
+        "rewrite_failed" -> MediationStep.FAILED_REWRITE
+        "summary_failed" -> MediationStep.FAILED_SUMMARY
         else -> MediationStep.WAITING_PARTNER
     }
 
@@ -50,6 +65,10 @@ object MediationFlow {
         "rewriting" -> MediationStep.WAITING_REWRITE
         "confirming" -> MediationStep.CONFIRM
         "summarizing", COMPLETED -> MediationStep.RESULT
+        // 整改 B4.1-4：等待循环里读到失败态必须**立刻离开等待**，去能重试的页面。
+        // 旧实现里这两个状态没有分支，等待页会一直转圈到轮询窗口用尽为止。
+        "rewrite_failed" -> MediationStep.FAILED_REWRITE
+        "summary_failed" -> MediationStep.FAILED_SUMMARY
         // 仍停在 inviting：继续等（对方还没回应）
         else -> MediationStep.STAY
     }
@@ -69,6 +88,10 @@ object MediationFlow {
     ): MediationStep = when {
         mediationStatus == "summarizing" || mediationStatus == COMPLETED ->
             MediationStep.RESULT
+        // 整改 B4.1-4：总结失败时人也该看到**结果页上的失败态**（那里有重试），
+        // 而不是停在一张「双方都确认过了」的确认页上——那场调解确实已经走进
+        // 总结这一步了，出路在结果页。
+        mediationStatus == "summary_failed" -> MediationStep.RESULT
         myConfirmed && partnerConfirmed -> MediationStep.RESULT
         myConfirmed -> MediationStep.WAITING_PARTNER_CONFIRM
         else -> MediationStep.STAY
@@ -104,4 +127,17 @@ enum class MediationStep {
 
     /** 结果/回看页。 */
     RESULT,
+
+    /**
+     * 改写生成失败（整改 B4.1-4）：落到**确认页**——那一页已经具备完整的
+     * [MediationGenerationState] 失败态与「重试」按钮（见 `MediationConfirmScreen`）。
+     * 不新开一个「失败页」：失败不是流程里的新一步，是同一步的另一种形态。
+     */
+    FAILED_REWRITE,
+
+    /**
+     * 总结生成失败（整改 B4.1-4）：落到**结果页**——同理，
+     * `MediationResultScreen` 已带失败态与重试。
+     */
+    FAILED_SUMMARY,
 }

@@ -243,12 +243,27 @@ fun MediationInviteScreen(
                         )
                         // §8.5-1：状态变化会自动刷新（WS 推送 + 轮询），
                         // 让用户知道「不用退出去重进」，也说明页面是活的。
+                        // 整改 B4.1-5：窗口用尽后不再自称「刷新中」——那时轮询
+                        // 确实停了，说在刷新是骗人的；改由「继续等待」按钮承接。
                         Text(
-                            text = if (uiState.isPolling) "对方接受后这里会自动进入下一步" else "状态刷新中…",
+                            text = when {
+                                uiState.waitingPaused -> MediationPolling.HUMAN_WAIT_PAUSED_NOTICE
+                                uiState.isPolling -> "对方接受后这里会自动进入下一步"
+                                else -> "状态刷新中…"
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = AppTextSecondary,
                             textAlign = TextAlign.Center,
                         )
+                        // 整改 B4.1-5：轮询窗口用尽后由用户决定要不要再等一轮。
+                        // 没有这个按钮，用户就只能看着一句「暂停」然后退出 App。
+                        if (uiState.waitingPaused) {
+                            AppPrimaryButton(
+                                text = "继续等待",
+                                onClick = { viewModel.resumeWaiting() },
+                                enabled = !uiState.isLoading,
+                            )
+                        }
                     } else {
                         Text(
                             text = "你收到了调解邀请",
@@ -359,14 +374,23 @@ fun MediationInputScreen(
 
             if (uiState.submitted) {
                 // ---- §8.5-2 等待态：我是第一方（或双方都写完、AI 正在改写）----
-                WaitingCard(
-                    title = if (uiState.isGenerating) "AI 正在准备你们的改写…" else "已提交，等对方写下 TA 的感受",
-                    subtitle = if (uiState.isGenerating) {
-                        "通常需要十几秒，好了会自动进入确认页"
-                    } else {
-                        "对方提交后，AI 会同时为你们生成改写"
-                    },
-                )
+                // 整改 B4.1-4：失败态**不在本页**停：改写的归宿是确认页，那一页
+                // 才带完整的失败卡片与「重试」。上面的 LaunchedEffect 已经把
+                // `rewrite_failed` 交给 MediationFlow 判成 FAILED_REWRITE 并导航过去，
+                // 本页只留「窗口用尽暂停」这一种需要用户介入的形态。
+                if (uiState.waitingPaused) {
+                    WaitingPausedCard(onResume = viewModel::resumeWaiting)
+                } else {
+                    WaitingCard(
+                        title = waitHeadlineOf(uiState.generation, summarizing = false)
+                            .ifBlank { "已提交，等对方写下 TA 的感受" },
+                        subtitle = if (uiState.isGenerating) {
+                            "通常需要十几秒，好了会自动进入确认页"
+                        } else {
+                            "对方提交后，AI 会同时为你们生成改写"
+                        },
+                    )
+                }
             } else {
                 Text(
                     text = "请写下你的感受和诉求，AI 会帮你改写为对方更容易接受的表达",
@@ -460,12 +484,110 @@ private fun WaitingCard(title: String, subtitle: String) {
     }
 }
 
+/**
+ * 整改 B4.1-4：生成失败的**独立卡片**。
+ *
+ * 为什么不能沿用 [WaitingCard] 再换行字：那会得到一个转圈图标配「失败了」的
+ * 自相矛盾的卡片，用户读到的仍是「它在忙」。失败必须是**另一种形态**——
+ * 没有转圈、有原因、有出路。
+ *
+ * @param onRetry 允许手动重试时给的回调；null 表示这一步的重试在别处（如确认页）
+ * @param onRestart 重新发起一场调解（永远给：只给重试的失败页会把用户堵死）
+ */
+@Composable
+private fun GenerationFailureCard(
+    state: MediationGenerationState,
+    fallbackMessage: String,
+    onRetry: (() -> Unit)?,
+    onRestart: () -> Unit,
+) {
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(AppRadius.md),
+        contentPadding = PaddingValues(20.dp),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = waitHeadlineOf(state, summarizing = false).ifBlank { "这次没生成成功" },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = state.failureMessage?.takeIf { it.isNotBlank() } ?: fallbackMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTextSecondary,
+            )
+            Text(
+                text = "双方写下的内容都还在，不会被这次失败清掉",
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTextSecondary,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            if (onRetry != null && state.canRetry) {
+                AppPrimaryButton(text = "重试", onClick = onRetry)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            AppSecondaryButton(text = "重新发起", onClick = onRestart)
+        }
+    }
+}
+
+/**
+ * 整改 B4.1-5：等「人」的窗口用尽 → **暂停**（不是失败）。
+ *
+ * 对方可能在上班、在睡觉；等不到不等于坏了。这里给一个明确的「继续等待」
+ * 按钮，让用户自己决定要不要再等一轮——而不是让页面无限轮询打接口，
+ * 也不是把「对方还没回应」说成「出错了」。
+ */
+@Composable
+private fun WaitingPausedCard(
+    onResume: () -> Unit,
+    title: String = "还在等对方",
+    notice: String = MediationPolling.HUMAN_WAIT_PAUSED_NOTICE,
+    actionText: String = "继续等待",
+) {
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(AppRadius.md),
+        contentPadding = PaddingValues(20.dp),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = notice,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTextSecondary,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            AppPrimaryButton(text = actionText, onClick = onResume)
+        }
+    }
+}
+
 @Composable
 fun MediationConfirmScreen(
     sessionId: Long,
     onMoveToStep: (Long, MediationStep) -> Unit,
     onNavigateBack: () -> Unit,
     statusFrames: Flow<String> = emptyFlow(),
+    /**
+     * 整改 B4.1-4：失败后的「重新发起」出口（去说明页新建一场）。
+     *
+     * 只给「重试」而没有「重新发起」时，一场彻底失败的调解会把用户堵死在
+     * 这一页上——重试若还失败，他就只能退出 App。旧会话保留在调解回看里，
+     * 双方写下过的内容不会因为重新发起而消失。
+     */
+    onRestartMediation: () -> Unit = {},
     viewModel: MediationConfirmViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -476,6 +598,9 @@ fun MediationConfirmScreen(
     }
 
     // §8.5-8：生成中（rewriting/summarizing）时就地轮询等结果，别让用户对着空白页。
+    // 整改 B4.1-4：**失败态不轮询**——isGenerating 只在 GENERATING/RETRYING 时为真，
+    // 终态失败进不来，于是失败卡片上的「重试」按钮是唯一的出路，不会被
+    // 一轮又一轮的空轮询掩盖。
     LaunchedEffect(uiState.isGenerating, uiState.status) {
         if (uiState.isGenerating) {
             viewModel.pollUntilReady()
@@ -529,17 +654,38 @@ fun MediationConfirmScreen(
                 )
                 if (uiState.isGenerating) {
                     Text(
-                        text = if (uiState.status == "summarizing") {
-                            "双方都确认了，AI 正在生成总结…"
-                        } else {
-                            "AI 正在准备改写，稍等一下"
-                        },
+                        text = waitHeadlineOf(uiState.generation, summarizing = false),
                         style = MaterialTheme.typography.bodySmall,
                         color = AppTextSecondary,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+            }
+
+            // 整改 B4.1-4：失败是**另一种形态**，不是继续转圈的等待。
+            // 注意顺序：失败卡片在改写卡片之前——失败时改写多半还是空的，
+            // 让用户先看到「为什么没有」再看到已有内容，比反过来好读。
+            if (uiState.generation.phase == MediationGenerationPhase.FAILED) {
+                GenerationFailureCard(
+                    state = uiState.generation,
+                    fallbackMessage = "改写没生成成功",
+                    onRetry = viewModel::retryGeneration,
+                    onRestart = onRestartMediation,
+                )
+            } else if (uiState.generation.phase == MediationGenerationPhase.RETRYING) {
+                // 自动重试中：给等待卡片而不是失败卡片——用户此刻不需要做任何事。
+                WaitingCard(
+                    title = waitHeadlineOf(uiState.generation, summarizing = false),
+                    subtitle = "不用手动操作，下一秒会自动再试一次",
+                )
+            } else if (uiState.pollingBudgetExhausted) {
+                // 窗口用尽**不是失败**：状态在服务端，重进一定看得到。
+                WaitingPausedCard(
+                    notice = MediationPolling.BUDGET_EXHAUSTED_NOTICE,
+                    actionText = "刷新看看",
+                    onResume = viewModel::loadRewrite,
+                )
             }
 
             uiState.myRewrite?.let { rewrite ->
@@ -654,6 +800,8 @@ private fun ConfirmProgressRow(myConfirmed: Boolean, partnerConfirmed: Boolean) 
 fun MediationResultScreen(
     sessionId: Long,
     onNavigateBack: () -> Unit,
+    /** 整改 B4.1-4：总结失败的「重新发起」（去说明页新建一场；旧会话保留可回看）。 */
+    onRestartMediation: () -> Unit = {},
     viewModel: MediationResultViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -695,8 +843,29 @@ fun MediationResultScreen(
             // §8.5-8：还在生成就明确说「在生成」，不要渲染成一片空白。
             if (uiState.isGenerating) {
                 WaitingCard(
-                    title = "AI 正在整理这场调解…",
+                    title = waitHeadlineOf(uiState.generation, summarizing = true)
+                        .ifBlank { "AI 正在整理这场调解…" },
                     subtitle = "通常需要十几秒，好了这里会自动出现总结",
+                )
+            }
+
+            // 整改 B4.1-4：总结失败**不是**「没有留下总结」——那是两件事，
+            // 混成一件事会让用户以为「这场调解白谈了」，而实际上内容还在，
+            // 只是这一步没跑成。失败卡片给重试，空态只给「确实没有」。
+            if (uiState.generation.phase == MediationGenerationPhase.FAILED) {
+                GenerationFailureCard(
+                    state = uiState.generation,
+                    fallbackMessage = "总结没生成成功",
+                    onRetry = viewModel::retryGeneration,
+                    onRestart = onRestartMediation,
+                )
+            } else if (uiState.pollingBudgetExhausted) {
+                // 窗口用尽 ≠ 失败：服务端还在跑，状态在服务端，重进一定看得到。
+                WaitingPausedCard(
+                    title = "总结还在生成",
+                    notice = MediationPolling.BUDGET_EXHAUSTED_NOTICE,
+                    actionText = "刷新看看",
+                    onResume = viewModel::loadResult,
                 )
             }
 

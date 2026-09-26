@@ -102,6 +102,9 @@ fun <T> AppListCard(
  *
  * @param leadingEmoji 传了 emoji 就用它，优先于 [leadingIcon]
  * @param leading 完全自定义左侧内容（如头像），优先于上面两者
+ * @param trailing 行尾自定义内容（如一个「重新发起」小动作）。
+ *   注意它会嵌在整行的点击区里，内部控件需要自己消费点击——
+ *   否则点「重新发起」会连带触发整行的 [onClick]。
  */
 @Composable
 fun AppListItem(
@@ -114,6 +117,7 @@ fun AppListItem(
     tileColor: Color = AppSurfaceMuted,
     tileContentColor: Color = AppTextSecondary,
     trailingText: String? = null,
+    trailing: (@Composable () -> Unit)? = null,
     showChevron: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
@@ -168,6 +172,10 @@ fun AppListItem(
             }
         }
 
+        if (trailing != null) {
+            Spacer(modifier = Modifier.width(AppSpacing.sm))
+            trailing()
+        }
         if (trailingText != null) {
             Spacer(modifier = Modifier.width(AppSpacing.sm))
             Text(

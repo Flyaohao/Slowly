@@ -575,6 +575,8 @@ fun NavGraph(
                 // §8.5-5：只有双方都确认（或总结已生成）才会发 RESULT
                 onMoveToStep = { id, step -> navigateToMediationStep(navController, id, step) },
                 onNavigateBack = { navController.popBackStack() },
+                // 整改 B4.1-4：失败态的「重新发起」——去说明页新建一场（真实 id 由后端给）
+                onRestartMediation = { navController.navigate(Screen.MediationExplanation.route) },
                 statusFrames = realtimeSocketManager?.statusFrames
                     ?.filter { it.sessionId == sessionId }
                     ?.map { it.status }
@@ -595,6 +597,8 @@ fun NavGraph(
             MediationResultScreen(
                 sessionId = sessionId,
                 onNavigateBack = { navController.popBackStack() },
+                // 整改 B4.1-4：总结失败态的「重新发起」（旧会话保留在调解回看里）
+                onRestartMediation = { navController.navigate(Screen.MediationExplanation.route) },
             )
         }
 
@@ -606,6 +610,9 @@ fun NavGraph(
                 onOpenSession = { sessionId ->
                     navController.navigate("${Screen.MediationResult.route}?sessionId=$sessionId")
                 },
+                // 整改 B4.1-6：「重新发起」走说明页新建一场（真实 session_id 由后端给），
+                // 不复用旧会话——旧会话的总结是那次沟通的记录，不该被新一轮覆盖。
+                onRestartMediation = { navController.navigate(Screen.MediationExplanation.route) },
             )
         }
 
@@ -976,6 +983,9 @@ private fun navigateToMediationStep(
 
         MediationStep.WAITING_REWRITE,
         MediationStep.WAITING_PARTNER_CONFIRM,
+        // 整改 B4.1-4：改写失败也落在确认页——那一页有失败态与「重试」按钮。
+        // 失败不是流程里的新一步，是同一步的另一种形态。
+        MediationStep.FAILED_REWRITE,
         -> navigateSingleStep(
             navController,
             from = Screen.MediationConfirm.route,
@@ -986,6 +996,16 @@ private fun navigateToMediationStep(
             navController,
             from = Screen.MediationInput.route,
             to = "${Screen.MediationConfirm.route}?sessionId=$sessionId",
+        )
+
+        // 整改 B4.1-4：总结失败落在结果页（那一页有失败态与「重试」）。
+        // 用 from = 结果页自身：从确认页过来时清掉确认页，从历史/结果页重进时
+        // popUpTo 一个不在回退栈里的路由是**空操作**（Navigation 的行为），
+        // 于是不会把用户已有的回退栈意外清空。
+        MediationStep.FAILED_SUMMARY -> navigateSingleStep(
+            navController,
+            from = Screen.MediationResult.route,
+            to = "${Screen.MediationResult.route}?sessionId=$sessionId",
         )
 
         MediationStep.RESULT -> navController.navigate(

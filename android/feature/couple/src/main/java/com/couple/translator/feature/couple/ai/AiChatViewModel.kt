@@ -43,7 +43,7 @@ enum class QuotePickerType { MESSAGE, LETTER, ANNIVERSARY }
  * 整改 §8.2：一条 AI 回复上「可发起的行动」。
  *
  * 刻意不在 UI 里写死按钮：同一行按钮在不同场景/语境下既不该全都在，也不该都没有。
- * [actionsFor] 是唯一的裁决点，可单测；调解按钮受 [FeatureGate.MEDIATION] 门控
+ * [actionPlanFor] 是唯一的裁决点，可单测；调解按钮受 [FeatureGate.MEDIATION] 门控
  * （§8.5 未过验收前不许暴露残缺流程）。
  */
 enum class AiAction(val label: String) {
@@ -53,7 +53,11 @@ enum class AiAction(val label: String) {
     INVITE_DUAL("邀请 TA 补充双视角"),
     START_MEDIATION("发起双人调解"),
     SAVE_REVIEW("记录为关系复盘"),
-    FEEDBACK("告诉军师有没有用"),
+    // 整改 B4.1-P1：这里**没有** FEEDBACK。反馈不是一个"动作 chip"，
+    // 它是同一屏上的次级控件，由 AiFeedbackRow 独立渲染（三态：未表态 /
+    // 已采纳待结果 / 已填结果）。此前那枚 chip 的分支体是 `-> Unit`——
+    // 点了没有任何反应，正是「装饰按钮」。删掉它而不是留着，
+    // 是为了让编译器守住：任何再想从行动行里"顺手加一个反馈按钮"的改动都会失败。
 }
 
 object FeatureGate {
@@ -62,6 +66,37 @@ object FeatureGate {
      * 置 true 前必须完成 §8.5 全部验收——这是产品级红线，不是开关偏好。
      */
     const val MEDIATION = false
+}
+
+/**
+ * 一条回复的行动行分组（整改 B4.1-P1）。
+ *
+ * 为什么必须分组：`actionsFor` 此前是**无条件堆叠**——只要有可复制内容，
+ * 复制/分享/写信/邀请/复盘/反馈六枚 chip 会同时铺满一行，用户面对一堵墙，
+ * 真正该点的那个（比如"你们在吵，要不要一起谈谈"）被淹在最下面。
+ *
+ * 现在：主动作最多 [ActionLimits.PRIMARY_MAX] 个（按优先级取前 N），
+ * 其余进 [more]，由 UI 折进「更多」。**反馈不在其中**——它是次级控件，
+ * 由 [AiFeedbackRow] 单独渲染（此前那枚 FEEDBACK chip 点了没有任何反应，
+ * 是典型的装饰按钮）。
+ */
+data class AiActionPlan(
+    val primary: List<AiAction>,
+    val more: List<AiAction>,
+) {
+    val all: List<AiAction> get() = primary + more
+
+    val isEmpty: Boolean get() = primary.isEmpty() && more.isEmpty()
+}
+
+object ActionLimits {
+    /**
+     * 同屏主动作上限。
+     *
+     * 2 的依据：一个动作行同时承载「眼下最该做的一件事」和「备选的第二件」
+     * 已经是认知上限；第三枚开始用户就不再读了（改文案也不会有人点）。
+     */
+    const val PRIMARY_MAX = 2
 }
 
 /** 「这段表达」的可复制文本：优先可直接发送的建议，其次破冰开场白，最后没有。 */
@@ -73,24 +108,68 @@ fun copyableReplyOf(structured: AiDto.StructuredOutput?, content: String): Strin
 }
 
 /**
- * 场景/语境 → 行动行（§8.2「按场景给上下文动作，非永久全按钮」）。
+ * 场景/语境 → 行动行（§8.2「按场景给上下文动作，非永久全按钮」+ B4.1-P1 收敛）。
  *
- * 依据来自各场景的结构化字段：有 `suggested_reply`/`rewrites` 才谈得上复制分享；
- * 有破冰话术或建议表达才谈得上「整理成一封信」；`relationship_review` 场景本身
- * 就是复盘，不再重复给「记录为复盘」。调解永远受门控。
+ * 排序即优先级，前 [ActionLimits.PRIMARY_MAX] 个是主动作：
+ *
+ * 1. **发起双人调解**：只在两个条件同时成立时出现——军师判定这是双方矛盾
+ *    （`suggestMediation`，由后端 `AdvisorOutput.suggest_mediation` 下发）
+ *    **且**门控已开。冲突语境下「把两个人都拉进来说」比「换句话再说一遍」更治本，
+ *    所以它排第一。它只做**导航**：真正的会话由后端在用户点过说明页的
+ *    「开始调解」之后创建，模型不替用户发邀请。
+ * 2. **复制这段表达**：有可复制内容（建议回复 / 破冰话术 / 改写）才给。
+ * 3. 分享、整理成一封信、邀请双视角、记录为复盘——按可用实体收敛后进「更多」。
+ *
+ * 反馈**不在本函数里**：它由 [AiFeedbackRow] 作为次级控件渲染（见 [AiActionPlan]）。
  */
-fun actionsFor(sceneKey: String, structured: AiDto.StructuredOutput?): List<AiAction> {
+fun actionPlanFor(sceneKey: String, structured: AiDto.StructuredOutput?): AiActionPlan {
+    val ordered = orderedActionsFor(
+        sceneKey = sceneKey,
+        structured = structured,
+        // 门控只在这一处裁决：模型说「你们在吵」不够，产品开关没开就不许出现。
+        suggestMediation = FeatureGate.MEDIATION && structured?.suggestMediation == true,
+    )
+    return AiActionPlan(
+        primary = ordered.take(ActionLimits.PRIMARY_MAX),
+        more = ordered.drop(ActionLimits.PRIMARY_MAX),
+    )
+}
+
+/**
+ * 候选动作的**有序全集**（按优先级），不含门控裁决。
+ *
+ * 单独把这层抽出来是为了让「排序规则」可被直接测试：如果排序逻辑只藏在
+ * [actionPlanFor] 里，那么「调解排第一」这条规则在门控关闭时**永远测不到**
+ * ——测试只能退化成「门控关着时它不存在」，等于没测。把已裁决的
+ * `suggestMediation` 作为参数传进来，测试就能在不改产品开关的前提下
+ * 断言真实的排序行为。
+ */
+fun orderedActionsFor(
+    sceneKey: String,
+    structured: AiDto.StructuredOutput?,
+    suggestMediation: Boolean,
+): List<AiAction> {
     val hasReply = copyableReplyOf(structured, "") != null
+    // 有实质结论才谈得上「记录为复盘」：整屏空字段点一下只会得到一张空复盘
+    val hasConclusion =
+        !structured?.summary.isNullOrBlank() || !structured?.nextStep.isNullOrBlank()
+
     return buildList {
+        if (suggestMediation) add(AiAction.START_MEDIATION)
         if (hasReply) add(AiAction.COPY_REPLY)
         if (hasReply) add(AiAction.SHARE_REPLY)
         if (hasReply) add(AiAction.MAKE_LETTER)
-        if (sceneKey != "relationship_review") add(AiAction.INVITE_DUAL)
-        if (sceneKey != "relationship_review") add(AiAction.SAVE_REVIEW)
-        if (FeatureGate.MEDIATION && structured?.mediationId != null) add(AiAction.START_MEDIATION)
-        add(AiAction.FEEDBACK)
+        if (hasReply) add(AiAction.INVITE_DUAL)
+        if (sceneKey != "relationship_review" && hasConclusion) add(AiAction.SAVE_REVIEW)
     }
 }
+
+/**
+ * 兼容入口：只关心「这一行有哪些动作」的调用方（旧测试、未来可能的埋点）。
+ * 新代码请直接用 [actionPlanFor] —— 主动作上限是在分组里保证的。
+ */
+fun actionsFor(sceneKey: String, structured: AiDto.StructuredOutput?): List<AiAction> =
+    actionPlanFor(sceneKey, structured).all
 
 /** 待回访条目在会话语境下的最小形态（§8.3 反馈页与任务卡共用） */
 data class PendingFeedback(

@@ -29,6 +29,13 @@ data class MediationInviteUiState(
     val isLoading: Boolean = false,
     /** 是否仍在轮询等待（§8.5-1：状态变化靠推送 + 可靠轮询双保险）。 */
     val isPolling: Boolean = false,
+    /**
+     * 整改 B4.1-5：等「人」的窗口用尽后**暂停**轮询（不是失败）。
+     *
+     * 对方可能在上班/睡觉，等不到不等于坏了；但无限轮询会一直打接口。
+     * 暂停后页面给「继续等待」，点一下从新的窗口重新开始。
+     */
+    val waitingPaused: Boolean = false,
     val error: String = "",
 )
 
@@ -100,13 +107,20 @@ class MediationInviteViewModel @Inject constructor(
      * 这里做成「WS 状态帧（[onStatusFrame]）+ 可靠轮询」双保险：WS 断线时
      * 轮询仍然把状态拉回来，不把可达性押在长连接上。轮询在离开 inviting
      * 或页面销毁时自动停。
+     *
+     * 整改 B4.1-5：等的是**人**（对方接受邀请），所以用
+     * [MediationPolling.HUMAN_WAIT_TOTAL_BUDGET_MS] 这个更宽的口径；
+     * 窗口用尽只暂停（[MediationInviteUiState.waitingPaused]），由用户点
+     * 「继续等待」再开一轮——绝不当成失败。
      */
     fun startWaiting(sessionId: Long) {
         if (pollJob?.isActive == true) return
-        _uiState.update { it.copy(sessionId = sessionId, isPolling = true) }
+        _uiState.update { it.copy(sessionId = sessionId, isPolling = true, waitingPaused = false) }
         pollJob = viewModelScope.launch {
+            val startedAt = System.currentTimeMillis()
             while (true) {
-                delay(POLL_INTERVAL_MS)
+                delay(MediationPolling.HUMAN_WAIT_INTERVAL_MS)
+                // 单次请求失败不结束等待（网络抖动而已），下一轮继续
                 val detail = mediationRepository.getMediation(sessionId).getOrNull() ?: continue
                 _uiState.update { it.copy(status = detail.mediationStatus) }
                 val step = MediationFlow.whileWaiting(detail.mediationStatus)
@@ -115,8 +129,19 @@ class MediationInviteViewModel @Inject constructor(
                     _event.emit(MediationInviteUiEvent.MoveTo(step))
                     return@launch
                 }
+                if (MediationPolling.humanWaitExhausted(System.currentTimeMillis() - startedAt)) {
+                    _uiState.update { it.copy(isPolling = false, waitingPaused = true) }
+                    return@launch
+                }
             }
         }
+    }
+
+    /** 暂停后点「继续等待」：开新的一轮窗口（状态仍在服务端，这里只是重新开始轮询）。 */
+    fun resumeWaiting() {
+        val sessionId = _uiState.value.sessionId ?: return
+        _uiState.update { it.copy(waitingPaused = false) }
+        startWaiting(sessionId)
     }
 
     /** §2.3-4 推送侧：WS 状态帧到达时立即推进，不必等下一次轮询。 */
@@ -208,10 +233,5 @@ class MediationInviteViewModel @Inject constructor(
     override fun onCleared() {
         stopWaiting()
         super.onCleared()
-    }
-
-    private companion object {
-        /** 轮询间隔：够快让用户感觉是「实时」，又不至于把关系页/邀请页打成高频请求。 */
-        const val POLL_INTERVAL_MS = 4_000L
     }
 }

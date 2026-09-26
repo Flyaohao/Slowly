@@ -23,6 +23,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
+import com.couple.translator.core.ui.components.AppLinkText
 import com.couple.translator.core.ui.components.AppListItem
 import com.couple.translator.core.ui.components.AppListItemDivider
 import com.couple.translator.core.ui.components.AppPageHeader
@@ -38,11 +39,18 @@ import com.couple.translator.core.ui.theme.AppSpacing
  * 但「接口能读」不等于「用户找得到」——§8.0 的走查口径明确要求**能回看**。
  * 本页就是这个入口：列出 history 列表，点进去复用调解结果页（它按会话 id
  * 读服务端总结，不区分「刚结束」还是「一个月前」）。
+ *
+ * 整改 B4.1-6：每行带一个「重新发起」——上一次谈完，过一阵子又遇到类似的
+ * 情况是常态，而用户从这里的动机明确是「再谈一次」。它**不复用**旧会话
+ * （旧会话的总结是那次沟通的记录，不能被新的一轮覆盖），而是走说明页
+ * `POST /ai/mediation/start` 新建一场——真实 id 由后端给，与 AI 军师那条
+ * 建议入口走的是同一条路。
  */
 @Composable
 fun MediationHistoryScreen(
     onNavigateBack: () -> Unit,
     onOpenSession: (Long) -> Unit,
+    onRestartMediation: () -> Unit = {},
     viewModel: MediationHistoryViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -92,6 +100,9 @@ fun MediationHistoryScreen(
                         icon = Icons.Outlined.History,
                         title = "还没有完成的调解",
                         subtitle = "谈完之后，总结会留在这里",
+                        // 空列表也留一条出路：用户点进「调解回看」却没看到东西时，
+                        // 最可能的意图就是「那再谈一次」。
+                        action = { AppPrimaryButton(text = "发起调解", onClick = onRestartMediation) },
                     )
                 }
                 return@Column
@@ -114,6 +125,14 @@ fun MediationHistoryScreen(
                         ).joinToString(" · "),
                         leadingIcon = Icons.Outlined.History,
                         showChevron = true,
+                        // 整改 B4.1-6：行尾「重新发起」。它在整行的点击区里，
+                        // AppLinkText 自己消费了点击，所以点它不会连带打开详情。
+                        trailing = {
+                            AppLinkText(
+                                label = "重新发起",
+                                onClick = onRestartMediation,
+                            )
+                        },
                         onClick = { onOpenSession(item.sessionId) },
                     )
                 }
