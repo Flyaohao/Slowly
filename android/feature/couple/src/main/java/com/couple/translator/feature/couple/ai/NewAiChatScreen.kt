@@ -356,7 +356,9 @@ fun NewAiChatScreen(
                         // §8.2 行动行：按场景给上下文动作（调解受门控，不出残缺流程）。
                         // 整改 B4.1-P1：传**分组**不传平铺列表——同屏主动作 ≤2，
                         // 其余折进「更多」，由 AiActionRow 自己管展开态。
-                        val plan = actionPlanFor(uiState.sceneKey, structured)
+                        // 风险等级一并传进裁决：高风险下不给「把人拉进同一场会话」
+                        // 的动作（调解/邀请双视角），只留自己这一侧的出口。
+                        val plan = actionPlanFor(uiState.sceneKey, structured, risk)
                         if (!plan.isEmpty) {
                             Spacer(modifier = Modifier.height(10.dp))
                             AiActionRow(

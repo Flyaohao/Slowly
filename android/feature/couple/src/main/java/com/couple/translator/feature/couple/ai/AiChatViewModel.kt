@@ -12,6 +12,7 @@ import com.couple.translator.feature.couple.data.repository.AiRepository
 import com.couple.translator.feature.couple.data.repository.AnniversaryRepository
 import com.couple.translator.feature.couple.data.repository.LetterRepository
 import com.couple.translator.core.network.GenerationStreamEvent
+import com.couple.translator.core.ui.components.AiRiskLevel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -122,17 +123,38 @@ fun copyableReplyOf(structured: AiDto.StructuredOutput?, content: String): Strin
  *
  * 反馈**不在本函数里**：它由 [AiFeedbackRow] 作为次级控件渲染（见 [AiActionPlan]）。
  */
-fun actionPlanFor(sceneKey: String, structured: AiDto.StructuredOutput?): AiActionPlan {
+fun actionPlanFor(
+    sceneKey: String,
+    structured: AiDto.StructuredOutput?,
+    riskLevel: AiRiskLevel? = null,
+): AiActionPlan {
     val ordered = orderedActionsFor(
         sceneKey = sceneKey,
         structured = structured,
         // 门控只在这一处裁决：模型说「你们在吵」不够，产品开关没开就不许出现。
         suggestMediation = FeatureGate.MEDIATION && structured?.suggestMediation == true,
+        riskLevel = riskLevel,
     )
     return AiActionPlan(
         primary = ordered.take(ActionLimits.PRIMARY_MAX),
         more = ordered.drop(ActionLimits.PRIMARY_MAX),
     )
+}
+
+/**
+ * 安全门控：这些风险等级下**不得**给出「把人拉进同一场会话」的动作。
+ *
+ * 为什么客户端也要挡一道（后端已经会阻断产物）：行动行是在**离开页之前**
+ * 就渲染好的。若只靠后端，用户会先看到一个「发起双人调解」按钮，点进去才
+ * 发现流程走不通——那是一段残缺流程。控制/暴力/自伤语境下正确的事是把人
+ * 引向安全资源，而不是把双方再关进一间屋子。
+ *
+ * `heated_conflict` 刻意**不在**其中：双方情绪激动正是调解要处理的场景。
+ * null（normal / 未知）也不挡——不能因为解析不出等级就把正常用户的路堵死。
+ */
+fun mediationBlockedByRisk(riskLevel: AiRiskLevel?): Boolean = when (riskLevel) {
+    AiRiskLevel.MANIPULATION_RISK, AiRiskLevel.ABUSE_RISK, AiRiskLevel.SELF_HARM_RISK -> true
+    else -> false
 }
 
 /**
@@ -148,18 +170,22 @@ fun orderedActionsFor(
     sceneKey: String,
     structured: AiDto.StructuredOutput?,
     suggestMediation: Boolean,
+    riskLevel: AiRiskLevel? = null,
 ): List<AiAction> {
     val hasReply = copyableReplyOf(structured, "") != null
     // 有实质结论才谈得上「记录为复盘」：整屏空字段点一下只会得到一张空复盘
     val hasConclusion =
         !structured?.summary.isNullOrBlank() || !structured?.nextStep.isNullOrBlank()
+    // 高风险下「把人拉进同一场会话」的动作一律不给（见 [mediationBlockedByRisk]）。
+    // 复制/分享/写信不挡：那是让当事人**自己**把话说好，与风险处置不冲突。
+    val canPullPartnerIn = !mediationBlockedByRisk(riskLevel)
 
     return buildList {
-        if (suggestMediation) add(AiAction.START_MEDIATION)
+        if (suggestMediation && canPullPartnerIn) add(AiAction.START_MEDIATION)
         if (hasReply) add(AiAction.COPY_REPLY)
         if (hasReply) add(AiAction.SHARE_REPLY)
         if (hasReply) add(AiAction.MAKE_LETTER)
-        if (hasReply) add(AiAction.INVITE_DUAL)
+        if (hasReply && canPullPartnerIn) add(AiAction.INVITE_DUAL)
         if (sceneKey != "relationship_review" && hasConclusion) add(AiAction.SAVE_REVIEW)
     }
 }
@@ -168,8 +194,11 @@ fun orderedActionsFor(
  * 兼容入口：只关心「这一行有哪些动作」的调用方（旧测试、未来可能的埋点）。
  * 新代码请直接用 [actionPlanFor] —— 主动作上限是在分组里保证的。
  */
-fun actionsFor(sceneKey: String, structured: AiDto.StructuredOutput?): List<AiAction> =
-    actionPlanFor(sceneKey, structured).all
+fun actionsFor(
+    sceneKey: String,
+    structured: AiDto.StructuredOutput?,
+    riskLevel: AiRiskLevel? = null,
+): List<AiAction> = actionPlanFor(sceneKey, structured, riskLevel).all
 
 /** 待回访条目在会话语境下的最小形态（§8.3 反馈页与任务卡共用） */
 data class PendingFeedback(
