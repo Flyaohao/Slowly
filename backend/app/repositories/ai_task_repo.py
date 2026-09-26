@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.models.ai_task import (
     CLAIMABLE_STATES,
+    DEFAULT_MAX_ATTEMPTS,
     STATE_FAILED,
     STATE_PENDING,
     STATE_RUNNING,
@@ -74,11 +75,17 @@ def create_task(
     payload: Optional[dict] = None,
     max_attempts: int = 3,
 ) -> AiTask:
-    """建任务（幂等）。返回**已存在或新建**的那一行。
+    """建任务（幂等，**不提交**——事务由顶层业务操作统一控制）。
 
     并发下两个请求可能同时走到 INSERT：唯一约束会让后到的那个抛
-    IntegrityError，这里接住并回读既有行——调用方拿到的永远是同一个任务，
-    这正是「双方同时提交只创建一个改写任务」在存储层的保证。
+    IntegrityError。这里用 SAVEPOINT（`begin_nested`）把 INSERT 的失败
+    **只回滚到本次插入**，不动调用方外层事务里已经完成的「状态 CAS +
+    revision 自增」——这正是「IntegrityError 只回滚当前原子事务，不破坏
+    已经存在的正确任务」的落点。回读既有行后返回，调用方拿到的永远是
+    同一个任务（「双方同时提交只创建一个改写任务」的存储层保证）。
+
+    幂等插入完成后 `task.id` 已由 flush 填充（autoincrement），供调用方
+    回写 `rewrite_task_id` / `summary_task_id`。
     """
     key = idempotency_key(task_type, session_id, revision)
     existing = get_by_idempotency_key(db, key)
@@ -98,14 +105,14 @@ def create_task(
     )
     db.add(task)
     try:
-        db.commit()
+        with db.begin_nested():
+            db.flush()
     except IntegrityError:
-        db.rollback()
+        # 只回滚本次 INSERT 的 SAVEPOINT；外层事务（状态 CAS、revision 自增）不受影响
         existing = get_by_idempotency_key(db, key)
         if existing is None:
             raise
         return existing
-    db.refresh(task)
     return task
 
 
@@ -129,6 +136,9 @@ def claim_next_task(
     now = datetime.utcnow()
     query = db.query(AiTask.id).filter(
         AiTask.state.in_(CLAIMABLE_STATES),
+        # P0-3：领取硬门槛——尝试次数未耗尽才可领取。耗尽的行只能靠用户
+        # 显式重试产生新版本的新任务，绝不自动再跑（连续崩溃不得无限执行）。
+        AiTask.attempt < AiTask.max_attempts,
         or_(AiTask.locked_until.is_(None), AiTask.locked_until < now),
         or_(AiTask.next_retry_at.is_(None), AiTask.next_retry_at <= now),
     )
@@ -143,6 +153,7 @@ def claim_next_task(
             .where(
                 AiTask.id == task_id,
                 AiTask.state.in_(CLAIMABLE_STATES),
+                AiTask.attempt < AiTask.max_attempts,
                 or_(AiTask.locked_until.is_(None), AiTask.locked_until < now),
                 or_(AiTask.next_retry_at.is_(None), AiTask.next_retry_at <= now),
             )
@@ -242,16 +253,23 @@ def claim_for_retry(db: Session, session_id: int, task_type: str) -> Optional[Ai
 
 def recover_stale_tasks(
     db: Session, *, now: Optional[datetime] = None, limit: int = 50
-) -> int:
-    """把租约过期仍停在 running 的任务打回 pending（进程崩溃后的恢复）。
+):
+    """回收租约过期仍停在 running 的任务（进程崩溃后的恢复）。
 
     **不清零 attempt**：崩溃本身也是一次真实的尝试失败，清零会让一个
-    必然崩溃的任务无限重试。耗尽的由 [mark_failed] 收口。
+    必然崩溃的任务无限重试。回收结果分两路（P0-3）：
+
+    - 未耗尽（``attempt < max_attempts``）：恢复为 pending，重排执行；
+    - 已耗尽（``attempt >= max_attempts``）：任务进入 failed 终态，
+      由调用方（服务层）把会话推进到对应 ``*_failed``——不允许出现
+      ``attempt > max_attempts`` 的无限重试。
+
+    返回 ``(recovered, exhausted)``：recovered 为恢复为 pending 的数量，
+    exhausted 为本次判为 failed 的任务列表（供服务层写会话失败态）。
     """
     now = now or datetime.utcnow()
-    stale_ids = [
-        row[0]
-        for row in db.query(AiTask.id)
+    stale_rows = (
+        db.query(AiTask.id, AiTask.attempt, AiTask.max_attempts)
         .filter(
             AiTask.state == STATE_RUNNING,
             AiTask.locked_until.isnot(None),
@@ -260,38 +278,77 @@ def recover_stale_tasks(
         .order_by(AiTask.id.asc())
         .limit(limit)
         .all()
-    ]
+    )
     recovered = 0
-    for task_id in stale_ids:
-        result = db.execute(
-            update(AiTask)
-            .where(
-                AiTask.id == task_id,
-                AiTask.state == STATE_RUNNING,
-                AiTask.locked_until.isnot(None),
-                AiTask.locked_until < now,
+    exhausted: List[AiTask] = []
+    for task_id, attempt, max_attempts in stale_rows:
+        if int(attempt or 0) >= int(max_attempts or DEFAULT_MAX_ATTEMPTS):
+            result = db.execute(
+                update(AiTask)
+                .where(
+                    AiTask.id == task_id,
+                    AiTask.state == STATE_RUNNING,
+                    AiTask.locked_until.isnot(None),
+                    AiTask.locked_until < now,
+                )
+                .values(
+                    state=STATE_FAILED,
+                    locked_by=None,
+                    locked_until=None,
+                    next_retry_at=None,
+                    last_error="worker 中断且重试耗尽",
+                    heartbeat_at=None,
+                    finished_at=now,
+                )
             )
-            .values(
-                state=STATE_PENDING,
-                locked_by=None,
-                locked_until=None,
-                next_retry_at=None,
-                last_error="worker 中断，任务已回收重排",
-                heartbeat_at=None,
-                started_at=None,
+            db.commit()
+            if result.rowcount == 1:
+                exhausted.append(get_task_by_id(db, task_id))
+        else:
+            result = db.execute(
+                update(AiTask)
+                .where(
+                    AiTask.id == task_id,
+                    AiTask.state == STATE_RUNNING,
+                    AiTask.locked_until.isnot(None),
+                    AiTask.locked_until < now,
+                )
+                .values(
+                    state=STATE_PENDING,
+                    locked_by=None,
+                    locked_until=None,
+                    next_retry_at=None,
+                    last_error="worker 中断，任务已回收重排",
+                    heartbeat_at=None,
+                    started_at=None,
+                )
             )
-        )
-        db.commit()
-        recovered += int(result.rowcount or 0)
-    return recovered
+            db.commit()
+            recovered += int(result.rowcount or 0)
+    return recovered, exhausted
 
 
-def heartbeat(db: Session, task_id: int, *, lease_seconds: int = DEFAULT_LEASE_SECONDS) -> bool:
-    """续租。返回 False 表示这一行已经不属于当前执行者（被回收/作废）。"""
+def heartbeat(
+    db: Session,
+    task_id: int,
+    worker_id: str,
+    *,
+    lease_seconds: int = DEFAULT_LEASE_SECONDS,
+) -> bool:
+    """续租。返回 False 表示这一行已经不属于当前执行者（被回收/作废）。
+
+    P0-2：必须校验 `task_id + state + locked_by` 三者——旧执行者不得给
+    新执行者续租：任务被回收后 `locked_by` 已被清空或改写，旧执行者手里
+    的 worker_id 不再命中条件，续租失败。
+    """
     now = datetime.utcnow()
     result = db.execute(
         update(AiTask)
-        .where(AiTask.id == task_id, AiTask.state == STATE_RUNNING)
+        .where(
+            AiTask.id == task_id,
+            AiTask.state == STATE_RUNNING,
+            AiTask.locked_by == worker_id,
+        )
         .values(heartbeat_at=now, locked_until=now + timedelta(seconds=lease_seconds))
     )
     db.commit()
@@ -302,6 +359,7 @@ def mark_succeeded(
     task: AiTask,
     *,
     expected_revision: Optional[int] = None,
+    commit: bool = True,
 ) -> bool:
     """标记成功。返回 False 表示**没有真正收口**，调用方不得认为结果已生效。
 
@@ -312,11 +370,19 @@ def mark_succeeded(
       「任务表里有一行成功、业务上却没有它的结果」这种矛盾不会出现。
     - 任务行已经不属于本次执行（租约过期后被回收、甚至已被别的 worker 重新
       领走）：本执行者的产出同样是过期的，什么都不写。
+
+    `commit=False` 供「会话 CAS + assistant 消息 + 任务 succeeded」同一事务的
+    生成结果写回路径使用（见 mediation_service._commit_generation_result）。
     """
     if expected_revision is not None and int(task.revision or 0) != int(expected_revision):
-        _finalize(db, task.id, STATE_SUPERSEDED, error="结果已过期，被更新版本取代")
+        _finalize(
+            db, task.id, STATE_SUPERSEDED,
+            error="结果已过期，被更新版本取代",
+            locked_by=task.locked_by,
+            commit=commit,
+        )
         return False
-    if not _finalize(db, task.id, STATE_SUCCEEDED, locked_by=task.locked_by):
+    if not _finalize(db, task.id, STATE_SUCCEEDED, locked_by=task.locked_by, commit=commit):
         return False
     return True
 
@@ -351,7 +417,9 @@ def schedule_retry(db: Session, task: AiTask, error: str, backoff_seconds: int) 
         update(AiTask)
         .where(
             AiTask.id == task.id,
-            # 归属判据：本执行者领走时写下的值仍在，才算这次执行还有发言权
+            # 归属判据（P0-2）：本执行者领走时写下的值仍在、且任务仍在运行，
+            # 才算这次执行还有发言权
+            AiTask.state == STATE_RUNNING,
             AiTask.locked_by == task.locked_by,
         )
         .values(
@@ -406,6 +474,7 @@ def _finalize(
     *,
     error: Optional[str] = None,
     locked_by: Optional[str],
+    commit: bool = True,
 ) -> bool:
     """写终态。返回是否真的由本次调用写成（rowcount==1）。
 
@@ -416,8 +485,17 @@ def _finalize(
 
     调用方传 `None` 时条件退化成 `locked_by IS NULL`（对应用户重试复位后
     的「无主」任务），语义一致：没主的行谁都能收口。
+
+    P0-2：额外限定 `state == running`——终态只由「仍在运行」的任务收口，
+    已经 succeeded/failed/superseded 的行不再被反复改写。
+
+    `commit=False` 供「业务结果与任务收口同一事务」的路径使用（生成结果
+    写回），此时 UPDATE 留在调用方事务里，由调用方统一 commit/rollback。
     """
-    conditions = [AiTask.id == task_id]
+    conditions = [
+        AiTask.id == task_id,
+        AiTask.state == STATE_RUNNING,
+    ]
     if locked_by is None:
         conditions.append(AiTask.locked_by.is_(None))
     else:
@@ -431,7 +509,8 @@ def _finalize(
     if error is not None:
         values["last_error"] = error
     result = db.execute(update(AiTask).where(*conditions).values(**values))
-    db.commit()
+    if commit:
+        db.commit()
     return bool(result.rowcount)
 
 

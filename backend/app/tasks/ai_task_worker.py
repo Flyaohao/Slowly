@@ -29,7 +29,6 @@ import signal
 import time
 
 from app.core.database import SessionLocal
-from app.repositories import ai_task_repo
 from app.services import ai_task_service
 
 logger = logging.getLogger("couple.ai.worker")
@@ -54,7 +53,7 @@ def run_once() -> int:
     """一次巡回：先回收僵尸任务，再执行到期任务。返回执行数量。"""
     db = SessionLocal()
     try:
-        recovered = ai_task_repo.recover_stale_tasks(db)
+        recovered = ai_task_service.recover_stale_tasks(db)
         if recovered:
             logger.warning("回收了 %s 个中断任务（worker 重启/租约过期）", recovered)
         return ai_task_service.run_due_tasks(db, worker_id=ai_task_service.WORKER_ID, limit=BATCH)

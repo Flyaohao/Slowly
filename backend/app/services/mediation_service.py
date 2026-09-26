@@ -4,6 +4,7 @@ from typing import Optional, Dict, List, Set, Tuple
 from datetime import datetime
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
@@ -56,13 +57,11 @@ ASYNC_GENERATION_STATUSES = {
 #: 需要用户介入（点重试）才能继续的终态失败
 TERMINAL_FAILURE_STATUSES = frozenset({"rewrite_failed", "summary_failed"})
 
-#: 「等生成」状态：**人**停在这里，生成结果将把它推到下一步。
-#:
-#: 与 `ASYNC_GENERATION_STATUSES` 的区别是「谁在等」：后者是任务**自己**
-#: 推进出来的中间态（重试重排后要能再推进，所以是宽集合）；这里是**人**的
-#: 等待态——只有人做了新动作（补了输入）才会离开它。生成失败时**绝不能**
-#: 把人推到这里来：那时没有任何任务会再跑，用户等的是一个永远不来的结果。
-WAITING_GENERATION_STATUSES = frozenset({"confirming"})
+#: 注意：`confirming` **不是**「等生成」态。它是**人**停在这里的等待态——
+#: 只有人做了新动作（补输入 / 点确认）才会离开它，没有任何在跑的任务会把它
+#: 推到下一步。所以它不在 `ASYNC_GENERATION_STATUSES` 里，也**不得**被
+#: `_claim_generation` 当作可推进状态（否则重复执行会往确认页再写一份稿）。
+#: 生成失败时也**绝不能**把人推到这里来：那时没有任何任务会再跑。
 
 #: 契约 §8.5-3：双方独立输入在「明确公开（总结生成）」之前不得互相返回。
 #: 这些状态下 GET {id} 的 messages 只回当前用户自己的发言。
@@ -87,6 +86,59 @@ def _raise_if_degraded(ai_response: dict, scene_key: str) -> None:
     for marker in _LLM_DEGRADED_MARKERS:
         if marker in text:
             raise LlmError("调解生成降级（%s）：%s" % (scene_key, marker))
+
+
+#: 合法风险等级（与 `app/schemas/ai_output.RiskLevel`、`safety_service.RISK_LEVEL_ORDER`
+#: 逐字一致）。模型的结构化输出**不是可信输入**：大小写、空格、自造值都会出现。
+_KNOWN_RISK_LEVELS = (
+    "normal", "heated_conflict", "manipulation_risk", "abuse_risk", "self_harm_risk",
+)
+
+#: 高风险等级：这些等级下**不得**产出双人调解结果（P0-6「高风险禁止双人调解」）。
+#:
+#: 依据：调解的产物是「替双方把话说软」。若一方的表达属于控制/威胁（manipulation）、
+#: 暴力/胁迫（abuse）或自伤风险（self_harm），把它改写成一份体面的稿子等于替施害
+#: 一方粉饰，甚至会成为当事人继续留在有害关系里的理由。正确处置是**停止调解、
+#: 给出安全资源**。`heated_conflict` 不在其中——双方情绪激动正是调解要处理的场景。
+BLOCKING_RISK_LEVELS = frozenset({
+    "manipulation_risk", "abuse_risk", "self_harm_risk",
+})
+
+
+def normalize_risk_level(raw) -> str:
+    """把模型给的 `risk_level` 收敛到白名单；未知值按 `normal` 处理。
+
+    归一化本身是安全链路的一环：门控按等级判定，若模型返回 `"High"` 这类
+    不在白名单的值，未归一化会让判定静默落空（等于安全链路失效）。
+    """
+    text = str(raw if raw is not None else "").strip().lower()
+    return text if text in _KNOWN_RISK_LEVELS else "normal"
+
+
+def _normalize_generation_payload(payload: dict, *, summary: bool) -> dict:
+    """结构化输出归一化（写库前的唯一收敛点）。
+
+    - `risk_level` 过 [normalize_risk_level]；
+    - 改写的两侧文本一律成 str（模型可能给 null / 数字）；
+    - 总结的三个列表一律成 `List[str]`（模型可能给 str 或含 null 的列表，
+      直接把 None 序列化给客户端会让 Kotlin 侧解析崩在 `List<String>` 上）。
+    """
+    data = dict(payload or {})
+    data["risk_level"] = normalize_risk_level(data.get("risk_level"))
+    if summary:
+        for key in ("common_points", "differences", "next_actions"):
+            value = data.get(key)
+            if isinstance(value, str):
+                value = [value.strip()] if value.strip() else []
+            elif isinstance(value, (list, tuple)):
+                value = [str(v).strip() for v in value if str(v or "").strip()]
+            else:
+                value = []
+            data[key] = value
+    else:
+        for key in ("rewrite_a", "rewrite_b"):
+            data[key] = str(data.get(key) or "").strip()
+    return data
 
 
 
@@ -152,10 +204,57 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+def _active_slot(relation_id: int, user_id: int) -> str:
+    """活跃调解并发兜底槽位：同一 (relation, inviter) 只会有一个活跃调解。"""
+    return "%s:%s" % (relation_id, user_id)
+
+
+def _find_active_mediation(
+    db: Session, relation_id: int, user_id: int
+) -> Optional[AiChatSession]:
+    """同一情侣关系中**同一发起者**现有的活跃调解（无则 None）。"""
+    return (
+        db.query(AiChatSession)
+        .filter(
+            AiChatSession.relation_id == relation_id,
+            AiChatSession.user_id == user_id,
+            AiChatSession.session_type == "mediation",
+            AiChatSession.mediation_status.in_(ACTIVE_MEDIATION_STATUSES),
+        )
+        .order_by(AiChatSession.created_at.desc())
+        .populate_existing()
+        .first()
+    )
+
+
+def _start_payload(session: AiChatSession, user_id: int) -> dict:
+    return {
+        "session_id": session.id,
+        "partner_user_id": session.partner_user_id,
+        "mediation_status": session.mediation_status,
+        # 契约 §2.3-1：start 只有发起方能调，固定 inviter
+        "my_role": "inviter",
+    }
+
+
 def start_mediation(db: Session, user_id: int, relation_id: int) -> dict:
+    """发起双人调解（**幂等**）。
+
+    同一情侣关系中同一发起者不能同时有多场活跃调解：重复 start（网络重试、
+    响应丢失、双击、双设备）返回**现有活跃会话**，方便客户端恢复。
+
+    数据库层并发兜底：不是「先 SELECT 再 INSERT」，而是把活跃槽位
+    `mediation_active_slot` 写进唯一约束——两个并发 start 只有一个能插入成功，
+    另一个命中 IntegrityError 后回读现有会话。
+    """
     relation = couple_repo.get_relation_by_id(db, relation_id)
     if not relation:
         raise ValueError("50001")
+
+    existing = _find_active_mediation(db, relation_id, user_id)
+    if existing is not None:
+        return _start_payload(existing, user_id)
+
     partner_id = relation.user_b_id if relation.user_a_id == user_id else relation.user_a_id
     session = AiChatSession(
         user_id=user_id,
@@ -166,21 +265,24 @@ def start_mediation(db: Session, user_id: int, relation_id: int) -> dict:
         session_type="mediation",
         partner_user_id=partner_id,
         mediation_status="inviting",
+        mediation_active_slot=_active_slot(relation_id, user_id),
     )
     db.add(session)
-    db.flush()
+    try:
+        with db.begin_nested():
+            db.flush()
+    except IntegrityError:
+        # 并发兜底：另一请求已插入同槽位 → 只回滚本次 INSERT，回读并返回现有会话
+        existing = _find_active_mediation(db, relation_id, user_id)
+        if existing is None:
+            raise
+        return _start_payload(existing, user_id)
     db.commit()
 
-    # 契约 §2.3-5：start 成功后必须通知伴侣（此前零调用点，邀请只能靠 WS 偶遇）
+    # 契约 §2.3-5：start 成功后必须通知伴侣（仅在真正新建时通知，幂等返回不重发）
     _notify_invite(db, user_id, partner_id, session.id)
 
-    return {
-        "session_id": session.id,
-        "partner_user_id": partner_id,
-        "mediation_status": "inviting",
-        # 契约 §2.3-1：start 只有发起方能调，固定 inviter
-        "my_role": "inviter",
-    }
+    return _start_payload(session, user_id)
 
 
 def _notify_invite(db: Session, inviter_id: int, partner_id: int, session_id: int) -> None:
@@ -265,23 +367,66 @@ def _broadcast_status(session: AiChatSession) -> None:
 
 
 def accept_mediation(db: Session, session_id: int, user_id: int) -> dict:
+    """接受邀请：**仅 inviting → inputting**（原子状态转换）。
+
+    - 已 inputting 的重复 accept 幂等返回当前状态（双击/重试不倒退）；
+    - rewriting / confirming / summarizing / completed / 失败态均不得倒退；
+    - 只有伴侣能接受（发起方自己接受 = 无权限）。
+    """
     session = _get_session(db, session_id, user_id)
-    if session.mediation_status == "completed":
-        raise ValueError("50003")
     if session.partner_user_id != user_id:
         raise ValueError("50002")
-    session.mediation_status = "inputting"
+    if session.mediation_status == "inputting":
+        return {"session_id": session_id, "mediation_status": "inputting"}
+    if session.mediation_status != "inviting":
+        raise ValueError("50003")
+
+    # 条件 UPDATE：不能先读后写（并发下两个 accept 只有一个 rowcount=1）
+    result = db.execute(
+        update(AiChatSession)
+        .where(
+            AiChatSession.id == session_id,
+            AiChatSession.mediation_status == "inviting",
+        )
+        .values(mediation_status="inputting")
+    )
     db.commit()
+    session = _reload(db, session_id)
+    if result.rowcount != 1:
+        # 并发落败：已被别处推进为 inputting → 幂等返回；否则状态不允许
+        if session.mediation_status == "inputting":
+            return {"session_id": session_id, "mediation_status": "inputting"}
+        raise ValueError("50003")
     _broadcast_status(session)
     return {"session_id": session_id, "mediation_status": "inputting"}
 
 
 def reject_mediation(db: Session, session_id: int, user_id: int) -> dict:
+    """拒绝邀请：**仅 inviting** 可拒绝（原子），终态 completed（可回看）。
+
+    产品里「中途退出」是独立的 cancel/end 操作（`next_step("end")`），
+    不复用 reject——reject 只属于「还没接受」的阶段。
+    """
     session = _get_session(db, session_id, user_id)
     if session.partner_user_id != user_id:
         raise ValueError("50002")
-    session.mediation_status = "completed"
+    if session.mediation_status != "inviting":
+        raise ValueError("50003")
+
+    result = db.execute(
+        update(AiChatSession)
+        .where(
+            AiChatSession.id == session_id,
+            AiChatSession.mediation_status == "inviting",
+        )
+        .values(mediation_status="completed", mediation_active_slot=None)
+    )
     db.commit()
+    session = _reload(db, session_id)
+    if result.rowcount != 1:
+        if session.mediation_status == "completed":
+            return {"session_id": session_id, "mediation_status": "completed"}
+        raise ValueError("50003")
     _broadcast_status(session)
     return {"session_id": session_id, "mediation_status": "completed"}
 
@@ -294,13 +439,14 @@ def _claim_transition(
 ) -> bool:
     """条件 UPDATE 的原子状态转换；返回是否**由本次调用完成**了转换。
 
+    **不提交**（P0-1）：状态 CAS 只是「入队原子事务」的第一步，与 revision
+    自增、任务插入、task_id 回写由调用方同一次 commit 收口。这里只把
+    「判断」与「推进」压成一条 SQL，rowcount 决定谁赢——后到的那个拿到 0，
+    按既有状态幂等返回。
+
     为什么必须原子：`submit_input` / `confirm_rewrite` 都是「先读状态、再写状态」，
     两个请求同时进来会双双读到 `inputting`，于是各自创建任务、各自广播，
-    同一场调解被推进两次。条件 UPDATE 把「判断」与「推进」压成一条 SQL，
-    rowcount 决定谁赢——后到的那个拿到 0，按既有状态幂等返回。
-
-    SQLite 同样支持本写法（UPDATE ... WHERE 状态条件），所以 hermetic 测试
-    走的是与生产完全相同的路径。
+    同一场调解被推进两次。条件 UPDATE 把「判断」与「推进」压成一条 SQL。
     """
     result = db.execute(
         update(AiChatSession)
@@ -310,12 +456,11 @@ def _claim_transition(
         )
         .values(mediation_status=new_status)
     )
-    db.commit()
     return result.rowcount == 1
 
 
 def _bump_revision(db: Session, session_id: int) -> int:
-    """推进会话内容版本（原子自增）；返回推进后的版本。
+    """推进会话内容版本（原子自增）；返回推进后的版本。**不提交**（P0-1）。
 
     版本是「任务结果是否还新鲜」的唯一判据：任务只写回版本仍等于自己那一版
     的结果，因此**旧任务不可能覆盖新版本结果**。
@@ -325,7 +470,6 @@ def _bump_revision(db: Session, session_id: int) -> int:
         .where(AiChatSession.id == session_id)
         .values(mediation_revision=AiChatSession.mediation_revision + 1)
     )
-    db.commit()
     return _current_revision(db, session_id)
 
 
@@ -351,13 +495,21 @@ def submit_input(db: Session, session_id: int, user_id: int, content: str) -> di
         safety_resp = get_safety_response(safety_risk)
         return {"blocked": True, "risk_level": safety_risk, "safety_response": safety_resp}
 
-    # 契约 §2.4-1：user 消息必须带作者，按人判定/按作者分组都靠它
-    ai_repo.create_message(db, session_id, "user", content, user_id=user_id)
-    db.commit()
+    # 契约 §2.4-1：user 消息必须带作者，按人判定/按作者分组都靠它。
+    # 幂等：同一用户重复提交**完全相同**的内容不追加第二条（双击/网络重试/
+    # 超时重发）；不同内容仍按条落库（用户可以追加倾诉）。
+    messages = ai_repo.get_messages_by_session(db, session_id)
+    already_same = any(
+        m.role == "user" and m.user_id == user_id and m.content == content
+        for m in messages
+    )
+    if not already_same:
+        ai_repo.create_message(db, session_id, "user", content, user_id=user_id)
+        db.commit()
+        messages = ai_repo.get_messages_by_session(db, session_id)
 
     # 契约 §2.4-2：「双方已提交」按 distinct user 判定——同一个人提交两次不算；
     # user_id 为 NULL 的旧数据不参与判定（无从归属）。
-    messages = ai_repo.get_messages_by_session(db, session_id)
     submitted = {
         m.user_id for m in messages
         if m.role == "user" and m.user_id is not None
@@ -367,17 +519,18 @@ def submit_input(db: Session, session_id: int, user_id: int, content: str) -> di
     )
 
     if both_submitted:
-        # 整改 B4.1-3：双方同时提交时，只有**一个**请求能把会话从
+        # 整改 B4.1-3 + B4.2-P0：双方同时提交时，只有**一个**请求能把会话从
         # inputting/accepted 推进到 rewriting，另一个拿到 rowcount=0，
         # 走下面的幂等返回。任务本身还额外有唯一约束兜底（同版本同类型只有一行）。
-        if _claim_transition(
-            db, session_id, ("inputting", "accepted"), "rewriting"
-        ):
-            # 版本推进：本轮的改写产出属于这个版本
-            _bump_revision(db, session_id)
-            session = _reload(db, session_id)
-            _enqueue_rewrite(db, session, requested_by_user_id=user_id)
-            _broadcast_status(session)
+        # 状态 CAS + revision + 任务插入 + task_id 回写在 `_enqueue_generation`
+        # 里**同一次 commit** 收口。
+        _enqueue_generation(
+            db, session_id,
+            from_statuses=("inputting", "accepted"),
+            to_status="rewriting",
+            task_type=TASK_REWRITE,
+            requested_by_user_id=user_id,
+        )
         return {
             "session_id": session_id,
             "mediation_status": "rewriting",
@@ -394,30 +547,50 @@ def submit_input(db: Session, session_id: int, user_id: int, content: str) -> di
     }
 
 
-def _enqueue_rewrite(
+def _enqueue_generation(
     db: Session,
-    session: AiChatSession,
+    session_id: int,
     *,
+    from_statuses: Tuple[str, ...],
+    to_status: str,
+    task_type: str,
     requested_by_user_id: Optional[int],
-    regenerate: bool = False,
     supplement: Optional[str] = None,
-) -> None:
-    """把改写（或只重生成某一侧）排进持久化任务队列，然后催一下 worker。"""
+) -> bool:
+    """原子入队（P0-1）：状态 CAS + revision 自增 + 任务插入 + task_id 回写，
+    一次 commit 收口；广播与 kick 只在提交成功后执行。
+
+    rewrite / regenerate / summary / retry 四条路径**统一走这里**。任何一步
+    抛异常（包括任务插入撞唯一键、task_id 回写失败）都会回滚整个事务并
+    重抛，绝不留下「状态已 rewriting 但任务不存在」的半成品。
+
+    返回是否由本次调用真正推进（拿到 CAS 的那一方）；落败方返回 False，
+    调用方按既有状态幂等返回。
+    """
     from app.services import ai_task_service
 
-    payload = {}
-    if supplement:
-        # 载荷里**不存补充说明原文**：它在消息表里已有归属，任务只需要知道
-        # 「重生成哪一侧」这类 ID 级信息（隐私红线：敏感正文不冗余存储）。
-        payload["has_supplement"] = True
-    ai_task_service.ensure_task(
-        db,
-        session,
-        TASK_REGENERATE if regenerate else TASK_REWRITE,
-        requested_by_user_id=requested_by_user_id,
-        payload=payload,
-    )
+    try:
+        if not _claim_transition(db, session_id, from_statuses, to_status):
+            return False
+        _bump_revision(db, session_id)
+        fresh = _reload(db, session_id)
+        payload = {}
+        if supplement:
+            # 载荷里**不存补充说明原文**：它在消息表里已有归属，任务只需要知道
+            # 「重生成哪一侧」这类 ID 级信息（隐私红线：敏感正文不冗余存储）。
+            payload["has_supplement"] = True
+        ai_task_service.ensure_task(
+            db, fresh, task_type,
+            requested_by_user_id=requested_by_user_id,
+            payload=payload,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     ai_task_service.kick()
+    _broadcast_status(fresh)
+    return True
 
 
 
@@ -479,16 +652,14 @@ def confirm_rewrite(
         _set_my_confirm(session, session.user_id, None)
         _set_my_confirm(session, session.partner_user_id, None)
         db.commit()
-        if _claim_transition(db, session_id, ("confirming",), "rewriting"):
-            _bump_revision(db, session_id)
-            fresh = _reload(db, session_id)
-            _enqueue_rewrite(
-                db, fresh,
-                requested_by_user_id=user_id,
-                regenerate=True,
-                supplement=supplement,
-            )
-            _broadcast_status(fresh)
+        _enqueue_generation(
+            db, session_id,
+            from_statuses=("confirming",),
+            to_status="rewriting",
+            task_type=TASK_REGENERATE,
+            requested_by_user_id=user_id,
+            supplement=supplement,
+        )
         return _confirm_response(db, session_id, user_id)
 
     # 审查 H2 的**按人版本**：自己那一侧没有改写文本时，绝不记下确认——
@@ -497,14 +668,13 @@ def confirm_rewrite(
     # 整改 B4.1-2：补生成同样是一次 LLM 调用，此前是同步跑（用户要等 120s）。
     # 现在与首次改写走同一条后台任务路径：状态翻回 rewriting，客户端继续轮询。
     if not _my_rewrite_text(db, session, user_id):
-        if _claim_transition(db, session_id, ("confirming",), "rewriting"):
-            session = _reload(db, session_id)
-            _bump_revision(db, session_id)
-            fresh = _reload(db, session_id)
-            _enqueue_rewrite(
-                db, fresh, requested_by_user_id=user_id, regenerate=True
-            )
-            _broadcast_status(fresh)
+        _enqueue_generation(
+            db, session_id,
+            from_statuses=("confirming",),
+            to_status="rewriting",
+            task_type=TASK_REGENERATE,
+            requested_by_user_id=user_id,
+        )
         return _confirm_response(db, session_id, user_id)
 
     _set_my_confirm(session, user_id, datetime.now())
@@ -518,25 +688,14 @@ def confirm_rewrite(
 
     # 双方确认齐了 → summarizing（后台任务生成总结，§8.5-8）。
     # CAS：双方同时点确认时，只有先到的那个请求能建总结任务。
-    if _claim_transition(db, session_id, ("confirming",), "summarizing"):
-        session = _reload(db, session_id)
-        _bump_revision(db, session_id)
-        session = _reload(db, session_id)
-        _enqueue_summary(db, session, requested_by_user_id=user_id)
-        _broadcast_status(session)
-    return _confirm_response(db, session_id, user_id)
-
-
-def _enqueue_summary(
-    db: Session, session: AiChatSession, *, requested_by_user_id: Optional[int]
-) -> None:
-    """把总结排进持久化任务队列，然后催一下 worker。"""
-    from app.services import ai_task_service
-
-    ai_task_service.ensure_task(
-        db, session, TASK_SUMMARY, requested_by_user_id=requested_by_user_id
+    _enqueue_generation(
+        db, session_id,
+        from_statuses=("confirming",),
+        to_status="summarizing",
+        task_type=TASK_SUMMARY,
+        requested_by_user_id=user_id,
     )
-    ai_task_service.kick()
+    return _confirm_response(db, session_id, user_id)
 
 
 def retry_generation(db: Session, session_id: int, user_id: int) -> dict:
@@ -544,8 +703,6 @@ def retry_generation(db: Session, session_id: int, user_id: int) -> dict:
 
     不新建会话、不丢已有输入与改写——只是把失败的那一步重新排进任务队列。
     """
-    from app.services import ai_task_service
-
     session = _get_session(db, session_id, user_id)
     if session.mediation_status not in TERMINAL_FAILURE_STATUSES:
         raise ValueError("50003")
@@ -560,16 +717,13 @@ def retry_generation(db: Session, session_id: int, user_id: int) -> dict:
         resumed = "rewriting"
         task_type = TASK_REWRITE
 
-    if _claim_transition(db, session_id, TERMINAL_FAILURE_STATUSES, resumed):
-        _bump_revision(db, session_id)
-        session = _reload(db, session_id)
-        # 版本已推进：任务必须在**新版本**上重跑。同一版本的旧任务（已 failed）
-        # 是一条历史记录，不复用它——`ensure_task` 会按新版本建一行。
-        ai_task_service.ensure_task(
-            db, session, task_type, requested_by_user_id=user_id
-        )
-        ai_task_service.kick()
-        _broadcast_status(session)
+    _enqueue_generation(
+        db, session_id,
+        from_statuses=TERMINAL_FAILURE_STATUSES,
+        to_status=resumed,
+        task_type=task_type,
+        requested_by_user_id=user_id,
+    )
 
     return {
         "session_id": session_id,
@@ -806,14 +960,52 @@ def _last_input(messages: List[AiChatMessage], uid: Optional[int]) -> str:
 def next_step(db: Session, session_id: int, user_id: int, action: str) -> dict:
     session = _get_session(db, session_id, user_id)
     if action == "end":
-        session.mediation_status = "completed"
+        # 终止（中途退出）：清空活跃槽位 + 推进版本，一次条件 UPDATE 收口。
+        # 推进版本让**在途任务**的写回与失败收口全部失效（它们按 revision
+        # 比对），杜绝「点了退出，正在跑的改写失败后又把会话翻回 rewrite_failed」。
+        db.execute(
+            update(AiChatSession)
+            .where(AiChatSession.id == session_id)
+            .values(
+                mediation_status="completed",
+                mediation_active_slot=None,
+                mediation_revision=AiChatSession.mediation_revision + 1,
+            )
+        )
+        db.commit()
+        session = _reload(db, session_id)
     elif action == "pause":
         pass
     elif action == "continue":
-        session.mediation_status = "inputting"
+        # 「继续沟通」：把这一场重新打开（结果页的下一步动作）。
+        #
+        # 必须**重新占用活跃槽位**：completed 时槽位已被释放，不重新占用就断了
+        # 「同一发起者最多一场活跃调解」这条不变量——用户可以一边接着谈这一场，
+        # 一边再发起一场新的，两场并行生成、两次总结。槽位被别人占着（并发下
+        # 另一场刚好开起来）时唯一约束会拒掉，此时按状态冲突返回 50003。
+        try:
+            result = db.execute(
+                update(AiChatSession)
+                .where(AiChatSession.id == session_id)
+                .values(
+                    mediation_status="inputting",
+                    mediation_active_slot=_active_slot(
+                        session.relation_id, session.user_id
+                    ),
+                )
+            )
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            logger.warning(
+                "继续沟通被拒：已存在另一场活跃调解 session=%s", session_id
+            )
+            raise ValueError("50003")
+        if result.rowcount != 1:
+            raise ValueError("50003")
+        session = _reload(db, session_id)
     else:
         raise ValueError("50005")
-    db.commit()
     _broadcast_status(session)
     return {"session_id": session_id, "mediation_status": session.mediation_status}
 
@@ -1015,10 +1207,14 @@ def _commit_generation_result(
     合并成一次提交后，这两种半成品都不存在：要么状态和消息一起生效，
     要么一起回滚，任务留在 running（租约到期重跑）。
 
-    写回前两道闸：
+    写回前三道闸：
 
-    1. **版本**：`mediation_revision` 已被推进 → 产出属于旧版本，丢弃；
-    2. **状态 CAS**：见 [_claim_generation]——只有仍在**等这个结果**的状态
+    1. **归一化**：`risk_level` 与各字段类型先收敛（见 [_normalize_generation_payload]），
+       安全判定只能建立在归一化后的值上；
+    2. **版本**：`mediation_revision` 已被推进 → 产出属于旧版本，丢弃；
+    3. **安全**：`risk_level` 命中 [BLOCKING_RISK_LEVELS] → 走 [_commit_safety_block]，
+       **不落调解结果**；
+    4. **状态 CAS**：见 [_claim_generation]——只有仍在**等这个结果**的状态
        才能被推进，且 rowcount==1 才落消息。两个执行者（租约过期后的重复
        执行）同时回来时，只有一个能推进成功。
 
@@ -1029,14 +1225,11 @@ def _commit_generation_result(
     - 从 `rewriting` / `summarizing`（首次生成或退避重试）→ `new_status`；
     - 从 `rewrite_failed` / `summary_failed`（用户点了重试、状态已被
       `retry_generation` 复位）→ 重新落结果并**回到 `new_status`**。
-
-    为什么必须允许从失败态推进（否则会永久丢稿）：用户点重试时
-    `retry_generation` 会把会话从失败态复位成 `rewriting`，**重置的是会话，
-    不是任务行**——任务可能已经耗尽了 attempt。它重跑回来时 session 早已
-    不在 rewriting（可能被另一个执行者推到了 confirming），若 CAS 只认
-    「等生成态」，这次成功的结果就被丢掉，而任务行已被 `mark_succeeded`
-    记成成功 → 会话永久停在「重试中」且永远没有新稿。
     """
+    # 归一化必须在**任何判定之前**：后面所有安全门控都按 `risk_level` 判定，
+    # 模型给的大小写/自造值必须先收敛，否则门控会静默落空。
+    payload = _normalize_generation_payload(payload, summary=(new_status == "completed"))
+
     if not _task_still_fresh(db, task.session_id, task.revision):
         logger.info(
             "任务产出已过期，丢弃 task=%s session=%s rev=%s",
@@ -1044,6 +1237,11 @@ def _commit_generation_result(
         )
         db.rollback()
         ai_task_repo.mark_superseded(db, task)
+        return
+
+    # P0-6：高风险语境下**不产出**调解结果（详见 [BLOCKING_RISK_LEVELS]）。
+    if payload["risk_level"] in BLOCKING_RISK_LEVELS:
+        _commit_safety_block(db, task, payload["risk_level"])
         return
 
     claimed_from = _claim_generation(db, task.session_id, new_status)
@@ -1061,70 +1259,105 @@ def _commit_generation_result(
         db, task.session_id, "assistant",
         json.dumps(payload, ensure_ascii=False),
         structured_output=payload,
+        # 风险等级必须落库：客户端据此渲染安全提示卡；不落库等于把模型的
+        # 风险判定丢掉（此前 mediation 的 assistant 消息恒为 NULL）。
+        risk_level=payload["risk_level"],
     )
     db.commit()
     # 收口任务行。放在业务提交**之后**：万一它没写成（任务行已被回收/被别人
     # 接管），业务结果也已经落地，不会出现「结果在、任务还被重跑」。
     # 失败路径的归属判据同理，见 `ai_task_repo._finalize`。
     ai_task_repo.mark_succeeded(db, task)
-    final_status = _apply_generation_result(db, task.session_id, claimed_from, new_status)
-    broadcast_status_by_id(db, task.session_id, final_status)
+    broadcast_status_by_id(db, task.session_id, new_status)
 
 
-def _apply_generation_result(
-    db: Session, session_id: int, claimed_from: str, new_status: str
-) -> str:
-    """结果落库后的最终状态。返回真正生效的状态（用于广播）。
+def _commit_safety_block(db: Session, task, risk_level: str) -> None:
+    """高风险：**不产出调解结果**，把会话收口到安全提示（P0-6）。
 
-    失败态是「**没有在跑的生成**」：结果落到这里，会话必须立刻回到用户可操作
-    的状态（confirming / completed）。所以从失败态推进时补一次状态写作；
-    从等生成态推进时 `_claim_generation` 已经写好了，这里什么都不做。
+    为什么不能「照常落稿 + 加个风险角标」：调解产物是「替双方把话说软」。
+    在控制/暴力/自伤语境下，一份体面的改写会被当成「继续这样相处也没问题」的
+    许可。这里选择**终止这次调解**：
+
+    - 只落一条 assistant 消息，正文即安全资源，结构化输出只带风险等级；
+    - 会话置 ``completed``（终态、可回看、释放活跃槽位，日后仍可重新发起）；
+    - **不写** ``mediation_failure_code``——它不是失败，是主动阻断，客户端
+      不该为此显示「重试」；
+    - 记一条安全审计事件（与输入侧同一个出口）。
     """
-    if claimed_from not in TERMINAL_FAILURE_STATUSES:
-        return new_status
-    result = db.execute(
-        update(AiChatSession)
-        .where(AiChatSession.id == session_id)
-        .values(
-            mediation_status=new_status,
-            mediation_failure_code=None,
-            mediation_last_error=None,
-            mediation_failed_at=None,
-        )
+    if not _task_still_fresh(db, task.session_id, task.revision):
+        db.rollback()
+        ai_task_repo.mark_superseded(db, task)
+        return
+    # 用 CAS 收口到 completed：与正常结果路径共用同一套「只允许一个执行者推进」
+    # 的保护，顺手释放活跃槽位、清空失败标记。
+    if not _claim_generation(db, task.session_id, "completed"):
+        db.rollback()
+        ai_task_repo.mark_superseded(db, task)
+        return
+
+    message = get_safety_response(risk_level) or "你们的对话触发了安全提示，请先照顾好自己。"
+    ai_repo.create_message(
+        db, task.session_id, "assistant", message,
+        structured_output={"risk_level": risk_level, "safety_response": message},
+        risk_level=risk_level,
     )
     db.commit()
-    if result.rowcount != 1:  # 理论上不会发生：CAS 刚拿到过这一行
-        logger.warning("生成结果落库后状态写作未命中 session=%s", session_id)
-        return (_reload(db, session_id)).mediation_status
-    return new_status
+    ai_task_repo.mark_succeeded(db, task)
+    try:
+        safety_repo.log_event(
+            task.requested_by_user_id, "mediation", "output", risk_level, []
+        )
+    except Exception:  # noqa: BLE001 —— 审计失败绝不影响主链路
+        logger.warning("调解安全事件落库失败 session=%s", task.session_id, exc_info=True)
+    logger.warning(
+        "调解因高风险被阻断 session=%s task=%s risk=%s",
+        task.session_id, task.id, risk_level,
+    )
+    broadcast_status_by_id(db, task.session_id, "completed")
 
 
 def _claim_generation(db: Session, session_id: int, new_status: str) -> Optional[str]:
-    """生成成功时的状态推进（**不提交**，交给调用方与消息一起 commit）。
+    """生成结果的状态推进（**不提交**，交给调用方与消息一起 commit）。
 
-    返回**被推进时的状态**（判定不了就返回 None），调用方据此区分「首次生成」
-    与「失败后的重跑」。允许被推进的状态见 [_commit_generation_result] 的说明：
-    等生成态 + 失败态（保守性保护：两个执行者同时回来时只有一个 rowcount=1）。
+    返回**被推进前的状态**（观察不到可推进状态、或已被他人抢先就返回 None）。
+
+    为什么要把「先读到的那个状态」再写进 WHERE 条件：这是「同一版本的产出只写回
+    一次」的落点。租约过期后同一个任务可能被第二个 worker 重复执行，两个执行者
+    都会走到这里；把观察到的状态钉进条件，第二个执行者的 UPDATE 必然
+    `rowcount == 0`（状态已被第一个改成新值），于是它的产出被丢弃——
+    **过期执行者不得写业务结果**（P0-2）。
+
+    允许被推进的状态只有「正在等这个结果」的那几个（`ASYNC_GENERATION_STATUSES`）：
+    等生成态（rewriting / summarizing）与失败态（rewrite_failed / summary_failed，
+    用户点过重试后任务重跑）。**刻意不含 `confirming`**：若把确认页也算进去，
+    第二个执行者就能在「会话已在确认页、已有稿」时再写一份，正是要杜绝的重复产出。
     """
-    claimable = tuple(ASYNC_GENERATION_STATUSES | WAITING_GENERATION_STATUSES)
+    claimable = tuple(ASYNC_GENERATION_STATUSES)
+    observed = db.execute(
+        select(AiChatSession.mediation_status).where(AiChatSession.id == session_id)
+    ).scalar_one_or_none()
+    if observed not in claimable:
+        return None
+    values = {
+        "mediation_status": new_status,
+        "mediation_failure_code": None,
+        "mediation_last_error": None,
+        "mediation_failed_at": None,
+    }
+    if new_status == "completed":
+        # 终态：释放活跃槽位，允许同一发起者开始下一场调解
+        values["mediation_active_slot"] = None
     row = db.execute(
         update(AiChatSession)
         .where(
             AiChatSession.id == session_id,
-            AiChatSession.mediation_status.in_(claimable),
+            AiChatSession.mediation_status == observed,
         )
-        .values(
-            mediation_status=new_status,
-            mediation_failure_code=None,
-            mediation_last_error=None,
-            mediation_failed_at=None,
-        )
+        .values(**values)
     )
     if row.rowcount != 1:
         return None
-    return db.execute(
-        select(AiChatSession.mediation_status).where(AiChatSession.id == session_id)
-    ).scalar_one()
+    return observed
 
 
 def broadcast_status_by_id(db: Session, session_id: int, status: str) -> None:

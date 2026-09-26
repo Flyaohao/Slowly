@@ -36,7 +36,6 @@ from __future__ import annotations
 import logging
 import os
 import socket
-import threading
 import uuid
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
@@ -72,41 +71,26 @@ DRAIN_BATCH = 5
 #: 单进程标识：worker 用它抢任务，出问题时能从 locked_by 直接定位到进程。
 WORKER_ID = "%s-%s-%s" % (socket.gethostname(), os.getpid(), uuid.uuid4().hex[:8])
 
-#: 是否在请求线程里「踢一脚」worker。
-#:
-#: **这只是加速，不是可靠性来源**——任务在 `kick()` 之前已经落库，
-#: 即使这一脚没踢出去（进程下一秒就崩），调度器容器也会把它捞起来。
-#: 置 False 的场景：hermetic 测试（不希望后台线程干扰断言）与
-#: 「验证调度器路径」的测试（只允许 `run_due_tasks` 执行任务）。
-AUTO_KICK = True
-
-#: 会话工厂。默认是生产的 `SessionLocal`；hermetic 测试把它换成内存库的
-#: sessionmaker（同 `test_mediation_identity` 对 `core.database.SessionLocal`
-#: 的做法），这样 `kick()` 起来的后台线程也只会碰内存库。
+#: 会话工厂。默认是生产的 `SessionLocal`；hermetic 测试把它换成测试库的
+#: sessionmaker，这样 `run_due_tasks` 为每个任务新开的会话也只会碰测试库。
 _SESSION_FACTORY = SessionLocal
 
 
 def use_session_factory(factory) -> None:
-    """测试钩子：把后台线程用的会话工厂换成测试库。生产路径不调用。"""
+    """测试钩子：把 worker 每个任务用的会话工厂换成测试库。生产路径不调用。"""
     global _SESSION_FACTORY
     _SESSION_FACTORY = factory
 
 
 def kick() -> None:
-    """请求线程里异步催一下 worker（fire-and-forget，失败只记日志）。"""
-    if not AUTO_KICK:
-        return
+    """队列唤醒信号占位（P1-8）。
 
-    def _entry() -> None:
-        db = _SESSION_FACTORY()
-        try:
-            run_due_tasks(db, worker_id=WORKER_ID, limit=DRAIN_BATCH)
-        except Exception:  # noqa: BLE001
-            logger.warning("后台任务巡回失败", exc_info=True)
-        finally:
-            db.close()
-
-    threading.Thread(target=_entry, name="ai-task-kick", daemon=True).start()
+    API 进程**绝不**执行任何调解 LLM 任务：入队后是否立刻执行由独立
+    `ai-task-worker` 决定（每 3 秒轮询 `run_due_tasks`）。当前没有跨进程通知
+    设施，因此这里什么都不做——任务已落库，worker 轮询会在数秒内捞起。
+    保留此函数作为未来接入队列通知（Redis / DB notify）时的挂点。
+    """
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -127,6 +111,10 @@ def ensure_task(
     幂等由 `(task_type, session_id, revision)` 唯一约束保证：双方同时提交时
     两个请求都会走到这里，但只有一个任务行存在——这正是「双方同时提交只创建
     一个改写任务」。
+
+    **不提交**（P0-1）：任务插入 + `task_id` 回写 + 失败标记清空，全部留在
+    调用方事务里，与「状态 CAS + revision 自增」由同一个 commit 收口——
+    任何一步失败整体回滚，绝不出现「状态已 rewriting 但任务不存在」的半成品。
     """
     if session.mediation_revision is None:
         session.mediation_revision = 0
@@ -147,7 +135,7 @@ def ensure_task(
     session.mediation_failure_code = None
     session.mediation_last_error = None
     session.mediation_failed_at = None
-    db.commit()
+    db.flush()
     return task
 
 
@@ -324,8 +312,23 @@ def _broadcast_failure(db: Session, session_id: int, status: str) -> None:
         logger.warning("失败状态广播失败 session=%s", session_id, exc_info=True)
 
 
+def recover_stale_tasks(db: Session, *, now=None, limit: int = 50) -> int:
+    """崩溃回收的**服务层收口**（P0-3）：未耗尽恢复 pending，已耗尽收口失败。
+
+    repo 层只做任务行状态转换；这里补上「已耗尽 → 会话进对应 ``*_failed``」
+    的业务语义。会话失败态的写入带 ``mediation_revision == task.revision``
+    条件（见 [mark_session_failure]），所以「回收的失败收口」不会用旧版本
+    的失败覆盖已经推进到新版本的结果。
+    """
+    recovered, exhausted = ai_task_repo.recover_stale_tasks(db, now=now, limit=limit)
+    for task in exhausted:
+        mark_session_failure(
+            db, task, task.last_error or "worker 中断且重试耗尽", terminal=True
+        )
+    return recovered
+
+
 __all__ = [
-    "AUTO_KICK",
     "WORKER_ID",
     "RETRY_BASE_BACKOFF_SECONDS",
     "STATE_FAILED",
@@ -340,6 +343,7 @@ __all__ = [
     "execute_task",
     "kick",
     "mark_session_failure",
+    "recover_stale_tasks",
     "run_due_tasks",
     "use_session_factory",
 ]

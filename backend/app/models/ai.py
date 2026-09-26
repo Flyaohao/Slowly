@@ -58,6 +58,12 @@ class AiChatSession(BigIntPKMixin, TimestampMixin, Base):
             "ix_ai_session_scope",
             "user_id", "relation_id", "scene_key", "status", "last_message_at",
         ),
+        # P0-4：同一 (relation, inviter) 只能有一场活跃调解的**并发兜底**。
+        # 不能只靠「先 SELECT 再 INSERT」——两个并发 start 会同时查不到行、
+        # 双双插入。这里用一个非空槽位 + 唯一约束把「判断」和「插入」压成
+        # 一条原子约束：活跃时为 "<relation_id>:<inviter_id>"，结束清空为 NULL；
+        # NULL 在唯一索引里不参与唯一性判定（MySQL/SQLite 均允许多个 NULL）。
+        UniqueConstraint("mediation_active_slot", name="uk_ai_session_mediation_active"),
     )
 
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
@@ -107,6 +113,9 @@ class AiChatSession(BigIntPKMixin, TimestampMixin, Base):
     #: 当前改写/总结任务的 id（客户端可据此重试；也便于接口与任务表对账）
     rewrite_task_id: Mapped[Optional[int]] = mapped_column(BigInteger)
     summary_task_id: Mapped[Optional[int]] = mapped_column(BigInteger)
+    #: 活跃调解并发兜底槽位（见 __table_args__ 的唯一约束）：
+    #: 活跃时为 "<relation_id>:<inviter_id>"，结束（completed）时清空为 NULL。
+    mediation_active_slot: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     messages: Mapped[List["AiChatMessage"]] = relationship(back_populates="session")
 
