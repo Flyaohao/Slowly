@@ -361,7 +361,9 @@ private fun ComposeBottomBar(
         }
         Spacer(modifier = Modifier.width(4.dp))
         TextButton(onClick = {
-            val types = listOf("normal", "future", "calm", "unsaid", "private")
+            // [W1.4 隐藏] 未来信/私密信冻结创建（契约 §2.5-1，POST 10006）——类型循环只保留
+            // normal/unsaid/calm。旧枚举值与 letterTypeName 映射保留（隐藏 ≠ 删除）。
+            val types = listOf("normal", "unsaid", "calm")
             val nextIndex = (types.indexOf(currentType) + 1) % types.size
             onLetterType(types[nextIndex])
         }) {

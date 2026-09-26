@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.couple.translator.core.network.GenerationStreamEvent
+import com.couple.translator.core.network.SharedApiService
 import com.couple.translator.core.service.AiStreamKeepAlive
 import com.couple.translator.feature.couple.data.model.DualPerspectiveDto
 import com.couple.translator.feature.couple.data.repository.AiRepository
@@ -23,6 +24,11 @@ data class DualPerspectiveDetailUiState(
     val isLoading: Boolean = false,
     val error: String = "",
     val revealed: Boolean = false,
+    /**
+     * P0-1（契约 §2.1）：本人 user_id，用来把 records 判给「我 / 对方」并兜底排序。
+     * 获取失败为 null → 页面按旧后端行为渲染（不猜、不崩）。
+     */
+    val myUserId: Long? = null,
     // ---- AI 双视角对照总结 ----
     /** 回读到的已保存总结（按事件维度保存，换事件互不覆盖） */
     val summaryText: String = "",
@@ -44,6 +50,7 @@ data class DualPerspectiveDetailUiState(
 class DualPerspectiveDetailViewModel @Inject constructor(
     private val repository: DualPerspectiveRepository,
     private val aiRepository: AiRepository,
+    private val sharedApiService: SharedApiService,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -59,6 +66,8 @@ class DualPerspectiveDetailViewModel @Inject constructor(
         currentEventId = eventId
         _uiState.update { it.copy(isLoading = true, error = "") }
         viewModelScope.launch {
+            // P0-1：本人 user_id 是「哪条是我 / 我是否已提交」的判定基准；拿不到保持 null → 走旧行为
+            val myUserId = runCatching { sharedApiService.getCurrentUser().data?.userId }.getOrNull()
             repository.getEventDetail(eventId).fold(
                 onSuccess = { detail ->
                     detail?.let {
@@ -67,6 +76,7 @@ class DualPerspectiveDetailViewModel @Inject constructor(
                                 event = it,
                                 isLoading = false,
                                 revealed = it.status == "completed",
+                                myUserId = myUserId,
                             )
                         }
                         loadSavedSummary(eventId)

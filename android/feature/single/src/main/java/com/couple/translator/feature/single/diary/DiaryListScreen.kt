@@ -112,23 +112,25 @@ fun DiaryListScreen(
                         onOpenDrawer = onOpenDrawer,
                         isCoupleMode = false,
                         identity = identity,
-                        trailing = {
-                            AppTopBarAction(
-                                icon = Icons.Outlined.Delete,
-                                contentDescription = "批量删除",
-                                onClick = { viewModel.toggleSelectionMode() },
-                                tint = AppTextSecondary,
-                            )
-                        },
+                        // [W4.5 收缩] 批量管理入口隐藏（日记不再发展笔记软件能力，隐藏 ≠ 删除）
+                        // trailing = {
+                        //     AppTopBarAction(
+                        //         icon = Icons.Outlined.Delete,
+                        //         contentDescription = "批量删除",
+                        //         onClick = { viewModel.toggleSelectionMode() },
+                        //         tint = AppTextSecondary,
+                        //     )
+                        // },
                     )
                 }
 
                 AppPageHeader(
                     title = "日记",
+                    // [W4.5 收缩] 入口语义收成「给军师的私密记录」
                     subtitle = when {
                         uiState.isSelectionMode -> "长按可多选，删除不可恢复。"
-                        uiState.diaries.isEmpty() -> "写给自己，也算数。"
-                        else -> "已经写下 ${uiState.diaries.size} 篇。"
+                        uiState.diaries.isEmpty() -> "给军师的私密记录，只有你和它能看到。"
+                        else -> "已经写下 ${uiState.diaries.size} 条私密记录。"
                     },
                     modifier = Modifier.padding(top = AppSpacing.sm),
                 )
@@ -182,12 +184,15 @@ fun DiaryListScreen(
                                     }
                                 },
                                 onLongClick = {
-                                    if (!uiState.isSelectionMode) {
-                                        viewModel.toggleSelectionMode()
-                                        viewModel.toggleSelect(diary.id)
-                                    }
+                                    // [W4.5 收缩] 长按多选（批量删除）入口隐藏，隐藏 ≠ 删除
+                                    // if (!uiState.isSelectionMode) {
+                                    //     viewModel.toggleSelectionMode()
+                                    //     viewModel.toggleSelect(diary.id)
+                                    // }
                                 },
-                                onToggleFavorite = { viewModel.toggleFavorite(diary.id) },
+                                // [W4.5 收缩] 收藏入口隐藏，隐藏 ≠ 删除
+                                // onToggleFavorite = { viewModel.toggleFavorite(diary.id) },
+                                onToggleFavorite = {},
                             )
                         }
                     }
@@ -242,7 +247,8 @@ private fun DiaryFilterRow(
         "all" to "全部",
         "week" to "本周",
         "month" to "本月",
-        "favorite" to "收藏",
+        // [W4.5 收缩] 收藏筛选随收藏能力一并隐藏（隐藏 ≠ 删除）
+        // "favorite" to "收藏",
     )
     Row(
         modifier = Modifier
@@ -316,22 +322,23 @@ private fun DiaryItem(
                 )
             }
 
-            if (!isSelectionMode) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .pressFeedback(pressedScale = 0.9f, onClick = onToggleFavorite),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = if (diary.isFavorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = if (diary.isFavorite) "取消收藏" else "收藏",
-                        tint = if (diary.isFavorite) AppAccent else AppTextTertiary,
-                        modifier = Modifier.size(17.dp),
-                    )
-                }
-            }
+            // [W4.5 收缩] 收藏按钮入口隐藏（隐藏 ≠ 删除）
+            // if (!isSelectionMode) {
+            //     Box(
+            //         modifier = Modifier
+            //             .size(32.dp)
+            //             .clip(CircleShape)
+            //             .pressFeedback(pressedScale = 0.9f, onClick = onToggleFavorite),
+            //         contentAlignment = Alignment.Center,
+            //     ) {
+            //         Icon(
+            //             imageVector = if (diary.isFavorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
+            //             contentDescription = if (diary.isFavorite) "取消收藏" else "收藏",
+            //             tint = if (diary.isFavorite) AppAccent else AppTextTertiary,
+            //             modifier = Modifier.size(17.dp),
+            //         )
+            //     }
+            // }
         }
 
         Spacer(modifier = Modifier.height(AppSpacing.sm))

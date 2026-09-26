@@ -38,6 +38,7 @@ import com.couple.translator.feature.couple.anniversary.AddAnniversaryScreen
 import com.couple.translator.feature.couple.anniversary.AnniversaryListScreen
 import com.couple.translator.feature.couple.memorycard.MemoryCardScreen
 import com.couple.translator.feature.couple.presence.PresenceScreen
+import com.couple.translator.core.ui.advisor.AdvisorSettingsScreen
 import com.couple.translator.core.ui.auth.ForgotPasswordScreen
 import com.couple.translator.core.ui.guide.GuideScreen
 import com.couple.translator.core.ui.auth.LoginScreen
@@ -66,6 +67,7 @@ import com.couple.translator.feature.couple.practice.PracticeResultScreen
 import com.couple.translator.core.ui.profile.CoupleProfileScreen
 import com.couple.translator.core.ui.profile.ProfileResultScreen
 import com.couple.translator.core.ui.profile.ProfileScreen
+import com.couple.translator.core.ui.profile.UnderstandingScreen
 import com.couple.translator.core.ui.questionnaire.QuestionnaireHistoryScreen
 import com.couple.translator.core.ui.questionnaire.QuestionnaireIntroScreen
 import com.couple.translator.core.ui.questionnaire.QuestionnaireResultScreen
@@ -285,11 +287,13 @@ fun NavGraph(
                         popUpTo(0) { inclusive = true }
                     }
                 },
+                // [W4.3 合并] 问卷结果 → 画像两跳全部改指「军师如何理解我们」
+                // （ProfileResult / CoupleProfile 路由与页面保留）
                 onNavigateToProfile = {
-                    navController.navigate(Screen.ProfileResult.route)
+                    navController.navigate(Screen.Understanding.route)
                 },
                 onNavigateToCoupleProfile = {
-                    navController.navigate(Screen.CoupleProfile.route)
+                    navController.navigate(Screen.Understanding.route)
                 },
             )
         }
@@ -306,8 +310,9 @@ fun NavGraph(
         composable(Screen.ProfileResult.route) {
             ProfileResultScreen(
                 onNavigateBack = { navController.popBackStack() },
+                // [W4.3 合并] 「看关系画像」改指「军师如何理解我们」（CoupleProfile 路由保留）
                 onNavigateToCoupleProfile = {
-                    navController.navigate(Screen.CoupleProfile.route)
+                    navController.navigate(Screen.Understanding.route)
                 },
                 isCoupleMode = isCoupleMode,
             )
@@ -315,6 +320,21 @@ fun NavGraph(
 
         composable(Screen.CoupleProfile.route) {
             CoupleProfileScreen(
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        // [W4.3] 画像三合一页（我的画像 + 了解自己 + 关系画像 → 单一入口）
+        composable(Screen.Understanding.route) {
+            UnderstandingScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToRoute = { route -> navController.navigate(route) },
+            )
+        }
+
+        // [W4.4] 军师设置页（契约 §3.3）；抽屉「军师设置」入口指向此处
+        composable(Screen.AdvisorSettings.route) {
+            AdvisorSettingsScreen(
                 onNavigateBack = { navController.popBackStack() },
             )
         }
@@ -389,8 +409,16 @@ fun NavGraph(
         }
 
         composable(Screen.MediationExplanation.route) {
+            // 契约 §2.3-1：API 优先——说明页先 POST /mediation/start 拿真实 session_id，
+            // 再带 sessionId 导航（废除 sessionId=0 默认导航）。isInviter 走默认 true（发起方）。
             MediationExplanationScreen(
-                onStartMediation = { navController.navigate(Screen.MediationInvite.route) },
+                onStartMediation = { sessionId ->
+                    // M5：发起成功后把说明页移出回退栈——否则返回键回到说明页可再次 POST /start，
+                    // 造成重复发起。会话页成为该栈顶，返回直接回上一层。
+                    navController.navigate("${Screen.MediationInvite.route}?sessionId=$sessionId") {
+                        popUpTo(Screen.MediationExplanation.route) { inclusive = true }
+                    }
+                },
                 onNavigateBack = { navController.popBackStack() },
             )
         }

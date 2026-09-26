@@ -127,7 +127,13 @@ fun GuideScreen(
                     index = "3",
                     icon = Icons.Outlined.AutoAwesome,
                     title = "开始使用",
-                    desc = "底部三个入口：我们、信箱、军师。核心功能是「军师」。",
+                    // L3：底栏入口按模式区分——情侣模式是「军师 + 关系」，
+                    // 单身模式是「我 + 日记」，写死两入口会误导另一模式的用户。
+                    desc = if (isCoupleMode) {
+                        "底部两个入口：军师、关系。核心功能是「军师」，关系状态都在「关系」里。"
+                    } else {
+                        "底部两个入口：我、日记。核心功能是「我」，日记是给军师的私密记录。"
+                    },
                     route = null,
                     onNavigateToRoute = onNavigateToRoute,
                 )
@@ -167,12 +173,13 @@ fun GuideScreen(
                     name = "冷静一下",
                     desc = "冷战中。给出破冰的思路和几句可以直接用的开场白。",
                 )
-                GuideDivider()
-                SceneRow(
-                    icon = Icons.Outlined.People,
-                    name = "双人调解",
-                    desc = "两个人都参与的完整调解流程：各自陈述 → 生成方案 → 双方确认。从军师页面的调解入口进入。",
-                )
+                // [W1 隐藏] 双人调解场景说明（调解入口在 P0-3/P0-4 验收前隐藏，避免指向不可达功能）
+                // GuideDivider()
+                // SceneRow(
+                //     icon = Icons.Outlined.People,
+                //     name = "双人调解",
+                //     desc = "两个人都参与的完整调解流程：各自陈述 → 生成方案 → 双方确认。从军师页面的调解入口进入。",
+                // )
                 GuideDivider()
                 SceneRow(
                     icon = Icons.Outlined.MailOutline,
@@ -198,28 +205,30 @@ fun GuideScreen(
                     route = Screen.LetterList.route,
                     onNavigateToRoute = onNavigateToRoute,
                 )
-                GuideDivider()
-                GuideEntryRow(
-                    icon = Icons.Outlined.FavoriteBorder,
-                    title = "双视角记录",
-                    desc = "同一件事，两个人各自写一份感受，写完互相揭示，看看对方的视角。",
-                    route = Screen.DualPerspectiveList.route,
-                    onNavigateToRoute = onNavigateToRoute,
-                )
+                // [W1 隐藏] 双视角记录跳转项（机制保留，由军师推荐触发）
+                // GuideDivider()
+                // GuideEntryRow(
+                //     icon = Icons.Outlined.FavoriteBorder,
+                //     title = "双视角记录",
+                //     desc = "同一件事，两个人各自写一份感受，写完互相揭示，看看对方的视角。",
+                //     route = Screen.DualPerspectiveList.route,
+                //     onNavigateToRoute = onNavigateToRoute,
+                // )
             }
 
             Spacer(modifier = Modifier.height(28.dp))
             SectionTitle("关系沉淀", "把值得留下的都存起来")
             Spacer(modifier = Modifier.height(8.dp))
             GuideCard {
-                GuideEntryRow(
-                    icon = Icons.Outlined.Archive,
-                    title = "纪念馆",
-                    desc = "关系藏品时间线，支持信件、照片、一句话、梗、道歉、承诺、双视角等类别。",
-                    route = Screen.Museum.route,
-                    onNavigateToRoute = onNavigateToRoute,
-                )
-                GuideDivider()
+                // [W1 隐藏] 纪念馆跳转项（冻结 10006）
+                // GuideEntryRow(
+                //     icon = Icons.Outlined.Archive,
+                //     title = "纪念馆",
+                //     desc = "关系藏品时间线，支持信件、照片、一句话、梗、道歉、承诺、双视角等类别。",
+                //     route = Screen.Museum.route,
+                //     onNavigateToRoute = onNavigateToRoute,
+                // )
+                // GuideDivider()
                 GuideEntryRow(
                     icon = Icons.Outlined.StarOutline,
                     title = "愿望与纪念日",
@@ -227,43 +236,49 @@ fun GuideScreen(
                     route = Screen.AnniversaryList.route,
                     onNavigateToRoute = onNavigateToRoute,
                 )
-                GuideDivider()
-                GuideEntryRow(
-                    icon = Icons.Outlined.Book,
-                    title = "关系练习",
-                    desc = "按题目做练习，做完生成记录，可以回顾两个人的答案。",
-                    route = Screen.PracticeList.route,
-                    onNavigateToRoute = onNavigateToRoute,
-                )
-                GuideDivider()
-                GuideEntryRow(
-                    icon = Icons.Outlined.ViewSidebar,
-                    title = "关系画像",
-                    desc = "把两个人的画像放在一起看，找出你们容易起冲突的地方。",
-                    route = Screen.CoupleProfile.route,
-                    onNavigateToRoute = onNavigateToRoute,
-                )
+                // 分隔线随下方两个已隐藏/合并的条目一并注释（本卡现在只剩一条）
+                // GuideDivider()
+                // [W1 隐藏] 关系练习跳转项（P0-2 裁决冻结 10006）
+                // GuideEntryRow(
+                //     icon = Icons.Outlined.Book,
+                //     title = "关系练习",
+                //     desc = "按题目做练习，做完生成记录，可以回顾两个人的答案。",
+                //     route = Screen.PracticeList.route,
+                //     onNavigateToRoute = onNavigateToRoute,
+                // )
+                // GuideDivider()
+                // [W4.3 合并] 关系画像并入「军师如何理解我们」（条目在下方「左侧菜单」卡）
+                // GuideEntryRow(
+                //     icon = Icons.Outlined.ViewSidebar,
+                //     title = "关系画像",
+                //     desc = "把两个人的画像放在一起看，找出你们容易起冲突的地方。",
+                //     route = Screen.CoupleProfile.route,
+                //     onNavigateToRoute = onNavigateToRoute,
+                // )
             }
 
             Spacer(modifier = Modifier.height(28.dp))
             SectionTitle("左侧菜单里还有什么", "点左上角图标打开")
             Spacer(modifier = Modifier.height(8.dp))
             GuideCard {
+                // [W4.3 合并] 我的画像 + 了解自己 + 关系画像 三入口 → 单一「军师如何理解我们」
+                // 页内含判断依据与纠正入口；旧路由 ProfileResult/QuestionnaireIntro/CoupleProfile 保留。
                 GuideEntryRow(
                     icon = Icons.Outlined.Person,
-                    title = "我的画像",
-                    desc = "你的 11 维画像详情，以及 AI 生成的解读报告。",
-                    route = Screen.ProfileResult.route,
+                    title = "军师如何理解我们",
+                    desc = "画像、问卷、关系画像三合一，含「判断来自哪里」与「我要纠正军师」。",
+                    route = Screen.Understanding.route,
                     onNavigateToRoute = onNavigateToRoute,
                 )
-                GuideDivider()
-                GuideEntryRow(
-                    icon = Icons.Outlined.Analytics,
-                    title = "了解自己",
-                    desc = "重新做问卷，或查看历史作答记录。",
-                    route = Screen.QuestionnaireIntro.route,
-                    onNavigateToRoute = onNavigateToRoute,
-                )
+                // [W4.3 合并] 了解自己并入上方「军师如何理解我们」
+                // GuideDivider()
+                // GuideEntryRow(
+                //     icon = Icons.Outlined.Analytics,
+                //     title = "了解自己",
+                //     desc = "重新做问卷，或查看历史作答记录。",
+                //     route = Screen.QuestionnaireIntro.route,
+                //     onNavigateToRoute = onNavigateToRoute,
+                // )
                 if (isCoupleMode) {
                     GuideDivider()
                     GuideEntryRow(
@@ -289,21 +304,23 @@ fun GuideScreen(
                 SectionTitle("单身模式", "还没绑定伴侣时可用")
                 Spacer(modifier = Modifier.height(8.dp))
                 GuideCard {
+                    // [W4.5 收缩] 日记降级为「给军师的私密记录」入口，不再宣传笔记软件能力
                     GuideEntryRow(
                         icon = Icons.Outlined.Book,
                         title = "日记",
-                        desc = "记录每天的心情，支持收藏与批量删除。",
+                        desc = "给军师的私密记录：写下来的心情只有你和军师能看到。",
                         route = Screen.DiaryList.route,
                         onNavigateToRoute = onNavigateToRoute,
                     )
-                    GuideDivider()
-                    GuideEntryRow(
-                        icon = Icons.Outlined.SelfImprovement,
-                        title = "自我练习",
-                        desc = "面向个人的练习题库，做完留下记录。",
-                        route = Screen.SelfPracticeList.route,
-                        onNavigateToRoute = onNavigateToRoute,
-                    )
+                    // [W1 隐藏] 自我练习跳转项（冻结 10006）
+                    // GuideDivider()
+                    // GuideEntryRow(
+                    //     icon = Icons.Outlined.SelfImprovement,
+                    //     title = "自我练习",
+                    //     desc = "面向个人的练习题库，做完留下记录。",
+                    //     route = Screen.SelfPracticeList.route,
+                    //     onNavigateToRoute = onNavigateToRoute,
+                    // )
                 }
             }
 
@@ -317,19 +334,23 @@ fun GuideScreen(
                 GuideDivider()
                 QuickCaseRow("有话想说，但怕说出口就伤人", "军师 · 帮我表达")
                 GuideDivider()
-                QuickCaseRow("吵完架谁都不肯先开口", "军师 · 冷静一下，或发起双人调解")
+                // 双人调解入口在 P0-3/P0-4 验收前隐藏，速查文案同步收窄
+                QuickCaseRow("吵完架谁都不肯先开口", "军师 · 冷静一下")
                 GuideDivider()
                 QuickCaseRow("收到一封信，不确定 TA 想表达什么", "信箱 → 打开信件 → 信件解读")
                 GuideDivider()
                 QuickCaseRow("想道歉，但不知道怎么措辞", "信箱写信时用「信件改写」")
+                // [W1 隐藏] 双视角记录跳转项已随上方「日常沟通」卡一并隐藏（速查行不能指向不可达功能）
+                // GuideDivider()
+                // QuickCaseRow("想让 TA 明白我当时真实的感受", "双视角记录")
                 GuideDivider()
-                QuickCaseRow("想让 TA 明白我当时真实的感受", "双视角记录")
-                GuideDivider()
-                QuickCaseRow("为什么我们总在同一件事上吵", "关系画像 + 军师里的 AI 记忆")
-                GuideDivider()
-                QuickCaseRow("想一起做点什么", "关系练习 / 愿望清单")
-                GuideDivider()
-                QuickCaseRow("想留住某个重要的瞬间", "纪念馆 / 纪念日")
+                // L3：关系画像入口已并入「军师如何理解我们」（W4.3 合并），速查文案同步改指合并后的入口
+                QuickCaseRow("为什么我们总在同一件事上吵", "军师如何理解我们 + 军师里的 AI 记忆")
+                // [W1 隐藏] 关系练习 / 愿望清单均已隐藏，整条速查一并隐藏
+                // GuideDivider()
+                // QuickCaseRow("想一起做点什么", "关系练习 / 愿望清单")
+                // GuideDivider()
+                QuickCaseRow("想留住某个重要的瞬间", "纪念日")
             }
 
             Spacer(modifier = Modifier.height(24.dp))

@@ -39,11 +39,26 @@ import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextSecondary
 
+/**
+ * 调解说明页。契约 §2.3-1 API 优先：「开始调解」先在服务端创建会话拿到真实
+ * session_id，再导航进邀请页（废除 sessionId=0 默认导航）。
+ */
 @Composable
 fun MediationExplanationScreen(
-    onStartMediation: () -> Unit,
+    onStartMediation: (Long) -> Unit,
     onNavigateBack: () -> Unit,
+    viewModel: MediationExplanationViewModel = hiltViewModel(),
 ) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.event.collect { event ->
+            when (event) {
+                is MediationExplanationUiEvent.Started -> onStartMediation(event.sessionId)
+            }
+        }
+    }
+
     Scaffold(
         containerColor = AppBackground,
         topBar = {
@@ -106,7 +121,22 @@ fun MediationExplanationScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            AppPrimaryButton(text = "开始调解", onClick = onStartMediation)
+            if (uiState.error.isNotEmpty()) {
+                Text(
+                    text = uiState.error,
+                    color = AppErrorRed,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            AppPrimaryButton(
+                text = if (uiState.isStarting) "正在创建会话..." else "开始调解",
+                onClick = { viewModel.startMediation() },
+                enabled = !uiState.isStarting,
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -125,8 +155,14 @@ fun MediationInviteScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    // 契约 §2.3-2：GET {id} 的 my_role 是角色真源；后端未落地/拉取失败时降级回导航参数。
+    val effectiveIsInviter = uiState.isInviter ?: isInviter
+
     LaunchedEffect(sessionId) {
-        if (sessionId > 0) viewModel.setSessionId(sessionId)
+        if (sessionId > 0) {
+            viewModel.setSessionId(sessionId)
+            viewModel.loadSession(sessionId)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -168,7 +204,7 @@ fun MediationInviteScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    if (isInviter) {
+                    if (effectiveIsInviter) {
                         Text(
                             text = "等待对方接受邀请...",
                             style = MaterialTheme.typography.titleMedium,

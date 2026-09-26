@@ -73,7 +73,8 @@ import com.couple.translator.core.ui.theme.AppTextTertiary
 import com.couple.translator.core.ui.theme.AppTrack
 import io.noties.markwon.Markwon
 
-private val dimensionNames = mapOf(
+/** internal：同包 UnderstandingScreen（三合一页）复用同一套维度中文名。 */
+internal val dimensionNames = mapOf(
     "attachment_anxiety" to "依恋焦虑",
     "attachment_avoidance" to "依恋回避",
     "conflict_pursue" to "冲突追问倾向",

@@ -3,6 +3,7 @@ package com.couple.translator.feature.couple.couplebind
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.couple.translator.core.data.model.CoupleDto
+import com.couple.translator.core.network.SharedApiService
 import com.couple.translator.feature.couple.data.repository.CoupleRepository
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,6 +23,11 @@ data class CoupleInfoUiState(
     val error: String = "",
     val showUnbindDialog: Boolean = false,
     val unbindMessage: String = "",
+    /**
+     * 当前登录用户 id（解绑确认链门控用，契约 §2.6-2）。
+     * 获取失败为 null → FE 降级旧行为（确认按钮始终展示，由服务端 30004/30006 拦截）。
+     */
+    val myUserId: Long? = null,
 )
 
 sealed class CoupleInfoEvent {
@@ -32,6 +38,7 @@ sealed class CoupleInfoEvent {
 class CoupleInfoViewModel @Inject constructor(
     private val coupleRepository: CoupleRepository,
     private val coupleStateManager: CoupleStateManager,
+    private val sharedApiService: SharedApiService,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CoupleInfoUiState())
@@ -48,18 +55,27 @@ class CoupleInfoViewModel @Inject constructor(
         _uiState.update { it.copy(error = "") }
     }
 
-    fun loadCoupleInfo() {
+    /**
+     * @param silent 静默刷新（解绑动作成功后刷新门控字段），不切骨架屏、不覆盖错误提示
+     */
+    fun loadCoupleInfo(silent: Boolean = false) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = "") }
+            if (!silent) {
+                _uiState.update { it.copy(isLoading = true, error = "") }
+            }
+            // 解绑确认链门控（契约 §2.6-2）：拿不到 myUserId 时保持 null → FE 降级旧行为
+            val myUserId = runCatching { sharedApiService.getCurrentUser().data?.userId }.getOrNull()
             coupleRepository.getCoupleInfo().fold(
                 onSuccess = { info ->
                     _uiState.update {
-                        it.copy(coupleInfo = info, isLoading = false)
+                        it.copy(coupleInfo = info, isLoading = false, myUserId = myUserId)
                     }
                 },
                 onFailure = { error ->
-                    _uiState.update {
-                        it.copy(isLoading = false, error = error.message ?: "加载失败")
+                    if (!silent) {
+                        _uiState.update {
+                            it.copy(isLoading = false, error = error.message ?: "加载失败")
+                        }
                     }
                 },
             )
@@ -89,6 +105,8 @@ class CoupleInfoViewModel @Inject constructor(
                         it.copy(isLoading = false, unbindMessage = "解绑申请已发送，等待对方确认")
                     }
                     coupleStateManager.refresh()
+                    // 刷新 unbind_requested_at/by → 展示冷却状态与确认链门控（契约 §2.6-2）
+                    loadCoupleInfo(silent = true)
                 },
                 onFailure = { error ->
                     _uiState.update {
@@ -108,6 +126,7 @@ class CoupleInfoViewModel @Inject constructor(
                         it.copy(isLoading = false, unbindMessage = "已取消解绑申请")
                     }
                     coupleStateManager.refresh()
+                    loadCoupleInfo(silent = true)
                 },
                 onFailure = { error ->
                     _uiState.update {
@@ -131,6 +150,7 @@ class CoupleInfoViewModel @Inject constructor(
                         it.copy(isLoading = false, unbindMessage = "解绑完成")
                     }
                     coupleStateManager.refresh()
+                    loadCoupleInfo(silent = true)
                 },
                 onFailure = { error ->
                     _uiState.update {

@@ -193,8 +193,22 @@ interface CoupleApiService {
     suspend fun generateReply(@Body body: LetterDto.GenerateReplyRequest): ApiResponse<LetterDto.GenerateReplyResponse>
 
     // Mediation
+    /**
+     * 契约 §2.3-1：发起调解走 API 优先——服务端不收请求体（partner 由关系表推导），
+     * 返回 `{session_id, mediation_status, my_role}`。拿到真实 session_id 才进邀请页。
+     */
     @POST("api/v1/couple/ai/mediation/start")
-    suspend fun startMediation(@Body body: MediationDto.MediationStartRequest): ApiResponse<MediationDto.MediationSessionResponse>
+    suspend fun startMediation(): ApiResponse<MediationDto.MediationSessionResponse>
+
+    /**
+     * 契约 §2.3-3：调解列表（role=invited|mine|all，默认 mine），供关系 tab 待处理邀请卡。
+     * 端点未落地前 404 → repository 捕获为 Result.failure → 卡片降级为空。
+     * data 形状：`{total, items}`（DEV 已确认）。
+     */
+    @GET("api/v1/couple/ai/mediation")
+    suspend fun getMediationList(
+        @Query("role") role: String = "mine",
+    ): ApiResponse<MediationDto.MediationListResponse>
 
     @POST("api/v1/couple/ai/mediation/{id}/accept")
     suspend fun acceptMediation(@Path("id") sessionId: Long): ApiResponse<MediationDto.MediationSessionResponse>

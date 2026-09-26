@@ -11,7 +11,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Quiz
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -44,6 +43,8 @@ fun SingleHomeScreen(
     onOpenDrawer: () -> Unit,
     onNavigateToQuestionnaire: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
+    /** [W4.3 合并] 了解自己/我的画像两格 → 单一「军师如何理解我们」页 */
+    onNavigateToUnderstanding: () -> Unit = {},
     onNavigateToBind: () -> Unit = {},
     onNavigateToDiary: () -> Unit = {},
     identity: TopBarIdentity = TopBarIdentity(),
@@ -82,10 +83,11 @@ fun SingleHomeScreen(
             )
 
             SectionTitle(text = "快捷入口")
+            // [W4.3 合并] 「了解自己」+「我的画像」两格 → 单一「军师如何理解我们」
+            // （旧回调 onNavigateToQuestionnaire/onNavigateToProfile 保留给遗留壳，本页不再引用）
             AppListCard(
                 items = listOf(
-                    Triple(Icons.Outlined.Quiz, "了解自己", "填写问卷，生成个人画像"),
-                    Triple(Icons.Outlined.Person, "我的画像", "查看个人维度分析"),
+                    Triple(Icons.Outlined.Person, "军师如何理解我们", "画像、问卷与关系画像三合一"),
                     Triple(Icons.Outlined.Edit, "绑定情侣", "邀请 TA，解锁完整功能"),
                 ),
                 modifier = Modifier.padding(horizontal = AppSpacing.screenH),
@@ -96,16 +98,16 @@ fun SingleHomeScreen(
                     leadingIcon = icon,
                     showChevron = true,
                     onClick = when (label) {
-                        "了解自己" -> onNavigateToQuestionnaire
-                        "我的画像" -> onNavigateToProfile
+                        "军师如何理解我们" -> onNavigateToUnderstanding
                         else -> onNavigateToBind
                     },
                 )
             }
 
+            // [W4.5 收缩] 日记入口文案收进「给军师的私密记录」语义（不再按笔记软件宣传）
             if (uiState.recentDiaries.isNotEmpty()) {
                 SectionTitle(
-                    text = "最近日记",
+                    text = "最近的私密记录",
                     count = uiState.recentDiaries.size,
                     trailing = {
                         AppLinkText(label = "查看全部", onClick = onNavigateToDiary)
@@ -118,9 +120,9 @@ fun SingleHomeScreen(
                     DiaryRow(diary = diary, onClick = onNavigateToDiary)
                 }
             } else {
-                SectionTitle(text = "最近日记")
+                SectionTitle(text = "最近的私密记录")
                 AppLinkRow(
-                    label = "还没有日记，从这里开始",
+                    label = "还没有记录，写一篇给军师的私密记录",
                     leadingEmoji = "📝",
                     onClick = onNavigateToDiary,
                     modifier = Modifier.padding(horizontal = AppSpacing.screenH),
@@ -128,7 +130,7 @@ fun SingleHomeScreen(
             }
 
             AppPrimaryButton(
-                text = "写日记",
+                text = "写私密记录",
                 icon = Icons.Outlined.Edit,
                 onClick = onNavigateToDiary,
                 modifier = Modifier

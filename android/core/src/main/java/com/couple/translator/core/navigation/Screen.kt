@@ -52,6 +52,10 @@ enum class Screen(val route: String) {
     Presence("presence"),
     AvatarCustomize("avatar_customize"),
 
+    // 收敛期新增页（W4.3 画像三合一 / W4.4 军师设置；仅新增，既有路由字符串不动）
+    Understanding("understanding"),
+    AdvisorSettings("advisor_settings"),
+
     // 单身模式专属
     DiaryList("diary_list"),
     DiaryDetail("diary_detail"),

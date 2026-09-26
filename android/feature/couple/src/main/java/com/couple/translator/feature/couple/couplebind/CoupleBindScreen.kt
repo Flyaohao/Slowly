@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,7 +22,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -89,22 +87,11 @@ fun CoupleBindScreen(
         )
     }
 
-    // Unbind confirmation dialog
+    // Unbind confirmation dialog（契约 §2.6-2：后果说明与 CoupleInfoScreen 共用一份文案）
     if (uiState.showUnbindDialog) {
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissUnbindDialog() },
-            title = { Text("确认解绑") },
-            text = { Text("解绑设有 72 小时冷静期：申请后由对方在冷静期满后确认才生效，期间任意一方可取消。解绑后将失去情侣空间的所有数据，确定要申请吗？") },
-            confirmButton = {
-                TextButton(onClick = { viewModel.requestUnbind() }) {
-                    Text("确认解绑", color = AppErrorRed)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissUnbindDialog() }) {
-                    Text("取消")
-                }
-            },
+        UnbindConfirmDialog(
+            onConfirm = { viewModel.requestUnbind() },
+            onDismiss = { viewModel.dismissUnbindDialog() },
         )
     }
 

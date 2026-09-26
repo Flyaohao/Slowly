@@ -26,8 +26,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.Quiz
+import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,6 +65,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.AiDto
@@ -68,6 +74,8 @@ import com.couple.translator.core.ui.components.AiStreamingText
 import com.couple.translator.core.ui.components.AiThinkingPanel
 import com.couple.translator.core.ui.components.AiWaitingBubble
 import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppListItem
+import com.couple.translator.core.ui.components.AppListItemDivider
 import com.couple.translator.core.ui.components.AppMarkdownText
 import com.couple.translator.core.ui.components.AppPageHeader
 import com.couple.translator.core.ui.components.AppTopBar
@@ -94,13 +102,20 @@ fun NewAiChatScreen(
     onNavigateToMemory: () -> Unit,
     onNavigateToMediation: () -> Unit,
     onNavigateToReview: () -> Unit,
+    /**
+     * 收敛期任务卡（契约 §3.1）：按 type+id 映射出的根路由导航。
+     * 带默认值——遗留壳 MainScreen.kt 仍按旧签名实例化本页（隐藏 ≠ 删除，W6 才清理）。
+     */
+    onNavigateToRoute: (String) -> Unit = {},
     identity: TopBarIdentity = TopBarIdentity(),
     /** 沉浸模式：false = 底部 Tab 栏已隐藏（状态由 CoupleShell 持有） */
     tabBarVisible: Boolean = true,
     onToggleTabBar: () -> Unit = {},
     viewModel: AiChatViewModel = hiltViewModel(),
+    taskCardsViewModel: TaskCardsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val taskCardsState by taskCardsViewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     var showModeSheet by remember { mutableStateOf(false) }
     // P-B §1.6：回答深度三选一面板
@@ -132,6 +147,8 @@ fun NewAiChatScreen(
         if (pending != null && pending.newChat) {
             // P-A §3.1 D5：列表页「＋」→ 回来开新对话（lambda 内可安全 return）
             viewModel.startNewChat()
+            // M4：newChat 分支原来直接 return，跳过了任务卡刷新——任何分支进页面都要刷新
+            taskCardsViewModel.refresh()
             return@LaunchedEffect
         } else if (pending != null) {
             viewModel.setSceneKey(pending.sceneKey)
@@ -143,6 +160,8 @@ fun NewAiChatScreen(
         } else {
             viewModel.refreshActiveSession()
         }
+        // 任务卡与会话无关，放在外面：任何分支都要「再进即刷新」
+        taskCardsViewModel.refresh()
     }
 
     // P-A §2.1：错误呈现（ShowError 事件 + uiState.error 合并，只弹一个）
@@ -230,6 +249,26 @@ fun NewAiChatScreen(
                     )
                 }
                 // 快捷场景 chip 已下移到输入框下方（与深度档位同行），不再在顶部占位
+
+                // 收敛期任务卡（契约 §3.1）：空态才展示；task_cards 未落地 → 空列表整块不渲染
+                val taskCards = taskCardsState.cards
+                if (taskCards.isNotEmpty()) {
+                    item {
+                        AppCard(modifier = Modifier.fillMaxWidth()) {
+                            taskCards.forEachIndexed { index, card ->
+                                if (index > 0) AppListItemDivider()
+                                val route = routeForTaskCard(card)
+                                AppListItem(
+                                    title = card.title.ifBlank { fallbackTitleForTaskCard(card.type) },
+                                    subtitle = taskCardSubtitle(card.type),
+                                    leadingIcon = taskCardIcon(card.type),
+                                    showChevron = route != null,
+                                    onClick = route?.let { target -> { onNavigateToRoute(target) } },
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             items(uiState.messages) { message ->
@@ -770,6 +809,26 @@ private fun UsageHintRow(
             )
         }
     }
+}
+
+/** 收敛期任务卡（契约 §3.1）：type → 副标题。 */
+private fun taskCardSubtitle(type: String): String = when (type) {
+    "mediation_invite" -> "伴侣发起了双人调解"
+    "dual_perspective" -> "对方已提交，等你写下视角"
+    "pending_letter" -> "有一封信等你查看"
+    "feedback_outcome" -> "告诉军师上次建议的实际效果"
+    "questionnaire" -> "完善画像，军师的判断会更准"
+    else -> ""
+}
+
+/** 收敛期任务卡（契约 §3.1）：type → 图标。 */
+private fun taskCardIcon(type: String) = when (type) {
+    "mediation_invite" -> Icons.Outlined.People
+    "dual_perspective" -> Icons.Outlined.Visibility
+    "pending_letter" -> Icons.Outlined.MailOutline
+    "feedback_outcome" -> Icons.Outlined.StarOutline
+    "questionnaire" -> Icons.Outlined.Quiz
+    else -> Icons.Outlined.History
 }
 
 /**

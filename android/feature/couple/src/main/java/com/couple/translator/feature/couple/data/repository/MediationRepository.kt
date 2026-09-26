@@ -9,11 +9,29 @@ import javax.inject.Singleton
 class MediationRepository @Inject constructor(
     private val apiService: CoupleApiService,
 ) {
-    suspend fun startMediation(request: MediationDto.MediationStartRequest): Result<MediationDto.MediationSessionResponse?> {
+    /** 契约 §2.3-1：start 无请求体，直接返回含 session_id / my_role 的会话快照。 */
+    suspend fun startMediation(): Result<MediationDto.MediationSessionResponse?> {
         return try {
-            val response = apiService.startMediation(request)
+            val response = apiService.startMediation()
             if (response.isSuccess) {
                 Result.success(response.data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 契约 §2.3-3：邀请列表（role=invited 时为伴侣侧待接受邀请）。
+     * 端点未实现（404）或形状不符 → Result.failure，调用方降级为空列表。
+     */
+    suspend fun getMediationList(role: String = "invited"): Result<List<MediationDto.MediationListItem>> {
+        return try {
+            val response = apiService.getMediationList(role)
+            if (response.isSuccess) {
+                Result.success(response.data?.items ?: emptyList())
             } else {
                 Result.failure(Exception(response.message))
             }

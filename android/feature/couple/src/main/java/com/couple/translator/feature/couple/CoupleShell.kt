@@ -51,6 +51,7 @@ import com.couple.translator.feature.couple.home.NewHomeScreen
 import com.couple.translator.feature.couple.letter.NewMailboxScreen
 import com.couple.translator.feature.couple.navigation.DrawerContent
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
+import com.couple.translator.feature.couple.relation.RelationScreen
 import com.couple.translator.feature.couple.network.toNotice
 import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.ui.components.BottomTabBar
@@ -151,8 +152,10 @@ fun CoupleShell(
     val openDrawer: () -> Unit = { scope.launch { drawerState.open() } }
     val closeDrawer: () -> Unit = { scope.launch { drawerState.close() } }
 
-    // 情侣模式 Tab
-    val tabs = BottomTab.entries.filter { it != BottomTab.SingleHome && it != BottomTab.Diary }
+    // 情侣模式 Tab（契约 §4.2 S2 两 tab 壳）：军师 + 关系。
+    // 信箱/空间 tab 从底栏移除但枚举、路由与 composable 注册全部保留（隐藏 ≠ 删除），
+    // 仍可从关系 tab / 任务卡 / 深链进入。
+    val tabs = listOf(BottomTab.AiChat, BottomTab.Relation)
 
     // 军师沉浸模式：隐藏底部 Tab 栏换取更大对话空间。
     // 只在军师 Tab 生效（切走自动恢复），入口是输入框下方 chip，随时可显示回来。
@@ -319,9 +322,18 @@ fun CoupleShell(
                         onNavigateToReview = {
                             onNavigateToRoute("relationship_review")
                         },
+                        onNavigateToRoute = onNavigateToRoute,
                         identity = topBarIdentity,
                         tabBarVisible = !hideTabBar,
                         onToggleTabBar = { hideTabBar = !hideTabBar },
+                    )
+                }
+
+                composable(BottomTab.Relation.route) {
+                    RelationScreen(
+                        onOpenDrawer = openDrawer,
+                        onNavigateToRoute = onNavigateToRoute,
+                        identity = topBarIdentity,
                     )
                 }
             }

@@ -55,6 +55,12 @@ object DualPerspectiveDto {
         @Json(name = "event_time") val eventTime: String? = null,
         @Json(name = "status") val status: String = "one_side",
         @Json(name = "records") val records: List<DualRecordResponse> = emptyList(),
+        /**
+         * P0-1 服务端过滤（契约 §2.1）：reveal 前 viewer 只拿到自己的 record，
+         * 对方已提交与否由该字段告知（只增不减）。
+         * null = 旧后端未返回该字段 → FE 走旧行为，不崩。
+         */
+        @Json(name = "partner_submitted") val partnerSubmitted: Boolean? = null,
         @Json(name = "created_at") val createdAt: String? = null,
         @Json(name = "updated_at") val updatedAt: String? = null,
     )

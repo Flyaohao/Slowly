@@ -156,20 +156,27 @@ fun NewHomeScreen(
                     }
 
                     StaggeredAppear(2) {
-                        HomePrimaryButton(
-                            text = uiState.primaryButtonText,
-                            onClick = {
-                                when (uiState.primaryAction) {
-                                    HomePrimaryAction.ReadLetter,
-                                    HomePrimaryAction.ContinueDraft,
-                                    -> onNavigateToMailbox()
-                                    HomePrimaryAction.InvitePartner -> onNavigateToBind()
-                                    HomePrimaryAction.ContinueMediation -> {}
-                                    HomePrimaryAction.ViewAnniversary -> {}
-                                    else -> onNavigateToComposeLetter()
-                                }
-                            },
-                        )
+                        // [W1 隐藏] 调解/纪念日两个主按钮目前是 no-op 空转，先隐藏入口
+                        // （隐藏 ≠ 删除：HomePrimaryAction 分支与文案生成逻辑保留）
+                        val primaryAction = uiState.primaryAction
+                        val isNoOpAction = primaryAction == HomePrimaryAction.ContinueMediation ||
+                            primaryAction == HomePrimaryAction.ViewAnniversary
+                        if (!isNoOpAction) {
+                            HomePrimaryButton(
+                                text = uiState.primaryButtonText,
+                                onClick = {
+                                    when (uiState.primaryAction) {
+                                        HomePrimaryAction.ReadLetter,
+                                        HomePrimaryAction.ContinueDraft,
+                                        -> onNavigateToMailbox()
+                                        HomePrimaryAction.InvitePartner -> onNavigateToBind()
+                                        HomePrimaryAction.ContinueMediation -> {}
+                                        HomePrimaryAction.ViewAnniversary -> {}
+                                        else -> onNavigateToComposeLetter()
+                                    }
+                                },
+                            )
+                        }
                     }
 
                     StaggeredAppear(3) {
@@ -183,10 +190,9 @@ fun NewHomeScreen(
                     }
 
                     uiState.homeData?.let { data ->
+                        // [W1 隐藏] 未来信 / 纪念馆状态卡已隐藏，不再参与「有没有卡」判断
                         val hasAnything = data.activeMediation != null ||
-                            data.futureLetter != null ||
-                            data.upcomingAnniversary != null ||
-                            data.recentMuseumItems.isNotEmpty()
+                            data.upcomingAnniversary != null
                         if (hasAnything) {
                             StaggeredAppear(4) {
                                 Box(modifier = Modifier.padding(top = AppSpacing.section)) {
@@ -691,15 +697,17 @@ private fun HomeStatusCards(homeData: HomeDto.HomeResponse) {
     homeData.activeMediation?.let {
         cards.add(Icons.Outlined.People to ("调解进行中" to "还有一场没说完的对话"))
     }
-    homeData.futureLetter?.let {
-        cards.add(Icons.Outlined.Schedule to ("未来信" to "解锁于 ${it.unlockTime?.take(10) ?: "待定"}"))
-    }
+    // [W1 隐藏] 未来信状态卡（P0-5：future 类型冻结，卡片也不再展示）
+    // homeData.futureLetter?.let {
+    //     cards.add(Icons.Outlined.Schedule to ("未来信" to "解锁于 ${it.unlockTime?.take(10) ?: "待定"}"))
+    // }
     homeData.upcomingAnniversary?.let {
         cards.add(Icons.Outlined.StarOutline to (it.title to "${it.daysUntil} 天后"))
     }
-    if (homeData.recentMuseumItems.isNotEmpty()) {
-        cards.add(Icons.Outlined.Archive to ("纪念馆" to "${homeData.recentMuseumItems.size} 件新藏品"))
-    }
+    // [W1 隐藏] 纪念馆状态卡（模块冻结 10006）
+    // if (homeData.recentMuseumItems.isNotEmpty()) {
+    //     cards.add(Icons.Outlined.Archive to ("纪念馆" to "${homeData.recentMuseumItems.size} 件新藏品"))
+    // }
 
     Column(
         modifier = Modifier

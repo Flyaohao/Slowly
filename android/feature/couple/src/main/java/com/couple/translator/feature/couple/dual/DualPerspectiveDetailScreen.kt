@@ -93,31 +93,44 @@ fun DualPerspectiveDetailScreen(
             )
             Spacer(modifier = Modifier.height(24.dp))
 
-            if (uiState.revealed && event.records.size >= 2) {
+            // P0-1（契约 §2.1）：reveal 前服务端只回本人 record；排序仍由 FE 兜底一次——
+            // 先本人后对方（拿不到 myUserId 时保持服务端顺序，服务端已按同样规则排过）。
+            val records = event.records.sortedBy { record ->
+                if (uiState.myUserId != null && record.userId != uiState.myUserId) 1 else 0
+            }
+            val viewerRecord = records.firstOrNull()
+
+            if (uiState.revealed && records.size >= 2) {
                 DualPerspectiveComparison(
-                    record1 = event.records[0],
-                    record2 = event.records[1],
+                    record1 = records[0],
+                    record2 = records[1],
                 )
-            } else if (event.records.isNotEmpty()) {
+            } else if (viewerRecord != null) {
+                val isMyRecord = uiState.myUserId == null || viewerRecord.userId == uiState.myUserId
                 AppCard(
                     modifier = Modifier.fillMaxWidth(),
                     containerColor = AppAccentLight,
                     contentPadding = PaddingValues(16.dp),
                 ) {
                     Text(
-                        text = "我的视角",
+                        text = if (isMyRecord) "我的视角" else "对方视角",
                         style = MaterialTheme.typography.labelLarge,
                         color = AppAccent,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = event.records.first().content,
+                        text = viewerRecord.content,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "对方尚未提交，双方都提交后可并排查看",
+                    // partnerSubmitted：true = 对方已提交（内容被服务端过滤掉，等确认公开）
+                    text = if (event.partnerSubmitted == true) {
+                        "双方都已写下，确认后公开并排查看"
+                    } else {
+                        "对方尚未提交，双方都提交后可并排查看"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = AppTextTertiary,
                 )
@@ -125,7 +138,15 @@ fun DualPerspectiveDetailScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            if (event.records.isEmpty() || (event.records.size == 1 && !uiState.revealed)) {
+            // 「提交我的视角」只在我还没写时出现：已提交时不再与「确认公开」并排重复。
+            // 判定优先用本人 record；myUserId 拿不到时按 partner_submitted 降级；
+            // 两者都没有（旧后端 + 身份未知）才沿用旧条件，保证不崩。
+            val showSubmitButton = when {
+                uiState.myUserId != null -> records.none { it.userId == uiState.myUserId }
+                event.partnerSubmitted != null -> records.isEmpty()
+                else -> records.isEmpty() || (records.size == 1 && !uiState.revealed)
+            }
+            if (showSubmitButton) {
                 AppAccentButton(
                     text = "提交我的视角",
                     onClick = { onNavigateToSubmitRecord(eventId) },

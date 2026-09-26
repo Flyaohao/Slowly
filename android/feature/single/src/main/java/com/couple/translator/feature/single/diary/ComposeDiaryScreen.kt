@@ -125,16 +125,16 @@ fun ComposeDiaryScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Markdown 格式工具栏
-            MarkdownToolbar(
-                onFormatAction = { action ->
-                    val current = contentFieldValue
-                    val result = applyMarkdownAction(current, action)
-                    contentFieldValue = result
-                    lastSyncedContent = result.text
-                    viewModel.updateContent(result.text)
-                },
-            )
+            // [W4.5 收缩] Markdown 格式工具栏隐藏（日记不再发展笔记软件能力，隐藏 ≠ 删除）
+            // MarkdownToolbar(
+            //     onFormatAction = { action ->
+            //         val current = contentFieldValue
+            //         val result = applyMarkdownAction(current, action)
+            //         contentFieldValue = result
+            //         lastSyncedContent = result.text
+            //         viewModel.updateContent(result.text)
+            //     },
+            // )
 
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -147,7 +147,8 @@ fun ComposeDiaryScreen(
                     viewModel.updateContent(newValue.text)
                 },
                 label = { Text("内容") },
-                placeholder = { Text("支持 Markdown 格式...") },
+                // [W4.5 收缩] 不再宣传 Markdown，按「给军师的私密记录」定位写占位文案
+                placeholder = { Text("今天想让军师知道什么？") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(240.dp),

@@ -1,6 +1,7 @@
 package com.couple.translator.core.network
 
 import com.couple.translator.core.data.model.HomeDto
+import com.couple.translator.core.data.model.AdvisorDto
 import com.couple.translator.core.data.model.AiDto
 import com.couple.translator.core.data.model.AuthDto
 import com.couple.translator.core.data.model.ProfileDto
@@ -155,4 +156,13 @@ interface SharedApiService {
 
     @GET("api/v1/profiles/me/ai-report")
     suspend fun getAiReport(): ApiResponse<ProfileDto.AiReportResponse>
+
+    // Advisor settings（契约 §3.3，common 前缀，单双模式通用）
+    @GET("api/v1/advisor/settings")
+    suspend fun getAdvisorSettings(): ApiResponse<AdvisorDto.AdvisorSettings>
+
+    @PUT("api/v1/advisor/settings")
+    suspend fun updateAdvisorSettings(
+        @Body body: AdvisorDto.AdvisorSettings,
+    ): ApiResponse<AdvisorDto.AdvisorSettings>
 }

@@ -62,23 +62,27 @@ fun SingleDrawerContent(
         Spacer(modifier = Modifier.height(32.dp))
 
         // 菜单项
+        // [W4.3 合并] 我的画像 + 了解自己 → 单一「军师如何理解我们」页（隐藏 ≠ 删除，
+        // ProfileResult / QuestionnaireIntro 路由保留，页内有问卷与结果深链）
         DrawerNavItem(
             icon = Icons.Outlined.Person,
-            label = "我的画像",
-            onClick = { onNavigateToRoute(Screen.ProfileResult.route) },
+            label = "军师如何理解我们",
+            onClick = { onNavigateToRoute(Screen.Understanding.route) },
         )
 
-        DrawerNavItem(
-            icon = Icons.Outlined.Quiz,
-            label = "了解自己",
-            onClick = { onNavigateToRoute(Screen.QuestionnaireIntro.route) },
-        )
+        // [W4.3 合并] 了解自己入口并入上方「军师如何理解我们」
+        // DrawerNavItem(
+        //     icon = Icons.Outlined.Quiz,
+        //     label = "了解自己",
+        //     onClick = { onNavigateToRoute(Screen.QuestionnaireIntro.route) },
+        // )
 
-        DrawerNavItem(
-            icon = Icons.Outlined.SelfImprovement,
-            label = "自我练习",
-            onClick = { onNavigateToRoute(Screen.SelfPracticeList.route) },
-        )
+        // [W1 隐藏] 自我练习入口（收敛期冻结 10006，隐藏 ≠ 删除：路由与页面保留）
+        // DrawerNavItem(
+        //     icon = Icons.Outlined.SelfImprovement,
+        //     label = "自我练习",
+        //     onClick = { onNavigateToRoute(Screen.SelfPracticeList.route) },
+        // )
 
         Spacer(modifier = Modifier.height(16.dp))
         HorizontalDivider(color = AppBorderLight)

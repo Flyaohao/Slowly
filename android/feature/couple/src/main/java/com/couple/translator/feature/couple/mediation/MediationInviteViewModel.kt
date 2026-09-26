@@ -1,8 +1,8 @@
 package com.couple.translator.feature.couple.mediation
 
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.couple.translator.core.network.SharedApiService
 import com.couple.translator.feature.couple.data.model.MediationDto
 import com.couple.translator.feature.couple.data.repository.MediationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,6 +19,11 @@ import javax.inject.Inject
 data class MediationInviteUiState(
     val sessionId: Long? = null,
     val status: String = "inviting",
+    /**
+     * 身份真源（契约 §2.3-2）：优先服务端 `my_role`，缺失时按 `session.user_id == 我` 推导。
+     * null = 详情还没加载（或加载失败），渲染回退到导航参数 isInviter——只作展示兜底。
+     */
+    val isInviter: Boolean? = null,
     val isLoading: Boolean = false,
     val error: String = "",
 )
@@ -32,6 +37,7 @@ sealed class MediationInviteUiEvent {
 @HiltViewModel
 class MediationInviteViewModel @Inject constructor(
     private val mediationRepository: MediationRepository,
+    private val sharedApiService: SharedApiService,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MediationInviteUiState())
@@ -44,15 +50,64 @@ class MediationInviteViewModel @Inject constructor(
         _uiState.update { it.copy(sessionId = id) }
     }
 
-    fun startMediation(partnerUserId: Long) {
+    /**
+     * 契约 §2.3-2：`GET /ai/mediation/{id}` 是唯一状态真源。
+     * 加载失败静默降级（isInviter 保持 null，页面按导航参数渲染），
+     * 不打断接受/拒绝——那两个动作本身有服务端校验兜底。
+     */
+    fun loadSession(id: Long) {
+        _uiState.update { it.copy(sessionId = id, isLoading = true) }
+        viewModelScope.launch {
+            val myUserId = runCatching { sharedApiService.getCurrentUser().data?.userId }.getOrNull()
+            mediationRepository.getMediation(id).fold(
+                onSuccess = { detail ->
+                    if (detail != null) {
+                        val role = detail.myRole ?: deriveRole(detail.userId, myUserId)
+                        _uiState.update {
+                            it.copy(
+                                status = detail.mediationStatus,
+                                isInviter = role?.let { r -> r == "inviter" } ?: it.isInviter,
+                                isLoading = false,
+                            )
+                        }
+                    } else {
+                        _uiState.update { it.copy(isLoading = false) }
+                    }
+                },
+                onFailure = {
+                    _uiState.update { it.copy(isLoading = false) }
+                },
+            )
+        }
+    }
+
+    /** 服务端未给 my_role 时的客户端推导：会话创建者是我 → inviter。 */
+    private fun deriveRole(sessionUserId: Long?, myUserId: Long?): String? {
+        if (sessionUserId == null || myUserId == null) return null
+        return if (sessionUserId == myUserId) "inviter" else "partner"
+    }
+
+    /**
+     * 发起调解（契约 §2.3-1，API 优先）。
+     * 现由 MediationExplanationScreen 在「开始调解」时先调 start 拿真实 session_id 再导航进来；
+     * 本方法保留作备用入口（隐藏 ≠ 删除），无调用点。
+     */
+    fun startMediation() {
         _uiState.update { it.copy(isLoading = true, error = "") }
         viewModelScope.launch {
-            mediationRepository.startMediation(MediationDto.MediationStartRequest(partnerUserId)).fold(
+            mediationRepository.startMediation().fold(
                 onSuccess = { session ->
-                    session?.let {
+                    if (session != null) {
                         _uiState.update { state ->
-                            state.copy(sessionId = it.sessionId, status = it.mediationStatus, isLoading = false)
+                            state.copy(
+                                sessionId = session.sessionId,
+                                status = session.mediationStatus,
+                                isInviter = session.myRole?.let { it == "inviter" } ?: true,
+                                isLoading = false,
+                            )
                         }
+                    } else {
+                        _uiState.update { it.copy(isLoading = false, error = "发起失败") }
                     }
                 },
                 onFailure = { error ->

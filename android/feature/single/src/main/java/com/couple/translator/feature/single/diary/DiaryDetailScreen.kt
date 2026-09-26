@@ -137,24 +137,25 @@ fun DiaryDetailScreen(
                     title = "日记详情",
                     trailing = {
                         if (diary != null) {
-                            // TOC 按钮（仅当有标题时显示）
-                            if (tocEntries.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    scope.launch {
-                                        if (drawerState.isClosed) drawerState.open()
-                                        else drawerState.close()
-                                    }
-                                }) {
-                                    Icon(Icons.Outlined.List, contentDescription = "目录")
-                                }
-                            }
-                            IconButton(onClick = { viewModel.toggleFavorite() }) {
-                                Icon(
-                                    imageVector = if (diary.isFavorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
-                                    contentDescription = if (diary.isFavorite) "取消收藏" else "收藏",
-                                    tint = if (diary.isFavorite) AppAccent else AppTextSecondary,
-                                )
-                            }
+                            // [W4.5 收缩] 目录（Markdown 标题导航）入口隐藏，隐藏 ≠ 删除
+                            // if (tocEntries.isNotEmpty()) {
+                            //     IconButton(onClick = {
+                            //         scope.launch {
+                            //             if (drawerState.isClosed) drawerState.open()
+                            //             else drawerState.close()
+                            //         }
+                            //     }) {
+                            //         Icon(Icons.Outlined.List, contentDescription = "目录")
+                            //     }
+                            // }
+                            // [W4.5 收缩] 收藏入口隐藏，隐藏 ≠ 删除
+                            // IconButton(onClick = { viewModel.toggleFavorite() }) {
+                            //     Icon(
+                            //         imageVector = if (diary.isFavorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
+                            //         contentDescription = if (diary.isFavorite) "取消收藏" else "收藏",
+                            //         tint = if (diary.isFavorite) AppAccent else AppTextSecondary,
+                            //     )
+                            // }
                             IconButton(onClick = { onNavigateToEdit(diaryId) }) {
                                 Icon(Icons.Outlined.Edit, contentDescription = "编辑")
                             }

@@ -85,57 +85,63 @@ fun DrawerContent(
         HorizontalDivider(color = AppBorderLight)
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 我的画像 - 单身模式也可用
+        // [W4.3 合并] 我的画像 + 了解自己 + 关系画像 三入口 → 单一「军师如何理解我们」页。
+        // 旧路由 ProfileResult / QuestionnaireIntro / CoupleProfile 全部保留（隐藏 ≠ 删除）。
         DrawerNavItem(
             icon = Icons.Outlined.Person,
-            label = "我的画像",
-            onClick = { onNavigateToRoute(Screen.ProfileResult.route) },
+            label = "军师如何理解我们",
+            onClick = { onNavigateToRoute(Screen.Understanding.route) },
         )
-
-        // 了解自己（问卷） - 单身模式也可用
-        DrawerNavItem(
-            icon = Icons.Outlined.Analytics,
-            label = "了解自己",
-            onClick = { onNavigateToRoute(Screen.QuestionnaireIntro.route) },
-        )
+        // [W4.3 合并] 了解自己入口并入上方「军师如何理解我们」
+        // DrawerNavItem(
+        //     icon = Icons.Outlined.Analytics,
+        //     label = "了解自己",
+        //     onClick = { onNavigateToRoute(Screen.QuestionnaireIntro.route) },
+        // )
 
         // 以下功能仅情侣模式可用
         if (isCoupleMode) {
-            DrawerNavItem(
-                icon = Icons.Outlined.ViewSidebar,
-                label = "关系画像",
-                onClick = { onNavigateToRoute(Screen.CoupleProfile.route) },
-            )
-            DrawerNavItem(
-                icon = Icons.Outlined.Archive,
-                label = "纪念馆",
-                onClick = { onNavigateToRoute(Screen.Museum.route) },
-            )
+            // [W4.3 合并] 关系画像入口并入「军师如何理解我们」
+            // DrawerNavItem(
+            //     icon = Icons.Outlined.ViewSidebar,
+            //     label = "关系画像",
+            //     onClick = { onNavigateToRoute(Screen.CoupleProfile.route) },
+            // )
+            // [W1 隐藏] 纪念馆入口（收敛期冻结 10006，隐藏 ≠ 删除：路由与页面保留）
+            // DrawerNavItem(
+            //     icon = Icons.Outlined.Archive,
+            //     label = "纪念馆",
+            //     onClick = { onNavigateToRoute(Screen.Museum.route) },
+            // )
             DrawerNavItem(
                 icon = Icons.Outlined.StarOutline,
                 label = "愿望与纪念日",
                 onClick = { onNavigateToRoute(Screen.AnniversaryList.route) },
             )
-            DrawerNavItem(
-                icon = Icons.Outlined.FavoriteBorder,
-                label = "双视角记录",
-                onClick = { onNavigateToRoute(Screen.DualPerspectiveList.route) },
-            )
-            DrawerNavItem(
-                icon = Icons.Outlined.People,
-                label = "关系练习",
-                onClick = { onNavigateToRoute(Screen.PracticeList.route) },
-            )
+            // [W1 隐藏] 双视角记录入口（机制保留，由军师推荐触发）
+            // DrawerNavItem(
+            //     icon = Icons.Outlined.FavoriteBorder,
+            //     label = "双视角记录",
+            //     onClick = { onNavigateToRoute(Screen.DualPerspectiveList.route) },
+            // )
+            // [W1 隐藏] 关系练习入口（P0-2 裁决：整体冻结 10006）
+            // DrawerNavItem(
+            //     icon = Icons.Outlined.People,
+            //     label = "关系练习",
+            //     onClick = { onNavigateToRoute(Screen.PracticeList.route) },
+            // )
+            // [W4.4] AI 形象入口保留，但指向页改造为「军师设置」（见 AdvisorSettingsScreen）
             DrawerNavItem(
                 icon = Icons.Outlined.AutoAwesome,
-                label = "AI 形象",
-                onClick = { onNavigateToRoute(Screen.AvatarCustomize.route) },
+                label = "军师设置",
+                onClick = { onNavigateToRoute(Screen.AdvisorSettings.route) },
             )
-            DrawerNavItem(
-                icon = Icons.Outlined.LocationOn,
-                label = "异地陪伴",
-                onClick = { onNavigateToRoute(Screen.Presence.route) },
-            )
+            // [W1 隐藏] 异地陪伴入口（收敛期冻结 10006）
+            // DrawerNavItem(
+            //     icon = Icons.Outlined.LocationOn,
+            //     label = "异地陪伴",
+            //     onClick = { onNavigateToRoute(Screen.Presence.route) },
+            // )
         }
 
         // 解绑冷静期提示

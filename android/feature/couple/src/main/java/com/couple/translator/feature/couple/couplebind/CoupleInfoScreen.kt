@@ -14,7 +14,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,6 +49,10 @@ import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.feature.couple.data.repository.AppMode
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,22 +88,11 @@ fun CoupleInfoScreen(
         )
     }
 
-    // Unbind confirmation dialog
+    // Unbind confirmation dialog（契约 §2.6-2：后果说明与 CoupleBindScreen 共用一份文案）
     if (uiState.showUnbindDialog) {
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissUnbindDialog() },
-            title = { Text("确认解绑") },
-            text = { Text("解绑设有 72 小时冷静期：申请后由对方在冷静期满后确认才生效，期间任意一方可取消。解绑后将失去情侣空间的所有数据，确定要申请吗？") },
-            confirmButton = {
-                TextButton(onClick = { viewModel.requestUnbind() }) {
-                    Text("确认解绑", color = AppErrorRed)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissUnbindDialog() }) {
-                    Text("取消")
-                }
-            },
+        UnbindConfirmDialog(
+            onConfirm = { viewModel.requestUnbind() },
+            onDismiss = { viewModel.dismissUnbindDialog() },
         )
     }
 
@@ -255,20 +247,67 @@ fun CoupleInfoScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     if (isUnbinding) {
+                        // 冷却状态展示（契约 §2.6-2）：有 unbind_requested_at 才展示剩余时间
+                        val requestedAtMillis = info.unbindRequestedAt?.let { raw ->
+                            parseUnbindRequestedAt(raw)
+                        }
+                        val remainingMillis = requestedAtMillis?.let { start ->
+                            (start + UNBIND_COOLDOWN_MILLIS) - System.currentTimeMillis()
+                        }
+                        if (info.unbindRequestedAt != null) {
+                            Text(
+                                text = if (remainingMillis == null) {
+                                    "解绑冷静期中（72 小时）"
+                                } else if (remainingMillis > 0) {
+                                    "冷静期还剩 ${formatCooldownRemaining(remainingMillis)}"
+                                } else {
+                                    "冷静期已满"
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AppErrorRed,
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+
                         TextButton(
                             onClick = { viewModel.cancelUnbind() },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text("取消解绑")
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        TextButton(
-                            onClick = { viewModel.confirmUnbind() },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
+
+                        // 确认按钮门控（契约 §2.6-2）：仅非发起方且满 72h 展示；
+                        // 字段为 null（后端未落地/解析失败）→ 降级旧行为，由服务端 30004/30006 拦截。
+                        val gatingPresent =
+                            info.unbindRequestedAt != null && info.unbindRequestedBy != null
+                        val isInitiator =
+                            gatingPresent && uiState.myUserId != null &&
+                                info.unbindRequestedBy == uiState.myUserId
+                        val showConfirm = when {
+                            !gatingPresent -> true
+                            isInitiator -> false
+                            remainingMillis == null -> true
+                            else -> remainingMillis <= 0
+                        }
+                        if (showConfirm) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            TextButton(
+                                onClick = { viewModel.confirmUnbind() },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = if (gatingPresent) "确认解绑" else "确认解绑（冷静期满后可用）",
+                                    color = AppErrorRed,
+                                )
+                            }
+                        } else if (isInitiator && remainingMillis != null && remainingMillis > 0) {
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "确认解绑（冷静期满后可用）",
-                                color = AppErrorRed,
+                                text = "你是申请方：冷静期满后由对方确认生效。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTextSecondary,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
                             )
                         }
                     } else {
@@ -301,4 +340,31 @@ fun CoupleInfoScreen(
             }
         }
     }
+}
+
+/** 解绑冷静期 72 小时（契约 §2.6-2，与后端 unbinding_timeout 一致） */
+private const val UNBIND_COOLDOWN_MILLIS = 72L * 60 * 60 * 1000
+
+/**
+ * 解析后端 `unbind_requested_at`（ISO-8601，可能带/不带时区）→ epoch millis。
+ * 解析失败返回 null → FE 降级旧行为（按钮仍展示，由服务端 30004 拦截）。
+ *
+ * 注意第三级 fallback：后端是 `datetime.utcnow()` 的 naive ISO（无时区后缀），
+ * 必须按 **UTC** 解析——按设备本地时区解析会让 UTC+8 设备早 8 小时显示「冷静期已满」。
+ */
+private fun parseUnbindRequestedAt(raw: String): Long? {
+    val text = raw.trim()
+    if (text.isEmpty()) return null
+    runCatching { OffsetDateTime.parse(text).toInstant().toEpochMilli() }.getOrNull()?.let { return it }
+    runCatching { Instant.parse(text).toEpochMilli() }.getOrNull()?.let { return it }
+    return runCatching {
+        LocalDateTime.parse(text).atZone(ZoneOffset.UTC).toInstant().toEpochMilli()
+    }.getOrNull()
+}
+
+private fun formatCooldownRemaining(remainingMillis: Long): String {
+    val totalMinutes = remainingMillis / 60_000
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
+    return if (hours > 0) "${hours} 小时 $minutes 分钟" else "$minutes 分钟"
 }

@@ -153,13 +153,14 @@ private fun AnniversaryListItem(
                     )
                 }
             }
-            IconButton(onClick = onMemoryCard) {
-                Icon(
-                    Icons.Outlined.HistoryEdu,
-                    contentDescription = "回忆卡片",
-                    tint = AppAccent,
-                )
-            }
+            // [W1 隐藏] AI 回忆卡图标（memory-card 端点冻结 10006；回调参数保留）
+            // IconButton(onClick = onMemoryCard) {
+            //     Icon(
+            //         Icons.Outlined.HistoryEdu,
+            //         contentDescription = "回忆卡片",
+            //         tint = AppAccent,
+            //     )
+            // }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Filled.Delete, contentDescription = "删除", tint = AppErrorRed)
             }

@@ -104,6 +104,9 @@ object AiSceneCatalog {
         "cold_war" to Presentation("冷静一下", "冷静一下", Icons.Outlined.Icecream, showInQuickChips = true),
         "mediation" to Presentation(
             "双人调解", "双人调解", Icons.Outlined.People,
+            // [W1 隐藏] P0-3/P0-4 验收前隐藏调解场景 chip：入口切断但
+            // AiSceneTarget.MEDIATION 与跳转接线保留（隐藏 ≠ 删除）
+            showInDrawer = false,
             selectableAsChatScene = false,          // 没有输出模型，靠专属调解工作流
             target = AiSceneTarget.MEDIATION,
         ),

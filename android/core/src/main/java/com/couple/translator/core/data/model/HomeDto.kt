@@ -17,6 +17,11 @@ object HomeDto {
         @Json(name = "recommended_practices") val recommendedPractices: List<PracticeInfo> = emptyList(),
         @Json(name = "upcoming_anniversary") val upcomingAnniversary: AnniversaryInfo? = null,
         @Json(name = "space") val space: SpaceInfo? = null,
+        /**
+         * 收敛期新增（契约 §3.1）：军师首页任务卡，按优先级排序。
+         * 后端未落地前为 null/空 → FE 不渲染任何卡片（优雅降级，旧字段全部保留）。
+         */
+        @Json(name = "task_cards") val taskCards: List<TaskCard> = emptyList(),
         // 单身模式顶层字段
         @Json(name = "user_nickname") val userNickname: String? = null,
         @Json(name = "user_avatar_url") val userAvatarUrl: String? = null,
@@ -99,5 +104,20 @@ object HomeDto {
         @Json(name = "title") val title: String? = null,
         @Json(name = "mood") val mood: String? = null,
         @Json(name = "created_at") val createdAt: String? = null,
+    )
+
+    /**
+     * 军师首页任务卡（契约 §3.1）。
+     * [type] ∈ mediation_invite / dual_perspective / pending_letter / feedback_outcome / questionnaire；
+     * [route] 为可直接导航的根路由字符串（如 `mediation_invite?sessionId=12`），空则卡片不可点。
+     * 全字段带默认值：后端形状漂移时 Moshi 解析失败整卡降级为空列表，不会崩页面。
+     */
+    @JsonClass(generateAdapter = true)
+    data class TaskCard(
+        @Json(name = "type") val type: String = "",
+        @Json(name = "id") val id: Long = 0L,
+        @Json(name = "title") val title: String = "",
+        @Json(name = "created_at") val createdAt: String? = null,
+        @Json(name = "route") val route: String? = null,
     )
 }
