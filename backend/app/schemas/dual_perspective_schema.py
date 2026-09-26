@@ -6,6 +6,10 @@ from datetime import datetime
 class DualPerspectiveEventCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     event_time: datetime
+    #: 整改 §8.6：军师发起时必须告诉伴侣「为什么现在写这个」。
+    #: 为空时按普通创建处理——只有带邀请语的才通知对方（否则用户自建
+    #: 事件会把伴侣吵醒，而那时列表里还什么都没有）。
+    invite_message: Optional[str] = Field(None, max_length=200)
 
 
 class DualPerspectiveRecordSubmit(BaseModel):

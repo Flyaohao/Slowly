@@ -20,6 +20,7 @@ from app.repositories import (
     user_repo,
 )
 from app.services.letter_service import LOCKED_LETTER_TITLE, locked_future_clause
+from app.services.anniversary_dates import next_occurrence
 
 
 def _get_partner_id(relation: CoupleRelation, user_id: int) -> int:
@@ -221,30 +222,30 @@ def _get_couple_home_data(db: Session, user_id: int, relation: CoupleRelation) -
     ]
 
     # 纪念日
+    #
+    # 整改 §8.8：日期语义交给 anniversary_dates 统一处理（一次性 vs 每年重复），
+    # 并且**不能**像以前那样「按原始日期排完序取第一条能算出天数的」——那样
+    # 「去年的一次性纪念」会被顶到明年，渲染成「还有 55 天」+ 去年的年份，
+    # 正是契约点名禁止的年份冲突。这里算全部、按**下次发生日**取最近的一条。
     today = date.today()
-    upcoming_anniversary = (
-        db.query(Anniversary)
-        .filter(
-            Anniversary.relation_id == relation_id,
-        )
-        .order_by(Anniversary.anniversary_date.asc())
-        .all()
-    )
     next_anniversary = None
-    for a in upcoming_anniversary:
-        anniv_date = a.anniversary_date
-        this_year = anniv_date.replace(year=today.year)
-        if this_year < today:
-            this_year = anniv_date.replace(year=today.year + 1)
-        days_until = (this_year - today).days
-        if days_until >= 0:
+    best_occurrence = None
+    for a in db.query(Anniversary).filter(Anniversary.relation_id == relation_id).all():
+        repeat = bool(getattr(a, "repeat_annually", True))
+        occurrence = next_occurrence(a.anniversary_date, repeat, today)
+        if occurrence is None:
+            continue  # 一次性且已过去：不再是「下一次」，不参与角逐
+        if best_occurrence is None or occurrence < best_occurrence:
+            best_occurrence = occurrence
             next_anniversary = {
                 "id": a.id,
                 "title": a.title,
                 "anniversary_date": a.anniversary_date.isoformat(),
-                "days_until": days_until,
+                "repeat_annually": repeat,
+                # 下次发生在哪一天（客户端据此显示「下次 2026-11-20」）
+                "next_occurrence_date": occurrence.isoformat(),
+                "days_until": (occurrence - today).days,
             }
-            break
 
     # 空间信息
     space = couple_repo.get_space_by_relation_id(db, relation_id)
@@ -384,7 +385,26 @@ def _build_task_cards(
             }
         )
 
-    # 5) 问卷：本人关系画像未完成
+    # 5) 复盘回访（整改 §8.7）：到点且尚无「后来怎么样了」的复盘。
+    #    独立卡型 `review_recall`——id 语义是 review_id（不是会话 id），
+    #    与 feedback_outcome 混用会让 FE 的 id 解释产生歧义。
+    from app.services import relationship_review_service
+
+    recall_review = relationship_review_service.pick_due_recall(db, user_id)
+    if recall_review is not None:
+        cards.append(
+            {
+                "type": "review_recall",
+                "id": recall_review.id,
+                "title": "上次复盘后来怎么样了？",
+                "created_at": (
+                    recall_review.recall_at.isoformat() if recall_review.recall_at else None
+                ),
+                "route": "review_detail/%d" % recall_review.id,
+            }
+        )
+
+    # 6) 问卷：本人关系画像未完成
     if profile_repo.get_latest_profile(db, user_id) is None:
         cards.append(
             {

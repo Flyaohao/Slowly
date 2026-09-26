@@ -162,6 +162,39 @@ def cancel(generation_id: int) -> bool:
     return ai_stream_registry.cancel(generation_id)
 
 
+def _notify_saved(
+    prepared: Dict[str, Any],
+    *,
+    status: str,
+    content: str,
+    structured: Optional[Dict[str, Any]],
+    risk_level: Optional[str],
+) -> None:
+    """落库之后回调调用方，让它把结果镜像到自己的表（可选钩子）。
+
+    为什么需要：复盘类结果的**权威落点**不是 `ai_generation`（那是覆盖式的最新
+    一次），而是调用方自己的追加表（整改 §8.7）。但流式引擎只认 `ai_generation`，
+    所以引擎在四种结束路径落库之后统一叫一次 `prepared["on_saved"]`，
+    由调用方决定镜像到哪——引擎不需要知道复盘表的存在。
+
+    失败永远不影响已经推给用户的内容：与 `_save` 同策略，异常只记日志。
+    """
+    callback = prepared.get("on_saved")
+    if not callable(callback):
+        return
+    try:
+        callback(
+            status=status,
+            content=content,
+            structured=structured,
+            risk_level=risk_level,
+        )
+    except Exception:
+        logger.exception(
+            "[AI] 生成结果镜像失败 kind=%s", prepared.get("generation_kind")
+        )
+
+
 def _save(**kwargs: Any) -> None:
     """用独立会话落库，异常只记日志。
 
@@ -340,14 +373,22 @@ def stream_generation_events(prepared: Dict[str, Any]) -> Iterator[Dict[str, Any
         risk = _resolve_risk(content, structured)
         thinking = trim_thinking("".join(thinking_parts))
 
+        final_status = STATUS_INTERRUPTED if cancelled else STATUS_DONE
         _save(
             **save_kwargs,
-            status=STATUS_INTERRUPTED if cancelled else STATUS_DONE,
+            status=final_status,
             content=content,
             thinking=thinking,
             structured_output=structured,
             risk_level=risk,
             model=llm.model,
+        )
+        _notify_saved(
+            prepared,
+            status=final_status,
+            content=content,
+            structured=structured,
+            risk_level=risk,
         )
         # 先置位再 yield：万一客户端恰好在 done 帧处断开，
         # finally 里的「未完成兜底落库」就不会把刚写好的 done 覆盖成 interrupted。
@@ -387,6 +428,13 @@ def stream_generation_events(prepared: Dict[str, Any]) -> Iterator[Dict[str, Any
             risk_level=None,
             model=None,
         )
+        _notify_saved(
+            prepared,
+            status=STATUS_FAILED,
+            content=partial,
+            structured=None,
+            risk_level=None,
+        )
         completed = True
         yield {
             "event": "error",
@@ -401,12 +449,20 @@ def stream_generation_events(prepared: Dict[str, Any]) -> Iterator[Dict[str, Any
             # 客户端断开（GeneratorExit）才会走到这里：把已经生成的部分存下来。
             # 这里不能 yield（生成器正在关闭），只能做落库这类纯 IO。
             logger.info("[AI] 生成被中断，保留半成品 generation=%s", generation_id)
+            partial = splitter.content_so_far.strip()
             _save(
                 **save_kwargs,
                 status=STATUS_INTERRUPTED,
-                content=splitter.content_so_far.strip(),
+                content=partial,
                 thinking=trim_thinking("".join(thinking_parts)),
                 structured_output=None,
                 risk_level=None,
                 model=None,
+            )
+            _notify_saved(
+                prepared,
+                status=STATUS_INTERRUPTED,
+                content=partial,
+                structured=None,
+                risk_level=None,
             )

@@ -23,7 +23,9 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.main import app  # noqa: E402
 
 client = TestClient(app)
-SCHEMA = client.get("/openapi.json").json()
+# schema 直接从 app 取，不走 HTTP：DocsGuardMiddleware 对 /openapi.json 默认拒绝
+# （未配置口令一律 401），裸 GET 拿到的是空 body。探测端点仍走 TestClient。
+SCHEMA = app.openapi()
 PATHS = SCHEMA["paths"]
 
 

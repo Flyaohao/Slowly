@@ -27,11 +27,15 @@ def start_mediation(
 
 @router.get("", response_model=ApiResponse)
 def list_mediations(
-    role: str = Query("mine", pattern="^(invited|mine|all)$"),
+    role: str = Query("mine", pattern="^(invited|mine|all|history)$"),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """契约 §2.3-3：伴侣侧调解列表（默认 mine）。"""
+    """契约 §2.3-3 / §8.5-6：调解列表。
+
+    `invited` 待回应邀请；`mine` / `all` 我参与的（含已完成的，供「能回看」）；
+    `history` 只看已完成的。
+    """
     result = mediation_service.list_mediations(db, current_user.id, role)
     return ApiResponse(data=result)
 
@@ -134,6 +138,7 @@ def get_status(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """会话状态真源（§2.3-2）。§8.5-3：公开前只回本人发言；§8.5-6：completed 可读。"""
     try:
         result = mediation_service.get_status(db, session_id, current_user.id)
     except ValueError as e:

@@ -327,7 +327,8 @@ def t_feedback_post_api(db: Session):
         )
         check("adopted=False 真落库（未被 None 跳过）",
               row505 is not None and row505.adopted is False, str(row505))
-        check("outcome=None 保持 NULL（进 pending）",
+        # 整改 §8.3：明确「未采用」= 无需回访 → 不进 pending
+        check("outcome=None 保持 NULL（但 adopted=False 不回访）",
               row505 is not None and row505.outcome is None, str(row505))
 
         # 旧 APK 形状：只有 rating
@@ -348,11 +349,12 @@ def t_feedback_post_api(db: Session):
               row506 is not None and row506.adopted is None and row506.outcome is None,
               str(row506))
 
-        # 列表随之增长：501 + 508（服务层旧形状）+ 505 + 506（API 提交）
+        # 列表随之增长：501 + 508（服务层旧形状）+ 506（API 旧形状）
+        # —— 505 是 adopted=False（未采用），整改 §8.3 后不进 pending
         r3 = client.get("/api/v1/couple/ai/feedback/pending")
         ids3 = {i.get("session_id") for i in (r3.json().get("data") or {}).get("items", [])}
-        check("新增无 outcome 行进入 pending",
-              ids3 == {501, 505, 506, 508}, str(sorted(ids3)))
+        check("新增无 outcome 行进入 pending（adopted=False 除外）",
+              ids3 == {501, 506, 508}, str(sorted(ids3)))
     finally:
         _drop_client(app, g_db, g_user)
 

@@ -360,6 +360,78 @@ def t_dual_summary_http_gate(db: Session):
 
 
 # --------------------------------------------------------------------- #
+# §8.6 双视角邀请：带邀请语才通知
+# --------------------------------------------------------------------- #
+_INVITES = []
+
+
+def _install_invite_spy():
+    """替换 notify_dual_invite：只记录调用，不真发。
+
+    这里替换的是**通知函数**（不是 schedule_notify）——schedule_notify 在
+    没有事件循环时会 `asyncio.run` 真跑协程，而真正需要断言的是「有没有发起
+    这次通知、带的是什么」，不是投递机制本身。
+    """
+    from app.services import notification_service
+
+    original = notification_service.notify_dual_invite
+
+    def spy(partner_id, event_id, title, inviter_name, invite_message):
+        _INVITES.append({
+            "partner_id": partner_id,
+            "event_id": event_id,
+            "title": title,
+            "inviter_name": inviter_name,
+            "invite_message": invite_message,
+        })
+        return None
+
+    notification_service.notify_dual_invite = spy
+    return notification_service, original
+
+
+def t_create_event_invite(db: Session):
+    """§8.6：军师/用户发起双视角时能邀请伴侣；不填邀请语则完全不打扰。"""
+    from app.services import dual_perspective_service
+
+    _INVITES.clear()
+    plain = dual_perspective_service.create_event(db, A_ID, {
+        "title": "没填邀请语", "event_time": datetime.utcnow(),
+    })
+    check("不带邀请语不打扰伴侣", len(_INVITES) == 0, str(_INVITES))
+    check("事件照常创建", plain is not None and (plain.id or 0) > 0, str(plain))
+
+    invited = dual_perspective_service.create_event(db, A_ID, {
+        "title": "填了邀请语",
+        "event_time": datetime.utcnow(),
+        "invite_message": "我想听听你当时是怎么想的",
+    })
+    check("带邀请语恰好通知 1 次", len(_INVITES) == 1, str(_INVITES))
+    first_invite = _INVITES[0] if _INVITES else None
+    if first_invite:
+        got = first_invite
+        check("通知发给伴侣而不是自己", got["partner_id"] == B_ID, str(got))
+        check("通知带事件 id（对方能直达那件事）", got["event_id"] == invited.id, str(got))
+        check("通知带事件标题", got["title"] == "填了邀请语", str(got))
+        check("通知带邀请语（说明为什么现在写）",
+              got["invite_message"] == "我想听听你当时是怎么想的", str(got))
+        check("昵称取不到时退回中性称呼", got["inviter_name"] == "你的伴侣", str(got))
+
+    # 前端 trim 后可能传空串：等同没填，不发通知
+    _INVITES.clear()
+    dual_perspective_service.create_event(db, A_ID, {
+        "title": "空白邀请语", "event_time": datetime.utcnow(), "invite_message": "   ",
+    })
+    check("空白邀请语不打扰伴侣", len(_INVITES) == 0, str(_INVITES))
+
+    # 通知里不出现任何一方的视角正文（可见性边界仍在服务端过滤）
+    if first_invite:
+        check("通知 payload 无视角正文字段",
+              set(first_invite) == {"partner_id", "event_id", "title", "inviter_name", "invite_message"},
+              str(sorted(first_invite)))
+
+
+# --------------------------------------------------------------------- #
 def _fresh_client(db: Session, uid: int):
     from fastapi.testclient import TestClient
     from app.main import app
@@ -381,6 +453,7 @@ def main() -> int:
     print("[P0-1 双视角可见性] 契约 §2.1 回归")
     db = seed()
     module, original = _install_distill_spy()
+    notify_module, original_notify = _install_invite_spy()
     try:
         t_detail_hides_partner(db)
         t_detail_http_shape(db)
@@ -391,8 +464,10 @@ def main() -> int:
         t_reveal_makes_both_visible(db)
         t_dual_summary_gate(db)
         t_dual_summary_http_gate(db)
+        t_create_event_invite(db)
     finally:
         module.distill_event_in_background = original
+        notify_module.notify_dual_invite = original_notify
         db.close()
     print("========== 结果 ==========")
     if FAILURES:

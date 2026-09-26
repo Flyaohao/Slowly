@@ -84,6 +84,15 @@ class AiChatSession(BigIntPKMixin, TimestampMixin, Base):
     #: 分段原因：timeout / scene_switch / manual / budget / archived
     segment_reason: Mapped[Optional[str]] = mapped_column(String(30))
 
+    # ---- 整改 §8.5-5：改写确认的**双方各自**状态 ----
+    # 原先 confirm(true) 一个人点就把会话推进 summarizing，对方从没确认过——
+    # 「双方确认后才生成总结」是契约硬要求，而"另一方是否已确认"必须落库，
+    # 否则断线重进（§8.5-7）根本无从恢复，用户会看到一个凭空出现的总结页。
+    # 存 user_id（而不是布尔），这样"谁确认了"在库里是可查的，也不需要
+    # 假设双方 id 的顺序。NULL = 无人确认。
+    confirm_inviter_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    confirm_partner_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
     messages: Mapped[List["AiChatMessage"]] = relationship(back_populates="session")
 
 
@@ -112,6 +121,14 @@ class AiChatMessage(BigIntPKMixin, TimestampMixin, Base):
 
 class AiOutputFeedback(BigIntPKMixin, Base):
     __tablename__ = "ai_output_feedback"
+    # 整改契约 §8.3：同一用户对同一条消息只允许一行反馈（「采用」与「回访结果」
+    # 是对同一行的补全，不是两条记录）。仓储层的 upsert 是「先查后写」，
+    # 并发双击时两端都会查不到行 → 双插；数据库层的唯一约束才是真正的守卫。
+    # 必须在模型里显式声明：测试与任何 create_all 建库路径都走模型元数据，
+    # 只写在迁移里等于运行期没有约束（且 autogenerate 会反过来提议删掉它）。
+    __table_args__ = (
+        UniqueConstraint("message_id", "user_id", name="uq_ai_output_feedback_msg_user"),
+    )
 
     message_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("ai_chat_message.id"), nullable=False

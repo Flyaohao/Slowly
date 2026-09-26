@@ -193,8 +193,16 @@ def main():
 
             probe.get(path)(ai_limit()(endpoint))
 
-            # 每个场景再用独立 client IP，避免来源地址维度上的串扰
-            tc = TestClient(probe, client=(client_ip, 12345))
+            # 每个场景再用独立 client IP，避免来源地址维度上的串扰。
+            # starlette ≥0.25 的 TestClient（httpx 版）已移除 client= 参数，
+            # 改用 ASGI 包装强改 scope["client"]——slowapi get_remote_address
+            # 读的正是 scope["client"]，效果与旧参数一致。
+            async def _force_ip(scope, receive, send, _ip=client_ip):
+                if scope.get("type") == "http":
+                    scope = {**scope, "client": (_ip, 12345)}
+                await probe(scope, receive, send)
+
+            tc = TestClient(_force_ip)
             return [tc.get(path).status_code for _ in range(3)]
         finally:
             config.AI_RATE_LIMIT, config.AI_IP_RATE_LIMIT = saved

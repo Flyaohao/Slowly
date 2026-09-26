@@ -25,7 +25,9 @@ def create_anniversary(
         if code == "30005":
             return ApiResponse(code=30005, message="请先绑定情侣关系", data=None)
         return ApiResponse(code=int(code), message="创建失败", data=None)
-    return ApiResponse(data=AnniversaryOut.model_validate(item).model_dump())
+    return ApiResponse(data=AnniversaryOut.model_validate(
+        anniversary_service.serialize_anniversary(item)
+    ).model_dump())
 
 
 @router.get("", response_model=ApiResponse)
@@ -39,6 +41,8 @@ def list_anniversaries(
         result = anniversary_service.list_anniversaries(db, current_user.id, page, page_size)
     except ValueError:
         return ApiResponse(code=30005, message="请先绑定情侣关系", data=None)
+    # service 返回的 items 已经是 serialize_anniversary 的结果（含下次发生日 /
+    # 天数），这里只做形状校验，**不能**再序列化一次（传 dict 进去会 AttributeError）。
     result["items"] = [AnniversaryOut.model_validate(i).model_dump() for i in result["items"]]
     return ApiResponse(data=result)
 
@@ -62,7 +66,9 @@ def update_anniversary(
         if code == "100002":
             return ApiResponse(code=100002, message="无权访问", data=None)
         return ApiResponse(code=int(code), message="更新失败", data=None)
-    return ApiResponse(data=AnniversaryOut.model_validate(item).model_dump())
+    return ApiResponse(data=AnniversaryOut.model_validate(
+        anniversary_service.serialize_anniversary(item)
+    ).model_dump())
 
 
 @router.delete("/{item_id}", response_model=ApiResponse)

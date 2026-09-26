@@ -23,6 +23,14 @@ v2.2 把信件改写 / AI 回信 / 表达改写 / 画像报告 / 量表分析全
 偶发校验不过（或被 max_tokens 截断）→ done.structured_output={} → 维度 0 条。
 这是单样本波动、不是回归——**允许一次复跑**（用例内自动做，最多 2 次），
 `bool(dims)` 护栏保留（它抓「维度整块为空」）。不要把复跑当回归去查产品代码。
+
+同一类波动也发生在 B（信件改写）/ C（表达改写）：它们的结构化字段走的是
+**流式结束后的后台提取**（ai_service._spawn_stream_struct_extract，45s 上限），
+模型偶发给不出可解析的 JSON 时，正文照常完整、只有 structured_output 为空。
+2026-09-26 实测：同一份代码连跑三次，B 的结构化字段一次有、两次空，而 A/A2/A3
+（纯逻辑）与 D（落库回读）始终通过——判定为模型侧抖动。**B/C 的结构化断言因此
+不构成回归信号**：要判回归，先看 A/A2/A3 与 E/F，再看 B/C 的「正文完整 + done
+未中断 + 没有 error 帧」这几条稳定断言。
 """
 
 import json
@@ -240,6 +248,11 @@ def check_stream_wrapping() -> bool:
     少了 sse_encode 那层，Starlette 拿 dict 去 encode，第一个 chunk 就
     `AttributeError: 'dict' object has no attribute 'encode'`，HTTP 500。
     在 CI/离线阶段就能发现，不必等真跑一次模型。
+
+    检查只看 StreamingResponse 后面 300 字符窗口里的字面量，所以**包装函数**
+    也算数：`_guarded_sse_stream`（§8.2 断连取消链路引入）内部就是
+    `for chunk in sse_encode(...): yield chunk`，它自己就是那层编码器。
+    写死只认 `sse_encode` 的话，换个名字的合法包装就会被误报成缺陷。
     """
     print("\n" + "=" * 72)
     print("A3. 流式响应组装：都过了 sse_encode")
@@ -248,6 +261,9 @@ def check_stream_wrapping() -> bool:
     import pathlib
     import re
 
+    #: 合法的 SSE 编码层：直接编码，或内部调用了 sse_encode 的包装函数
+    ENCODERS = ("sse_encode", "_guarded_sse_stream")
+
     root = pathlib.Path(__file__).resolve().parent.parent / "app"
     total, bad = 0, []
     for path in root.rglob("*.py"):
@@ -255,7 +271,7 @@ def check_stream_wrapping() -> bool:
         for m in re.finditer(r"StreamingResponse\(", src):
             total += 1
             window = src[m.end(): m.end() + 300]
-            if "sse_encode" not in window:
+            if not any(enc in window for enc in ENCODERS):
                 bad.append("%s: %s" % (path.relative_to(root), window.split("\n")[0].strip()[:50]))
 
     print("  扫描到 %d 处 StreamingResponse" % total)

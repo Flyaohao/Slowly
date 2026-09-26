@@ -18,7 +18,13 @@ def _get_partner_id(relation: CoupleRelation, user_id: int) -> int:
 
 
 def create_event(db: Session, user_id: int, data: dict) -> DualPerspectiveEvent:
+    """创建双视角事件；带邀请语时通知伴侣（整改 §8.6）。
+
+    邀请语为空 = 用户自己先记着（伴侣通知只会打扰，列表里也还没有值得看的东西）；
+    带邀请语 = 军师推荐/用户主动拉对方一起写，此时实时帧才发出去。
+    """
     relation = _check_relation(db, user_id)
+    invite_message = (data.pop("invite_message", None) or "").strip()
     event = dual_perspective_repo.create_event(db, {
         "relation_id": relation.id,
         "title": data["title"],
@@ -27,7 +33,38 @@ def create_event(db: Session, user_id: int, data: dict) -> DualPerspectiveEvent:
     })
     db.commit()
     db.refresh(event)
+
+    if invite_message:
+        _notify_invite(db, user_id, relation, event, invite_message)
     return event
+
+
+def _notify_invite(
+    db: Session,
+    user_id: int,
+    relation: CoupleRelation,
+    event: DualPerspectiveEvent,
+    invite_message: str,
+) -> None:
+    """邀请通知（WS 实时帧）。失败绝不影响创建主链路。"""
+    from app.repositories import user_repo
+    from app.services.notification_service import notify_dual_invite, schedule_notify
+
+    inviter_name = "你的伴侣"
+    try:
+        profile = user_repo.get_profile_by_user_id(db, user_id)
+        if profile and profile.nickname:
+            inviter_name = profile.nickname
+    except Exception:  # noqa: BLE001  昵称取不到不该拦住邀请
+        pass
+
+    partner_id = _get_partner_id(relation, user_id)
+    # 实时帧只带「谁邀请 + 哪件事 + 邀请语」；邀请语是发起人写给伴侣看的话，
+    # 而双方各自的视角正文**永远**由服务端可见性过滤把守（§2.1-1），通知里不出现。
+    schedule_notify(
+        notify_dual_invite(partner_id, event.id, event.title, inviter_name, invite_message),
+        "dual_invite",
+    )
 
 
 def list_events(db: Session, user_id: int, page: int = 1, page_size: int = 20) -> dict:

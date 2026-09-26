@@ -148,8 +148,14 @@ def get_mediation_sessions(
     """契约 §2.3-3 伴侣侧调解列表。
 
     - ``invited``：partner_user_id==me 且 status=='inviting'（待处理邀请）
-    - ``mine``（默认）：我发起的且未结束
-    - ``all``：我参与的（两个方向）且未结束
+    - ``mine``（默认）：我发起的（含已完成的——§8.5-6「能回看」要能看到它们）
+    - ``all``：我参与的（两个方向）
+    - ``history``：我参与的且**已完成**（调解历史回看专用）
+
+    整改 §8.5-6：此前 mine/all 一律 `status != completed`，调解一结束就从列表里
+    消失，用户再也找不到——「已完成调解可重新查看」这条走查因此不成立。
+    现在只有 ``invited``（待处理邀请）仍按状态过滤，它是「要不要回应」的语义，
+    已完成的不该出现。
     """
     q = db.query(AiChatSession).filter(
         AiChatSession.session_type == "mediation"
@@ -159,16 +165,20 @@ def get_mediation_sessions(
             AiChatSession.partner_user_id == user_id,
             AiChatSession.mediation_status == "inviting",
         )
+    elif role == "history":
+        q = q.filter(
+            (AiChatSession.user_id == user_id)
+            | (AiChatSession.partner_user_id == user_id),
+            AiChatSession.mediation_status == "completed",
+        )
     elif role == "all":
         q = q.filter(
             (AiChatSession.user_id == user_id)
             | (AiChatSession.partner_user_id == user_id),
-            AiChatSession.mediation_status != "completed",
         )
     else:  # mine
         q = q.filter(
             AiChatSession.user_id == user_id,
-            AiChatSession.mediation_status != "completed",
         )
     return q.order_by(AiChatSession.created_at.desc()).all()
 
@@ -229,44 +239,150 @@ def create_feedback(
     db: Session,
     message_id: int,
     user_id: int,
-    rating: int,
+    rating: Optional[int],
     feedback_tag: Optional[str],
     feedback_text: Optional[str],
     adopted: Optional[bool] = None,
     outcome: Optional[str] = None,
 ) -> AiOutputFeedback:
-    fb = AiOutputFeedback(
-        message_id=message_id,
-        user_id=user_id,
-        rating=rating,
-        feedback_tag=feedback_tag,
-        feedback_text=feedback_text,
-        # 契约 §3.4：只增不减——旧客户端不传 → None（保持「有建议无 outcome」）
-        adopted=adopted,
-        outcome=outcome,
+    """按 ``(message_id, user_id)`` **upsert** 反馈（整改契约 §8.3）。
+
+    第一轮实现是纯 insert：同一消息反复反馈会堆出多行，旧行
+    ``outcome IS NULL`` 永久滞留在 pending 列表里，任务卡永远消不掉。
+    现改为：存在即原地更新——只覆盖调用方显式给出的字段（None=不改），
+    保证「采用 → 回访结果」是对**同一行**的补全，而非新增一条。
+    """
+    # FOR UPDATE：并发双击（「有帮助」连点 / 超时重试）时，后到的事务会阻塞到
+    # 前一个提交完毕再走 UPDATE 分支，避免两端都查不到行 → 双插。真正的兜底
+    # 仍是模型上的 uq_ai_output_feedback_msg_user（见 models/ai.py）。
+    fb = (
+        db.query(AiOutputFeedback)
+        .filter(
+            AiOutputFeedback.message_id == message_id,
+            AiOutputFeedback.user_id == user_id,
+        )
+        .with_for_update()
+        .first()
     )
-    db.add(fb)
+    if fb is None:
+        fb = AiOutputFeedback(
+            message_id=message_id,
+            user_id=user_id,
+            rating=rating,
+            feedback_tag=feedback_tag,
+            feedback_text=feedback_text,
+            adopted=adopted,
+            outcome=outcome,
+        )
+        db.add(fb)
+    else:
+        # 不可变字段语义：rating/tag/text 同为「显式传入才更新」
+        if rating is not None:
+            fb.rating = rating
+        if feedback_tag is not None:
+            fb.feedback_tag = feedback_tag
+        if feedback_text is not None:
+            fb.feedback_text = feedback_text
+        if adopted is not None:
+            fb.adopted = adopted
+        if outcome is not None:
+            fb.outcome = outcome
     db.flush()
     return fb
 
 
+def list_feedback_for_session(
+    db: Session, session_id: int, user_id: int
+) -> dict:
+    """一次取回会话内全部「我的反馈」，返回 ``{message_id: AiOutputFeedback}``。
+
+    整改契约 §8.3 消息回看用；批量查询避免 N+1。
+    """
+    rows = (
+        db.query(AiOutputFeedback)
+        .join(AiChatMessage, AiOutputFeedback.message_id == AiChatMessage.id)
+        .filter(AiChatMessage.session_id == session_id, AiOutputFeedback.user_id == user_id)
+        .order_by(AiOutputFeedback.id.asc())
+        .all()
+    )
+    # 同 message 历史脏数据可能多行：id 升序遍历 → 字典里留下最新（id 最大）一行
+    return {fb.message_id: fb for fb in rows}
+
+
 def list_pending_feedback(db: Session, user_id: int, since: datetime):
-    """契约 §3.4 待回访反馈：我的会话、``outcome IS NULL``、消息在 since 之后。
+    """待回访反馈（整改契约 §8.3：去重 + 只返回真正待回访的记录）。
+
+    语义：
+    - 我的会话、消息在窗口内；
+    - **按 message_id 聚合**：一条消息只要有任何一行写着 outcome，就算已回访；
+      ``adopted`` 同样按「任一行为 True 则算已采用」归并。这一点不能用行级
+      ``WHERE adopted IS NOT FALSE`` 代替——历史脏数据里同一个 message 可能既有
+      ``adopted=True`` 的旧行、又有 ``adopted=False`` 的新行，行级过滤会留下前者，
+      于是用户明确说过「没采用」的建议仍然被反复催回访，且因为能压住它的那行
+      id 更大，这条永远消不掉；
+    - 明确「没采用」且未采用过的不需要回访，只有「已采用待结果」和「尚未表态」
+      才是待办。
 
     返回 ``(AiOutputFeedback, AiChatMessage, AiChatSession)`` 三元组，
     按消息时间倒序。窗口取消息时间（feedback 行无时间戳列）。
     """
-    return (
+    rows = (
         db.query(AiOutputFeedback, AiChatMessage, AiChatSession)
         .join(AiChatMessage, AiOutputFeedback.message_id == AiChatMessage.id)
         .join(AiChatSession, AiChatMessage.session_id == AiChatSession.id)
         .filter(
             AiChatSession.user_id == user_id,
-            AiOutputFeedback.outcome.is_(None),
             AiChatMessage.created_at >= since,
         )
-        .order_by(AiChatMessage.created_at.desc())
+        # id 升序：同消息多行时字典留下最新一行（id 最大）作为展示用的实体
+        .order_by(AiOutputFeedback.id.asc())
         .all()
+    )
+
+    # message_id → 展示行（最新一行）+ 该消息的**归并**语义（任一行为 True 即采用；
+    # 任一行 outcome 非空即已回访）。归并必须按消息做，不能按行过滤——原因见 docstring。
+    by_message: dict = {}
+    for fb, msg, session in rows:
+        holder = by_message.get(fb.message_id)
+        if holder is None:
+            holder = {"fb": fb, "msg": msg, "session": session, "adopted": None, "outcome": None}
+            by_message[fb.message_id] = holder
+        else:
+            holder["fb"] = fb  # 升序遍历 → 最终留下 id 最大的一行
+        if fb.adopted is True:
+            holder["adopted"] = True
+        elif fb.adopted is False and holder["adopted"] is None:
+            holder["adopted"] = False
+        if holder["outcome"] is None and fb.outcome is not None:
+            holder["outcome"] = fb.outcome
+
+    deduped = [
+        (h["fb"], h["msg"], h["session"])
+        for h in by_message.values()
+        if h["outcome"] is None and h["adopted"] is not False
+    ]
+    deduped.sort(key=lambda t: t[1].created_at or datetime.min, reverse=True)
+    return deduped
+
+
+def count_closed_feedback_loops(db: Session, user_id: int) -> int:
+    """北极星「有效沟通闭环」可验证查询（整改契约 §8.3）。
+
+    闭环 = 我的会话里 ``adopted IS TRUE`` 且 ``outcome`` 非空的反馈行数
+    （去重后按消息计一次）。
+    """
+    return (
+        db.query(func.count(func.distinct(AiOutputFeedback.message_id)))
+        .join(AiChatMessage, AiOutputFeedback.message_id == AiChatMessage.id)
+        .join(AiChatSession, AiChatMessage.session_id == AiChatSession.id)
+        .filter(
+            AiChatSession.user_id == user_id,
+            AiOutputFeedback.adopted.is_(True),
+            AiOutputFeedback.outcome.isnot(None),
+            AiOutputFeedback.outcome != "",
+        )
+        .scalar()
+        or 0
     )
 
 

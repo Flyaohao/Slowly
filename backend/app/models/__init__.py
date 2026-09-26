@@ -32,6 +32,7 @@ from app.models.ai import (
     MemoryAssertionUserState,
 )
 from app.models.ai_generation import AiGeneration
+from app.models.relationship_review import AiRelationshipReview
 from app.models.letter import Letter
 from app.models.dual_perspective import DualPerspectiveEvent, DualPerspectiveRecord
 from app.models.museum import MuseumItem
@@ -75,6 +76,7 @@ __all__ = [
     "MemoryAssertionEvidence",
     "MemoryAssertionUserState",
     "AiGeneration",
+    "AiRelationshipReview",
     "Letter",
     "DualPerspectiveEvent",
     "DualPerspectiveRecord",

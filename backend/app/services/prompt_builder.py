@@ -157,6 +157,60 @@ SYSTEM_PROMPTS = {
 - next_step: 下一步建议
 - risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk""",
 
+    # 整改 §8.5：调解的改写与总结两段提示词原先硬编码在 mediation_service 里，
+    # 违反「提示词必须住在提示词层」。内容逐字未改，只是搬了家；两侧输入由
+    # 调用方按作者分组传入（rewrite_a=发起方、rewrite_b=参与方）。
+    "mediation_rewrite": """你是一位专业的关系调解师。下面是一对伴侣在矛盾中各自写下的感受。
+
+## 发起方画像（A 方）
+{inviter_profile}
+
+## 参与方画像（B 方）
+{partner_profile}
+
+## 冲突模式
+{conflict_pattern}
+
+## 发起方（A 方）写下的话
+{inviter_input}
+
+## 参与方（B 方）写下的话
+{partner_input}
+
+## 指导原则
+1. 保持中立，不评判任何一方
+2. 改写 A（发起方）：只表达自己的感受与需求，去掉指责、翻旧账、绝对化措辞（如"你总是""你从来不"）
+3. 改写 B（参与方）：先承接对方的感受，再表达自己的立场，去掉防御性与反击性措辞
+4. 保留双方的核心诉求与真实情绪，不要粉饰矛盾
+5. 语言口语化、真诚，像两个人在好好说话，不要书面腔
+6. 不使用"可能""也许"之类的推测措辞，这是改写而非解读
+
+请调用工具提交结果，其中 rewrite_a = 发起方（A 方）的改写，rewrite_b = 参与方（B 方）的改写，
+两侧都必须是改写后的完整表达。""",
+
+    "mediation_summary": """你是一位专业的关系调解师。下面是一对伴侣在调解过程中的全部对话记录。
+
+## 用户画像
+{user_profile}
+
+## 伴侣画像
+{partner_profile}
+
+## 冲突模式
+{conflict_pattern}
+
+## 调解记录
+{all_text}
+
+## 指导原则
+1. 站在中立立场，客观归纳，不偏袒任何一方
+2. common_points 写双方真正一致的地方，而不是场面话
+3. differences 写双方尚未达成一致的差异，措辞中性，不带评判
+4. next_actions 必须是双方立刻能执行的具体动作，例如"今晚睡前各说一件今天对方做的让你舒服的事"
+5. 不要编造记录中不存在的信息
+
+请调用工具提交结果。""",
+
     "letter_understand": """你是一位专业的信件/消息解读师，用户想深入理解一段文字。
 
 ## 用户画像
@@ -831,4 +885,46 @@ def build_dual_summary_prompt(
         event_title=event_title,
         side_self=side_self or "（未填写）",
         side_partner=side_partner or "（未填写）",
+    ))
+
+
+def build_mediation_rewrite_prompt(
+    inviter_profile: str,
+    partner_profile: str,
+    conflict_pattern: str,
+    inviter_input: str,
+    partner_input: str,
+) -> str:
+    """构建调解「双方改写」的 prompt（整改 §8.5：从 mediation_service 迁入）。
+
+    提示词层是唯一的 prompt 出口（代码风格约束：不得硬编码在业务函数里）。
+    两侧输入由调用方**按作者分组**后传入，本函数只负责拼装与兜底文案。
+    """
+    template = SYSTEM_PROMPTS["mediation_rewrite"]
+    return with_human_base(template.format(
+        inviter_profile=inviter_profile,
+        partner_profile=partner_profile,
+        conflict_pattern=conflict_pattern,
+        inviter_input=inviter_input or "（未填写）",
+        partner_input=partner_input or "（未填写）",
+    ))
+
+
+def build_mediation_summary_prompt(
+    user_profile: str,
+    partner_profile: str,
+    conflict_pattern: str,
+    all_text: str,
+) -> str:
+    """构建调解总结的 prompt（整改 §8.5：从 mediation_service 迁入）。
+
+    只应在**双方确认后**调用——双方独立输入的公开时机由状态机决定
+    （§8.5-3 / §8.5-5），本函数不做可见性判定。
+    """
+    template = SYSTEM_PROMPTS["mediation_summary"]
+    return with_human_base(template.format(
+        user_profile=user_profile,
+        partner_profile=partner_profile,
+        conflict_pattern=conflict_pattern,
+        all_text=all_text,
     ))

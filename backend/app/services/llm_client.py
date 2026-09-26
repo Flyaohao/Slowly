@@ -138,14 +138,19 @@ class LlmClient:
         temperature: float = 0.7,
         max_tokens: int = 2000,
         scene: str = "unknown",
+        cancel_event: Optional[threading.Event] = None,
     ) -> str:
-        """阻塞调用，返回完整文本。"""
+        """阻塞调用，返回完整文本。
+
+        ``cancel_event`` 置位时立刻关闭在途请求并抛 ``LlmError``（不静默返回空串，
+        否则「取消」会被上层误当成模型给出了空回复）。
+        """
         payload = {
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
-        resp = self._request(payload, scene=scene)
+        resp = self._request(payload, scene=scene, cancel_event=cancel_event)
         return self._first_text(resp)
 
     def stream(
@@ -296,21 +301,24 @@ class LlmClient:
         scene: str = "unknown",
         temperature: float = 0.7,
         max_tokens: int = 2000,
+        cancel_event: Optional[threading.Event] = None,
     ) -> BaseModel:
         """结构化调用：返回经 Pydantic 校验的模型实例。
 
-        实现路径（Function Calling 承载 Schema）：
-            Pydantic 模型 → tools 定义
-              → 模型调用 submit_structured_answer 并回填参数
-              → JSON 反序列化 → model_validate 强校验
-
-        三级降级：
-            ① 正常 tool_calls 解析
-            ② 提高约束重试一次（temperature 降到 0.2）
-            ③ 退回 prompt-JSON 文本解析
+        ``cancel_event`` 语义与 ``stream_events()`` 一致：置位后立刻放弃剩下的
+        尝试并抛 ``LlmError``。结构化链路自带「首轮 → 重试 → JSON 兜底」三次
+        尝试 × N 个候选模型，客户端一旦断开，没有取消信号就会把这一整套全部
+        跑完（单次超时 120s），白烧 token。调用方（流式结构化提取线程）在
+        用户断连时置位本事件。
         """
         model_cls = output_model or get_output_model(scene)
         tool = build_tool_schema(model_cls, tool_name=_TOOL_NAME)
+
+        def _cancelled() -> bool:
+            return cancel_event is not None and cancel_event.is_set()
+
+        if _cancelled():
+            raise LlmError("结构化调用已被调用方取消")
 
         # ① 首轮：明确要求模型必须调用工具
         armed_messages = self._arm_tool_messages(messages)
@@ -322,13 +330,16 @@ class LlmClient:
                 "temperature": temperature,
                 "max_tokens": max_tokens,
             }
-            resp = self._request(payload, scene=scene)
+            resp = self._request(payload, scene=scene, cancel_event=cancel_event)
             message = resp["choices"][0]["message"]
             data = self._extract_tool_arguments(message)
             if data is not None:
                 return self._validate(model_cls, data, scene)
         except (LlmError, ValidationError, ValueError, KeyError) as exc:
             logger.warning("[LLM] 结构化首轮失败 scene=%s: %s", scene, exc)
+
+        if _cancelled():
+            raise LlmError("结构化调用已被调用方取消")
 
         # ② 重试：降低温度，强化指令
         try:
@@ -344,17 +355,26 @@ class LlmClient:
                 "temperature": 0.2,
                 "max_tokens": max_tokens,
             }
-            resp = self._request(payload, scene=scene)
+            resp = self._request(payload, scene=scene, cancel_event=cancel_event)
             data = self._extract_tool_arguments(resp["choices"][0]["message"])
             if data is not None:
                 return self._validate(model_cls, data, scene)
         except (LlmError, ValidationError, ValueError, KeyError) as exc:
             logger.warning("[LLM] 结构化重试失败 scene=%s: %s", scene, exc)
 
+        if _cancelled():
+            raise LlmError("结构化调用已被调用方取消")
+
         # ③ 兜底：要求模型以纯 JSON 文本回复，再手工解析
         try:
             json_messages = self._json_fallback_messages(messages, model_cls)
-            text = self.invoke(json_messages, temperature=0.2, max_tokens=max_tokens, scene=scene)
+            text = self.invoke(
+                json_messages,
+                temperature=0.2,
+                max_tokens=max_tokens,
+                scene=scene,
+                cancel_event=cancel_event,
+            )
             data = self._extract_json_block(text)
             if data is not None:
                 return self._validate(model_cls, data, scene)
@@ -404,11 +424,23 @@ class LlmClient:
                 models.append(name)
         return models
 
-    def _request(self, payload: Dict[str, Any], scene: str = "unknown") -> Dict[str, Any]:
-        """带模型降级与重试的底层请求。"""
+    def _request(
+        self,
+        payload: Dict[str, Any],
+        scene: str = "unknown",
+        cancel_event: Optional[threading.Event] = None,
+    ) -> Dict[str, Any]:
+        """带模型降级与重试的底层请求。
+
+        ``cancel_event`` 置位时在**候选模型之间**提前退出：非流式 POST 本身
+        无法中断，但可以避免「主模型失败 → 再试 3 个备用模型」把已经无人在等的
+        请求继续烧下去（单次超时 120s × 候选数）。
+        """
         last_error: Optional[str] = None
 
         for model in self._candidates():
+            if cancel_event is not None and cancel_event.is_set():
+                raise LlmError("LLM 调用已被调用方取消")
             body = dict(payload, model=model, **self._thinking_params())
             started = time.time()
             try:

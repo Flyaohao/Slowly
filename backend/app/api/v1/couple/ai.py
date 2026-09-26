@@ -1,8 +1,11 @@
+import asyncio
 import logging
+import threading
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -19,13 +22,21 @@ from app.schemas.ai_schema import (
     LetterReplyRequest,
     RewriteRequest,
     ReviewRequest,
+    ReviewOutcomeRequest,
     DualSummaryRequest,
     PracticeSummaryRequest,
     MemoryCardRequest,
 )
-from app.services import ai_generation_service, ai_service, letter_ai_service
+from app.services import (
+    ai_generation_service,
+    ai_service,
+    letter_ai_service,
+    relationship_review_service,
+)
 from app.services.sse import sse_encode, SSE_HEADERS as _SSE_HEADERS
 from app.repositories import ai_generation_repo, couple_repo, ai_repo
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger("couple.ai")
 
@@ -137,11 +148,68 @@ def chat_stream(
             detail={"code": 50000, "message": "AI 服务异常", "data": None},
         )
 
+    # 客户端断开信号：后端在响应体阶段会启动一个后台线程做结构化提取
+    # （§8.2），断连后没人再读它的结果，必须让提取线程能停下来，
+    # 否则「首轮 → 重试 → JSON 兜底」会继续把 token 烧完。
+    # prepared 是流式生成器的入参，这里挂上事件即可（不改事件协议）。
+    disconnect_event = threading.Event()
+    prepared["cancel_event"] = disconnect_event
+
     return StreamingResponse(
-        sse_encode(ai_service.stream_chat_events(prepared)),
+        _guarded_sse_stream(prepared, disconnect_event),
         media_type="text/event-stream",
         headers=_SSE_HEADERS,
+        # 断连信号有两条来源，缺一不可，见 _disconnect_watcher。
+        background=BackgroundTask(_disconnect_watcher, request, disconnect_event),
     )
+
+
+async def _disconnect_watcher(request: Request, disconnect_event: threading.Event) -> None:
+    """客户端断开时**立刻**置位取消信号。
+
+    为什么不靠生成器关闭（``except GeneratorExit`` / ``finally``）：实测
+    starlette 0.37.2 的 ``StreamingResponse.__call__`` 在收到 ``http.disconnect``
+    后只是 ``cancel_scope.cancel()`` 掉 ``stream_response`` 的 await，同步生成器
+    的那一帧要等到**下一次 gen0 GC 回收**才被关闭——实测断开 8 秒后 ``finally``
+    仍未执行。靠它置位等于没置位：提取线程会继续跑完 45s 上限。
+
+    这里改用 ``BackgroundTask``：starlette 在 ``task_group`` 退出后、**同一个
+    ASGI 调用内** await 它（``responses.py`` 的 ``await self.background()``），
+    所以拿得到 ``receive`` 并立刻读到断连消息。客户端正常收完也一样会置位——
+    那时提取早已结束，置位无副作用。
+
+    为什么还需要 ``_guarded_sse_stream`` 里的 finally：BackgroundTask 是
+    starlette 的实现细节，一旦哪次升级改变了「同一 ASGI 调用内 await」的语义，
+    生成器关闭这条兜底路径还在。
+    """
+    try:
+        while not disconnect_event.is_set():
+            if await request.is_disconnected():
+                disconnect_event.set()
+                return
+            # 10ms 粒度足够：提取线程的每一次轮询都要等 LLM 调用返回，
+            # 提前几十毫秒没有意义，而轮询太密会白占一个 asyncio 槽位。
+            await asyncio.sleep(0.01)
+    except asyncio.CancelledError:
+        # 请求被整体取消；交由生成器的 finally 兜底，这里不要吞掉取消。
+        raise
+    except Exception:  # noqa: BLE001 —— 观察者自身绝不能让请求失败
+        logger.warning("[AI] 断连观察任务异常，改由生成器关闭兜底", exc_info=True)
+
+
+def _guarded_sse_stream(prepared: dict, disconnect_event: threading.Event):
+    """把事件流转成 SSE 串，并在**生成器关闭时**置位断连信号。
+
+    抽成模块级函数而不是端点内闭包：这是「客户端断开 → 提取线程收工」这条
+    取消链路的兜底实现处，必须能被测试直接调用（tests/test_feedback_loop.py
+    的断连用例）。主链路是 [_disconnect_watcher]（见那里的说明：starlette
+    0.37.2 下生成器关闭要等 GC，不能当主信号源）。
+    """
+    try:
+        for chunk in sse_encode(ai_service.stream_chat_events(prepared)):
+            yield chunk
+    finally:
+        disconnect_event.set()
 
 
 @router.get("/sessions", response_model=ApiResponse)
@@ -204,6 +272,14 @@ def submit_feedback(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """提交/补全反馈（整改契约 §8.3）。
+
+    - 不带 ``message_id``（旧客户端）→ 会话最后一条 AI 消息；
+    - 带 ``message_id`` → 校验属于本会话且 role=assistant，否则 50002；
+    - 服务端 upsert：同一用户同一消息的 outcome 更新原行，
+      不再产生永久 ``outcome IS NULL`` 的旧行；
+    - 响应回显落库后的反馈（data 只增不减，旧客户端忽略即可）。
+    """
     messages = ai_repo.get_messages_by_session(db, session_id)
     assistant_messages = [m for m in messages if m.role == "assistant"]
     if not assistant_messages:
@@ -211,19 +287,29 @@ def submit_feedback(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": 50003, "message": "会话无 AI 消息", "data": None},
         )
-    last_msg = assistant_messages[-1]
+
+    if req.message_id is not None:
+        target = next((m for m in messages if m.id == req.message_id), None)
+        if target is None or target.role != "assistant":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": 50002, "message": "反馈目标消息无效", "data": None},
+            )
+        target_msg_id = target.id
+    else:
+        target_msg_id = assistant_messages[-1].id
 
     try:
-        ai_service.submit_feedback(
+        fb = ai_service.submit_feedback(
             db,
             current_user.id,
             session_id,
-            last_msg.id,
+            target_msg_id,
             {
                 "rating": req.rating,
                 "feedback_tag": req.feedback_tag,
                 "feedback_text": req.feedback_text,
-                # 契约 §3.4：只增不减——旧客户端不传这两项 → None
+                # 契约 §3.4：只增不减——旧客户端不传这两项 → None（不改）
                 "adopted": req.adopted,
                 "outcome": req.outcome,
             },
@@ -233,7 +319,7 @@ def submit_feedback(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": 50002, "message": "无权操作此会话", "data": None},
         )
-    return ApiResponse()
+    return ApiResponse(data=fb)
 
 
 @router.get("/feedback/pending", response_model=ApiResponse)
@@ -716,6 +802,7 @@ def relationship_review_stream(
             relation_id=relation.id,
             description=req.description,
             context=req.context,
+            event_time=_parse_event_time(req.event_time),
         )
     except ValueError as e:
         _raise_prepared_error(
@@ -727,6 +814,71 @@ def relationship_review_stream(
         media_type="text/event-stream",
         headers=_SSE_HEADERS,
     )
+
+
+def _parse_event_time(raw):
+    """可选的事件发生时间。可解析则用之，否则返回 None（由留档回落创建时间）。
+
+    刻意不报 422：格式写错不该让整次复盘发不出去——发生时间只是记录维度，
+    而用户已经写好了一整段经过。
+    """
+    if not raw:
+        return None
+    from datetime import datetime
+
+    text = raw.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    # 带时区的输入统一转成朴素本地时间，与库中其它时间列（naive）保持一致
+    return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+
+
+@router.get("/review/history", response_model=ApiResponse)
+def review_history(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """整改 §8.7：复盘历史（可回看）。倒序分页，只给列表需要的字段。
+
+    路径必须声明在 `/review/{review_id}` 之前：否则 "history" 会被当成
+    路径参数去解析成整数而 422。
+    """
+    return ApiResponse(data=relationship_review_service.list_history(
+        db, current_user.id, page, page_size
+    ))
+
+
+@router.get("/review/{review_id}", response_model=ApiResponse)
+def review_detail(
+    review_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """单次复盘详情（含六项留档字段与「重新复盘一次」恢复输入所需原文）。"""
+    try:
+        data = relationship_review_service.get_detail(db, current_user.id, review_id)
+    except ValueError as e:
+        _raise_prepared_error(e, {"70001": (404, "复盘记录不存在")})
+    return ApiResponse(data=data)
+
+
+@router.post("/review/{review_id}/outcome", response_model=ApiResponse)
+def submit_review_outcome(
+    review_id: int,
+    req: ReviewOutcomeRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """回填「后来怎么样了」（§8.7 后续结果）。回填后回访任务随之消失。"""
+    try:
+        data = relationship_review_service.submit_outcome(db, current_user.id, review_id, req.outcome)
+    except ValueError as e:
+        _raise_prepared_error(e, {"70001": (404, "复盘记录不存在")})
+    return ApiResponse(data=data)
 
 @router.post("/dual-summary/stream")
 @ai_limit()

@@ -1,10 +1,11 @@
 from sqlalchemy.orm import Session
 from typing import Optional, List
-from datetime import datetime
+from datetime import date, datetime
 
 from app.models.couple_relation import CoupleRelation
 from app.models.anniversary import Anniversary, Wishlist
 from app.repositories import anniversary_repo, couple_repo
+from app.services.anniversary_dates import next_occurrence
 
 
 def _check_relation(db: Session, user_id: int) -> CoupleRelation:
@@ -14,26 +15,58 @@ def _check_relation(db: Session, user_id: int) -> CoupleRelation:
     return relation
 
 
+def serialize_anniversary(item: Anniversary, today: Optional[date] = None) -> dict:
+    """纪念日出参：附上**服务端算好的**下次发生日与剩余天数（契约 §8.8）。
+
+    单一出口，列表和今后的详情都走这里——两端各算一遍必然算出两个答案。
+    一次性的、已经过去的纪念日 `next_occurrence_date` / `days_until` 都是 None，
+    客户端据此显示原始日期，而不是硬凑一个「还有 N 天」。
+    """
+    today = today or date.today()
+    repeat = bool(getattr(item, "repeat_annually", True))
+    occurrence = next_occurrence(item.anniversary_date, repeat, today)
+    return {
+        "id": item.id,
+        "relation_id": item.relation_id,
+        "title": item.title,
+        "anniversary_date": item.anniversary_date,
+        "repeat_annually": repeat,
+        "description": item.description,
+        "created_at": item.created_at,
+        "next_occurrence_date": occurrence,
+        "days_until": None if occurrence is None else (occurrence - today).days,
+    }
+
+
 def create_anniversary(db: Session, user_id: int, data: dict) -> Anniversary:
     relation = _check_relation(db, user_id)
     item = anniversary_repo.create_anniversary(db, {
         "relation_id": relation.id,
         "title": data["title"],
         "anniversary_date": data["anniversary_date"],
+        # 契约 §8.8：缺省按「每年重复」——存量语义不变
+        "repeat_annually": data.get("repeat_annually", True),
         "description": data.get("description"),
     })
     db.commit()
     db.refresh(item)
 
     # P0-3：纪念日不经 AI，结构化直写（名称+日期），复用同一套去重。
+    # 一次性纪念日不能说成「每年 X 月 X 日」，否则记忆里也会留下年份冲突。
     from app.services.memory_events import MemoryEvent, distill_event_in_background
 
+    repeat = bool(item.repeat_annually)
+    when = (
+        f"每年 {item.anniversary_date.month} 月 {item.anniversary_date.day} 日"
+        if repeat
+        else f"{item.anniversary_date.isoformat()}（一次性）"
+    )
     distill_event_in_background(MemoryEvent(
         source="anniversary",
         source_id=item.id,
         user_id=user_id,
         relation_id=relation.id,
-        content=f"{item.title}是 {item.anniversary_date.month} 月 {item.anniversary_date.day} 日",
+        content=f"{item.title}是 {when}",
         occurred_at=datetime.utcnow(),
         extra={"context": f"纪念日：{item.title}"},
     ))
@@ -43,7 +76,12 @@ def create_anniversary(db: Session, user_id: int, data: dict) -> Anniversary:
 def list_anniversaries(db: Session, user_id: int, page: int = 1, page_size: int = 20) -> dict:
     relation = _check_relation(db, user_id)
     items, total = anniversary_repo.list_anniversaries(db, relation.id, page, page_size)
-    return {"items": items, "total": total, "page": page, "page_size": page_size}
+    return {
+        "items": [serialize_anniversary(i) for i in items],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 def update_anniversary(db: Session, user_id: int, item_id: int, data: dict) -> Anniversary:

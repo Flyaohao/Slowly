@@ -63,13 +63,31 @@ class ChatResponse(BaseModel):
 
 
 class FeedbackRequest(BaseModel):
-    rating: int = Field(..., ge=1, le=5)
+    #: 整改契约 §8.3：可选——不传仍回落到「会话最后一条 AI 消息」（旧 APK 兼容）；
+    #: 传了则必须是该会话内的 assistant 消息（服务端校验）。
+    #: rating 由必填放宽为可选（向后兼容：旧客户端仍传；补填结果时可不带评分）。
+    rating: Optional[int] = Field(default=None, ge=1, le=5)
     feedback_tag: Optional[str] = None
     feedback_text: Optional[str] = None
     #: 契约 §3.4（只增不减）：建议是否被采纳 / 结果回访。
     #: 旧 APK 不传 → None（保持「有建议无 outcome」，进入 pending 回访列表）。
     adopted: Optional[bool] = None
     outcome: Optional[str] = Field(default=None, max_length=2000)
+    #: 整改契约 §8.3：指定反馈落在哪条 AI 消息（历史消息可回填采用/结果）。
+    message_id: Optional[int] = None
+
+
+class FeedbackOut(BaseModel):
+    """反馈回读（新增；会话消息与提交响应用，JSON 只增不减）。"""
+
+    message_id: int
+    rating: Optional[int] = None
+    adopted: Optional[bool] = None
+    outcome: Optional[str] = None
+    feedback_tag: Optional[str] = None
+    feedback_text: Optional[str] = None
+
+    model_config = {"from_attributes": True}
 
 
 class SceneOut(BaseModel):
@@ -101,6 +119,14 @@ class RewriteRequest(BaseModel):
 class ReviewRequest(BaseModel):
     description: str = Field(..., min_length=1, max_length=4000, description="这次争吵/冷战/和好的经过")
     context: Optional[str] = Field(None, max_length=500, description="补充背景")
+    #: 契约 §8.7：发生时间（选填，ISO8601）。不传则按本次复盘时间记录。
+    event_time: Optional[str] = Field(None, max_length=32, description="事件发生时间（选填）")
+
+
+class ReviewOutcomeRequest(BaseModel):
+    """回填复盘「后来怎么样了」（契约 §8.7 后续结果）。"""
+
+    outcome: str = Field(..., min_length=1, max_length=1000, description="后来实际怎么样了")
 
 
 class DualSummaryRequest(BaseModel):

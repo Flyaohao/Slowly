@@ -91,6 +91,9 @@ class NotificationType(str, Enum):
     PARTNER_MOMENT = "partner_moment"
     COMPANION_REQUEST = "companion_request"
 
+    # 双视角相关（整改 §8.6）
+    DUAL_INVITE = "dual_invite"
+
     # 通用
     SYSTEM_NOTICE = "system_notice"
 
@@ -256,6 +259,31 @@ async def notify_mediation_invite(partner_id: int, session_id: int, inviter_name
         {"session_id": session_id, "inviter_name": inviter_name}
     )
     send_push_notification(partner_id, NotificationType.MEDIATION_INVITE.value)
+
+
+async def notify_dual_invite(
+    partner_id: int, event_id: int, title: str, inviter_name: str, invite_message: str
+):
+    """双视角邀请（整改 §8.6：军师发起 → 对方收到待补充提示）。
+
+    **不进邮件白名单**：双视角是「双方各自写下自己的视角」，没有回应时限，
+    也不像信件/调解/解绑那样需要把人从 App 外叫回来。App 内实时帧足够，
+    免得把邀请变成打扰（白名单的三类事件都是「对方做了需要你立刻回应的动作」）。
+
+    `invite_message` 走 `content` 键（与 partner_moment / companion_request 同款）：
+    它是**发起人写给伴侣看的话**，不是任何一方的视角正文——视角内容仍由服务端
+    可见性过滤把守（§2.1-1），通知里永远不出现。
+    """
+    await send_ws_notification(
+        partner_id,
+        NotificationType.DUAL_INVITE,
+        {
+            "event_id": event_id,
+            "title": title,
+            "inviter_name": inviter_name,
+            "content": invite_message,
+        },
+    )
 
 
 async def notify_partner_moment(partner_id: int, sender_id: int, moment_type: str, content: str):
