@@ -49,6 +49,63 @@ class MediationFlowTest {
     }
 
     // ------------------------------------------------------------------ #
+    // 整改 B4.1-4 失败态：必须离开等待，且落到**有出路**的页面
+    // ------------------------------------------------------------------ #
+
+    @Test
+    fun `改写失败不再留在等待态`() {
+        // 回归：`rewrite_failed` 此前没有分支，落进 else → 和「对方还没写完」
+        // 走同一条路。页面继续显示「等对方写下 TA 的感受」，而服务端其实已经停了
+        // ——用户等的是一个永远不会来的改写。这是「失败伪装成一直 processing」。
+        assertFalse(
+            "失败绝不能落成等待",
+            MediationFlow.afterSubmit("rewrite_failed") == MediationStep.WAITING_PARTNER,
+        )
+        assertFalse(
+            MediationFlow.afterSubmit("rewrite_failed") == MediationStep.WAITING_REWRITE,
+        )
+        assertEquals(MediationStep.FAILED_REWRITE, MediationFlow.afterSubmit("rewrite_failed"))
+        assertEquals(MediationStep.FAILED_SUMMARY, MediationFlow.afterSubmit("summary_failed"))
+    }
+
+    @Test
+    fun `等待循环读到失败态立刻交还用户`() {
+        assertEquals(MediationStep.FAILED_REWRITE, MediationFlow.whileWaiting("rewrite_failed"))
+        assertEquals(MediationStep.FAILED_SUMMARY, MediationFlow.whileWaiting("summary_failed"))
+    }
+
+    @Test
+    fun `失败落点必须是能给出重试的那一页`() {
+        // FAILED_REWRITE → 确认页（MediationConfirmScreen 带失败卡片与「重试」）；
+        // FAILED_SUMMARY → 结果页（同样带失败卡片与「重试」）。
+        // 不新开一个「失败页」：失败不是流程里的新一步，是同一步的另一种形态。
+        assertEquals(MediationStep.FAILED_REWRITE, MediationFlow.afterSubmit("rewrite_failed"))
+        assertEquals(MediationStep.FAILED_SUMMARY, MediationFlow.afterSubmit("summary_failed"))
+    }
+
+    @Test
+    fun `总结失败时人也该被送到结果页而不是干等`() {
+        // 双方都确认过了 → 服务端进 summarizing → 失败。人此刻停在确认页上
+        // 只会看到「双方都确认了」的既成事实，出路在结果页（那里有重试）。
+        assertEquals(
+            MediationStep.RESULT,
+            MediationFlow.afterConfirm("summary_failed", myConfirmed = true, partnerConfirmed = true),
+        )
+    }
+
+    @Test
+    fun `失败态不是生成中`() {
+        // 生成中的集合必须**不含**失败：把它算作"生成中"就等于允许客户端
+        // 无限轮询一个已经停下来的状态。
+        assertFalse("rewrite_failed" in MediationFlow.GENERATING_STATUSES)
+        assertFalse("summary_failed" in MediationFlow.GENERATING_STATUSES)
+        assertEquals(setOf("rewrite_failed", "summary_failed"), MediationFlow.FAILURE_STATUSES)
+        // 失败态也不该被判成「还没到结果」而一直轮询
+        assertFalse(MediationFlow.resultReady("rewrite_failed"))
+        assertFalse(MediationFlow.resultReady("summary_failed"))
+    }
+
+    // ------------------------------------------------------------------ #
     // §8.5-1 / §8.5-7 等待中：按服务端状态推进，重进可恢复
     // ------------------------------------------------------------------ #
 

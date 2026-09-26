@@ -87,11 +87,15 @@ class AiActionRoutingTest {
     private fun structured(
         suggestedReply: String? = null,
         openingLines: List<String>? = null,
-        mediaId: Long? = null,
+        summary: String? = null,
+        nextStep: String? = null,
+        suggestMediation: Boolean = false,
     ) = com.couple.translator.core.data.model.AiDto.StructuredOutput(
         suggestedReply = suggestedReply,
         openingLines = openingLines,
-        mediationId = mediaId,
+        summary = summary,
+        nextStep = nextStep,
+        suggestMediation = suggestMediation,
     )
 
     @Test
@@ -127,17 +131,132 @@ class AiActionRoutingTest {
 
     @Test
     fun `调解门控未开时永不出现调解按钮`() {
-        // §8.2/§8.5：调解未过验收前不得暴露残缺流程。即使后端给了 mediationId，
-        // FeatureGate.MEDIATION = false 也必须把它按住——这是契约里的硬门控。
+        // §8.2/§8.5：调解未过验收前不得暴露残缺流程。即使后端判定这是冲突语境
+        // （suggest_mediation = true），FeatureGate.MEDIATION = false 也必须把它按住
+        // ——这是契约里的硬门控，不是开关偏好。
         assertFalse(FeatureGate.MEDIATION)
-        val actions = actionsFor("private_advisor", structured(mediaId = 99L))
+        val actions = actionsFor("private_advisor", structured(suggestMediation = true))
         assertFalse(AiAction.START_MEDIATION in actions)
     }
 
     @Test
-    fun `反馈永远可用`() {
+    fun `没有结论时不给记录为复盘的按钮`() {
+        // 整屏结论字段全空时点「记录为复盘」只会得到一张空复盘——那是把用户
+        // 送进一个没有内容的表单，比不给按钮更糟。
         val actions = actionsFor("private_advisor", structured())
-        assertTrue(AiAction.FEEDBACK in actions)
+        assertFalse(AiAction.SAVE_REVIEW in actions)
+    }
+
+    @Test
+    fun `有结论时记录为复盘会出现`() {
+        val actions = actionsFor(
+            "private_advisor",
+            structured(summary = "你们都想把话说开", nextStep = "本周找时间聊一次"),
+        )
+        assertTrue(AiAction.SAVE_REVIEW in actions)
+    }
+
+    @Test
+    fun `反馈不再是行动行里的一枚 chip`() {
+        // 整改 B4.1-P1：反馈是**次级控件**，由 AiFeedbackRow 单独渲染。
+        // 此前那枚 FEEDBACK chip 点了没有任何反应（handleAction 里是 `-> Unit`），
+        // 是典型的装饰按钮；留在行动行里只会占掉主动作的位置。
+        //
+        // 断言写成「枚举里根本没有这个名字」而不是「它不在本次结果里」：
+        // 后者只能证明这一次没出现，有人把常量加回去照样绿；这里挡的是
+        // 「把装饰按钮加回来」这个动作本身。
+        assertFalse(
+            "AiAction 里不该再有反馈动作——反馈归 AiFeedbackRow 管",
+            AiAction.values().any { it.name == "FEEDBACK" },
+        )
+        val actions = actionsFor("private_advisor", structured(suggestedReply = "x"))
+        assertEquals(
+            "行动行里的动作必须都是真实动作",
+            listOf(AiAction.COPY_REPLY, AiAction.SHARE_REPLY),
+            actions.take(2),
+        )
+    }
+
+    // ------------------------------------------------------------------ #
+    // §8.2 行动行分组（整改 B4.1-P1：同屏主动作上限）
+    // ------------------------------------------------------------------ #
+
+    @Test
+    fun `主动作最多两个其余进更多`() {
+        // 场景：有可复制内容（复制/分享/写信/邀请四个候选）+ 有结论（复盘）。
+        val plan = actionPlanFor(
+            "private_advisor",
+            structured(suggestedReply = "我们聊聊？", summary = "说开了"),
+        )
+        assertTrue("主动作不能超过上限", plan.primary.size <= ActionLimits.PRIMARY_MAX)
+        assertEquals("主动作应当正好取满", ActionLimits.PRIMARY_MAX, plan.primary.size)
+        // 全量动作一个都不能丢：被折叠的必须原样出现在 more 里，
+        // 否则「收敛动作」会变成「砍掉动作」。
+        assertEquals(
+            listOf(
+                AiAction.COPY_REPLY,
+                AiAction.SHARE_REPLY,
+                AiAction.MAKE_LETTER,
+                AiAction.INVITE_DUAL,
+                AiAction.SAVE_REVIEW,
+            ),
+            plan.all,
+        )
+        assertEquals(
+            listOf(AiAction.MAKE_LETTER, AiAction.INVITE_DUAL, AiAction.SAVE_REVIEW),
+            plan.more,
+        )
+    }
+
+    @Test
+    fun `动作少于一屏上限时不出现更多`() {
+        // 只有结论、没有可复制内容 → 候选只剩「记录为复盘」一个。
+        val plan = actionPlanFor("private_advisor", structured(summary = "说开了"))
+        assertEquals(listOf(AiAction.SAVE_REVIEW), plan.primary)
+        assertTrue("没超过上限时不该多出一扇「更多」的门", plan.more.isEmpty())
+        assertFalse(plan.isEmpty)
+    }
+
+    @Test
+    fun `没有任何可用实体时行动行为空`() {
+        // 空内容 + 无结论 + 门控未开：一个动作都给不出来，页面不该渲染一整行空 chip。
+        val plan = actionPlanFor("private_advisor", structured())
+        assertTrue(plan.isEmpty)
+        assertTrue(plan.all.isEmpty())
+    }
+
+    @Test
+    fun `调解建议出现时排在第一位`() {
+        // 整改 B4.1-6 的产品裁决：冲突语境下「把两个人都拉进来说」比
+        // 「换句话再说一遍」更治本，所以它排在候补队列的最前面。
+        //
+        // 直接对排序函数断言，而不是走 actionPlanFor：门控关闭时
+        // actionPlanFor 里根本不会有 START_MEDIATION，那条断言会退化成
+        // 「它不存在」——等于没测排序。这里把已裁决的 suggestMediation 传进去，
+        // 就能在不改产品开关的前提下验证真实排序行为。
+        val ordered = orderedActionsFor(
+            sceneKey = "private_advisor",
+            structured = structured(suggestedReply = "x"),
+            suggestMediation = true,
+        )
+        assertEquals(AiAction.START_MEDIATION, ordered.first())
+        // 且它占掉的是一个主动作位，不是一个被折叠的次要动作
+        val plan = AiActionPlan(
+            primary = ordered.take(ActionLimits.PRIMARY_MAX),
+            more = ordered.drop(ActionLimits.PRIMARY_MAX),
+        )
+        assertTrue(AiAction.START_MEDIATION in plan.primary)
+    }
+
+    @Test
+    fun `门控未开时调解动作完全不进候选队列`() {
+        val ordered = orderedActionsFor(
+            sceneKey = "private_advisor",
+            structured = structured(suggestedReply = "x", suggestMediation = true),
+            suggestMediation = false,
+        )
+        assertFalse(AiAction.START_MEDIATION in ordered)
+        assertEquals(AiAction.COPY_REPLY, ordered.first())
     }
 
     // ------------------------------------------------------------------ #
