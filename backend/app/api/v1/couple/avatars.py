@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.features import require_feature
 from app.schemas.common import ApiResponse
 from app.schemas.avatar_schema import (
     AvatarUpdate, VoiceStyleUpdate, AvatarOut, AvatarAssetOut,
@@ -10,6 +11,15 @@ from app.schemas.avatar_schema import (
 from app.services import avatar_service
 
 router = APIRouter(prefix="/avatars", tags=["AI形象"])
+
+#: 契约 §1「AI 形象（捏脸）」：PUT /me 冻结的 appearance 字段。
+#: `name` 不在名单里（保留为军师设置存储，§3.3）；`voice_style` 走
+#: POST /me/voice-style 专属端点，同样保留。
+_AVATAR_APPEARANCE_FIELDS = ("body_color", "face_config", "outfit_config", "background_url")
+
+#: 复用为可直接调用的冻结检查：W6 打开开关后 PUT 的字段级检查自动放行，
+#: 与 GET /assets 上挂的依赖同源（同一个 FEATURE_FLAGS 条目）。
+_check_appearance_frozen = require_feature("avatar_appearance")
 
 
 @router.get("/me", response_model=ApiResponse)
@@ -35,6 +45,11 @@ def update_avatar(
 ):
     try:
         data = req.model_dump(exclude_unset=True)
+        # 契约 §1：appearance 字段冻结为 10006，name 保留。
+        # 只要请求体出现 appearance 字段就拦（含显式 null——清空形象
+        # 同样是对捏脸数据的写操作）；仅改 name 的请求正常放行。
+        if any(k in data for k in _AVATAR_APPEARANCE_FIELDS):
+            _check_appearance_frozen()
         avatar = avatar_service.update_avatar(db, current_user.id, data)
     except ValueError as e:
         code = str(e)
@@ -44,7 +59,13 @@ def update_avatar(
     return ApiResponse(data=AvatarOut.model_validate(avatar).model_dump())
 
 
-@router.get("/assets", response_model=ApiResponse)
+@router.get(
+    "/assets",
+    response_model=ApiResponse,
+    # 契约 §1：assets 属捏脸素材，整端点冻结 10006（冻结检查在鉴权之前，
+    # 与 museum 等已接线模块同一挂法）
+    dependencies=[Depends(require_feature("avatar_appearance"))],
+)
 def get_assets(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),

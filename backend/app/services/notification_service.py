@@ -7,6 +7,7 @@
 两者是补充关系，不是替代关系：WS 依赖长连接，邮件不依赖任何客户端状态。
 """
 
+import asyncio
 import logging
 import threading
 from datetime import datetime, timedelta
@@ -14,6 +15,59 @@ from typing import Optional, Dict, Any
 from enum import Enum
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# 事件循环投递：同步业务代码调用 async 通知的唯一入口
+# ---------------------------------------------------------------------------
+
+def _main_loop() -> Optional[asyncio.AbstractEventLoop]:
+    """取服务主事件循环（首个 WebSocket connect 时记录在 ConnectionManager 上）。
+
+    同步 `def` 端点跑在 FastAPI 线程池线程里——那里的 ``asyncio.get_event_loop()``
+    在 Python 3.13 直接 RuntimeError，旧的 try/except 调用点因此**全部静默失联**。
+    这里改成显式传递「连接时捕获的 loop」，不再依赖线程的隐式当前循环。
+    """
+    try:
+        from app.services.mediation_service import manager
+        return getattr(manager, "loop", None)
+    except Exception:  # noqa: BLE001  循环探测失败绝不能影响业务主链路
+        return None
+
+
+def schedule_notify(coro, name: str = "notify") -> None:
+    """把一个已构造好的通知协程安全投递出去（fire-and-forget）。
+
+    决策顺序：
+    1. 当前线程自带运行中的 loop（async 上下文）→ ``create_task``；
+    2. 服务主 loop 在跑（普通 uvicorn 请求线程）→ ``run_coroutine_threadsafe``；
+    3. 都没有（脚本 / 单测 / 尚无 WS 连接）→ ``asyncio.run`` 直接跑完——
+       此时连接表必为空，协程只是空转，但**调用点可观测**（测试 spy 依赖这一点）。
+
+    协程必须在调用点就构造好（作为实参传入），这样 monkeypatch 通知函数的
+    测试在 schedule 的瞬间就能观测到调用。失败只记日志，绝不影响业务主链路。
+    """
+    try:
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is not None:
+            running.create_task(coro)
+            return
+
+        loop = _main_loop()
+        if loop is not None and loop.is_running() and not loop.is_closed():
+            asyncio.run_coroutine_threadsafe(coro, loop)
+            return
+
+        asyncio.run(coro)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("notify(%s) 调度失败：%s", name, e)
+        try:
+            coro.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 class NotificationType(str, Enum):

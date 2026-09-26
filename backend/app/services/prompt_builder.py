@@ -521,12 +521,33 @@ def resolve_chat_mode(value: Optional[str]) -> str:
 DEFAULT_AVATAR_NAME = "军师"
 
 
-def build_persona_instruction(
-    name: Optional[str], voice_style: Optional[str]
-) -> str:
-    """组装军师人格指令（P0-7）：名字 + 语气，注入 system 最后一段。
+#: 军师设置四项（契约 §3.3）的 prompt 注入映射。默认值（standard/moderate/
+#: show_evidence=True/address 空）一律不产出文本——老 avatar 行行为零变化。
+_DETAIL_LEVEL_INSTRUCTIONS = {
+    "brief": "回答尽量简短直接，抓住重点即可。",
+    "detailed": "回答可以展开细节，给出更充分的分析。",
+    # standard：基线行为，不注入
+}
+_PROACTIVITY_INSTRUCTIONS = {
+    "passive": "保持克制，未经询问不要主动给建议。",
+    "active": "可以主动提供建议与提醒。",
+    # moderate：基线行为，不注入
+}
 
-    长度预算 ≤60 字（名字截到 12 字 + 语气指令约 20~25 字）。
+
+def build_persona_instruction(
+    name: Optional[str],
+    voice_style: Optional[str],
+    *,
+    address_name: Optional[str] = None,
+    detail_level: Optional[str] = None,
+    proactivity: Optional[str] = None,
+    show_evidence: Optional[bool] = None,
+) -> str:
+    """组装军师人格指令（P0-7）：名字 + 语气 + 设置项，注入 system 最后一段。
+
+    前两参保持位置传参（既有测试与调用点兼容）；契约 §3.3 的四项设置走
+    keyword-only：只在偏离基线时追加短句（默认 avatar 行为与旧版逐字节一致）。
     voice_style 不在 5 选 1 内（None / 空串 / 库里脏数据）→ gentle。
     与画像卡分开注入：人格是「军师是谁」，不是「用户是谁」。
     """
@@ -537,7 +558,26 @@ def build_persona_instruction(
         (voice_style or "").strip(),
         VOICE_STYLE_INSTRUCTIONS["gentle"],
     )
-    return f"你的名字是「{clean_name}」，用户这样称呼你。{style}"
+    parts = [f"你的名字是「{clean_name}」，用户这样称呼你。{style}"]
+
+    addr = (address_name or "").strip()
+    if addr:
+        if len(addr) > 12:
+            addr = addr[:12]
+        parts.append(f"称呼用户为「{addr}」。")
+
+    detail_text = _DETAIL_LEVEL_INSTRUCTIONS.get((detail_level or "").strip())
+    if detail_text:
+        parts.append(detail_text)
+
+    proactivity_text = _PROACTIVITY_INSTRUCTIONS.get((proactivity or "").strip())
+    if proactivity_text:
+        parts.append(proactivity_text)
+
+    if show_evidence is False:
+        parts.append("除非用户追问，否则不要展开你的判断依据。")
+
+    return "".join(parts)
 
 
 def truncate_at_json_marker(template: str) -> str:

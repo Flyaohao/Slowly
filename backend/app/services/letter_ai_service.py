@@ -9,6 +9,7 @@ from app.schemas.ai_output import (
 )
 from app.services import ai_generation_service
 from app.services.ai_service import _call_llm, _format_profile, _get_partner_id
+from app.services.letter_service import is_locked_future
 from app.services.prompt_builder import build_structured_stream_prompt
 
 #: 落 `ai_generation` 时用的生成类型。同时也是回读端点里的 `kind` 参数值，
@@ -111,6 +112,9 @@ def understand_letter(db: Session, user_id: int, letter_id: int) -> dict:
         raise ValueError("60001")
     if letter.relation_id != relation.id:
         raise ValueError("60002")
+    # 契约 §2.5-2：AI 理解/回信同样过解锁门——未解锁的存量未来信不给读
+    if is_locked_future(letter, user_id):
+        raise ValueError("60002")
 
     sender_profile = profile_repo.get_latest_profile(db, letter.sender_id)
     sender_scores = {}
@@ -140,12 +144,14 @@ def understand_letter(db: Session, user_id: int, letter_id: int) -> dict:
     }
 
 
-def _load_letter_in_relation(db: Session, relation_id: int, letter_id: int):
-    """取信件并校验它属于当前关系。"""
+def _load_letter_in_relation(db: Session, user_id: int, relation_id: int, letter_id: int):
+    """取信件并校验它属于当前关系，且对当前用户已过解锁门（§2.5-2）。"""
     letter = letter_repo.get_letter_by_id(db, letter_id)
     if not letter:
         raise ValueError("60001")
     if letter.relation_id != relation_id:
+        raise ValueError("60002")
+    if is_locked_future(letter, user_id):
         raise ValueError("60002")
     return letter
 
@@ -172,7 +178,7 @@ def prepare_understand_letter(
     必须在请求级 db 存活时调用：`begin()` 要落一条 `streaming` 占位记录，
     并把它的 id 作为 `generation_id` 交给客户端用于中断。
     """
-    letter = _load_letter_in_relation(db, relation_id, letter_id)
+    letter = _load_letter_in_relation(db, user_id, relation_id, letter_id)
     sender_profile_text = _sender_profile_text(db, letter.sender_id)
 
     base_prompt = LETTER_UNDERSTAND_PROMPT.format(
@@ -272,6 +278,9 @@ def generate_reply(db: Session, user_id: int, letter_id: int) -> dict:
         raise ValueError("60001")
     if letter.relation_id != relation.id:
         raise ValueError("60002")
+    # 契约 §2.5-2：AI 理解/回信同样过解锁门——未解锁的存量未来信不给读
+    if is_locked_future(letter, user_id):
+        raise ValueError("60002")
 
     sender_profile = profile_repo.get_latest_profile(db, letter.sender_id)
     sender_scores = {}
@@ -307,7 +316,7 @@ def prepare_rewrite_letter(
     仅输出协议分叉：正文流直接输出改写后的信件全文（用户最关心的东西，
     打字机逐字可见），分隔符后的 JSON 承载标题/改动说明等结构化字段。
     """
-    letter = _load_letter_in_relation(db, relation_id, letter_id)
+    letter = _load_letter_in_relation(db, user_id, relation_id, letter_id)
     if letter.sender_id != user_id:
         raise ValueError("60002")
 
@@ -366,7 +375,7 @@ def prepare_generate_reply(
     db: Session, user_id: int, relation_id: int, letter_id: int
 ) -> dict:
     """流式版「AI 回信建议」的前处理，与 `prepare_understand_letter` 同构。"""
-    letter = _load_letter_in_relation(db, relation_id, letter_id)
+    letter = _load_letter_in_relation(db, user_id, relation_id, letter_id)
     sender_profile_text = _sender_profile_text(db, letter.sender_id)
 
     base_prompt = LETTER_REPLY_PROMPT.format(

@@ -3,11 +3,17 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.features import require_feature
 from app.schemas.common import ApiResponse
 from app.schemas.practice_schema import PracticeOut, PracticeRecordOut, PracticeRecordSubmit, PracticeRecordDetailOut
 from app.services import practice_service
 
-router = APIRouter(prefix="/practices", tags=["关系练习"])
+# 收敛期冻结（契约 §1）：整模块挂依赖，写入即停（P0-2 冻结止血）。
+router = APIRouter(
+    prefix="/practices",
+    tags=["关系练习"],
+    dependencies=[Depends(require_feature("practices"))],
+)
 
 
 @router.get("", response_model=ApiResponse)

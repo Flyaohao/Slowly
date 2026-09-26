@@ -83,12 +83,23 @@ def get_couple_info(db: Session, user_id: int) -> dict:
 
     space = couple_repo.get_space_by_relation_id(db, relation.id)
 
+    love_days = None
+    if relation.bind_time:
+        love_days = (datetime.utcnow() - relation.bind_time).days
+
     return {
         "id": relation.id,
         "user_a_id": relation.user_a_id,
         "user_b_id": relation.user_b_id,
         "status": relation.status,
         "bind_time": relation.bind_time.isoformat() if relation.bind_time else None,
+        # 契约 §3.5（只增不减）：FE 解绑确认链要展示冷却状态与爱情天数
+        "unbind_requested_at": (
+            relation.unbind_requested_at.isoformat()
+            if relation.unbind_requested_at else None
+        ),
+        "unbind_requested_by": relation.unbind_requested_by,
+        "love_days": love_days,
         "space": {
             "id": space.id,
             "name": space.name,
@@ -113,6 +124,10 @@ def request_unbind(db: Session, user_id: int) -> None:
     relation = couple_repo.get_relation_by_user_including_unbinding(db, user_id)
     if not relation:
         raise ValueError("30005")
+
+    # 契约 §2.6-1：冷却期内重复申请拒绝——72h 时钟不可被重置、发起人不可被覆盖
+    if relation.status == "unbinding":
+        raise ValueError("30007")
 
     partner_id = relation.user_b_id if relation.user_a_id == user_id else relation.user_a_id
     couple_repo.request_unbind(db, relation.id, user_id)
@@ -174,4 +189,17 @@ def cancel_unbind(db: Session, user_id: int) -> None:
     if not relation or relation.status != "unbinding":
         raise ValueError("30005")
 
+    user_a_id, user_b_id = relation.user_a_id, relation.user_b_id
     couple_repo.cancel_unbind(db, relation.id)
+
+    # 契约 §2.6-3：取消成功后通知双方（此前零调用点）。
+    # schedule_notify 从同步/线程池上下文安全投递，失败不影响取消主链路。
+    from app.services.notification_service import (
+        notify_unbind_cancelled,
+        schedule_notify,
+    )
+
+    schedule_notify(
+        notify_unbind_cancelled(user_a_id, user_b_id),
+        "unbind_cancelled",
+    )

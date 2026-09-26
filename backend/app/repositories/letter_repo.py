@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, or_
 from typing import Optional, List
 from datetime import datetime
 
@@ -51,6 +51,8 @@ def list_letters(
     drafts: bool = False,
     page: int = 1,
     page_size: int = 20,
+    exclude_locked_for: Optional[int] = None,
+    now: Optional[datetime] = None,
 ) -> tuple:
     query = db.query(Letter).filter(Letter.deleted_at.is_(None))
 
@@ -78,6 +80,19 @@ def list_letters(
         query = query.filter(Letter.status == status)
     if is_favorite is not None:
         query = query.filter(Letter.is_favorite == is_favorite)
+
+    # 契约 §2.5-2：存量未解锁 future 信（接收方视角）在 SQL 层就剔除——
+    # count 与分页同源，total 才和 Python 层隐藏后实际返回的行数一致。
+    # 条款与 letter_service.is_locked_future / locked_future_clause 同规则。
+    if exclude_locked_for is not None:
+        ts = now or datetime.utcnow()
+        query = query.filter(
+            ~and_(
+                Letter.receiver_id == exclude_locked_for,
+                Letter.letter_type == "future",
+                or_(Letter.unlock_time.is_(None), Letter.unlock_time > ts),
+            )
+        )
 
     total = query.count()
     items = (

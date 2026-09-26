@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from starlette.websockets import WebSocket
@@ -8,7 +9,7 @@ from starlette.websockets import WebSocket
 from app.security.jwt import decode_token
 from app.services.mediation_service import manager
 from app.core.database import SessionLocal
-from app.repositories import user_repo
+from app.repositories import ai_repo, user_repo
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,14 @@ router = APIRouter(tags=["WebSocket"])
 async def websocket_endpoint(
     ws: WebSocket,
     token: str = Query(...),
+    session_id: Optional[int] = Query(None),
 ):
+    """实时通道：token 必校验；可选 session_id 做调解成员校验（契约 §2.3-4）。
+
+    WS 只做**服务端推送**（通知帧 + mediation_status 状态帧），
+    accept/reject/input/confirm 等动作一律走 REST——本端点不再有回声语义。
+    session_id 传入且非会话成员 → close 4003；不传则为通用通知通道。
+    """
     payload = decode_token(token)
     if not payload or payload.get("type") != "access":
         await ws.close(code=4001, reason="Invalid token")
@@ -27,13 +35,23 @@ async def websocket_endpoint(
 
     user_id = int(payload["sub"])
 
-    # 模式校验：仅情侣模式可连接 WebSocket
     db = SessionLocal()
     try:
+        # 模式校验：仅情侣模式可连接 WebSocket
         user = user_repo.get_user_by_id(db, user_id)
         if not user or not user.has_couple:
             await ws.close(code=4003, reason="Single mode - WebSocket not available")
             return
+
+        # 成员校验：带 session_id 连接时，非成员直接拒（契约 §2.3-4）
+        if session_id is not None:
+            session = ai_repo.get_session_by_id(db, session_id)
+            if (
+                session is None
+                or user_id not in (session.user_id, session.partner_user_id)
+            ):
+                await ws.close(code=4003, reason="Not a member of this session")
+                return
     finally:
         db.close()
 
@@ -46,44 +64,10 @@ async def websocket_endpoint(
                 msg = json.loads(data)
                 msg_type = msg.get("type", "")
 
-                if msg_type == "pong":
+                # 只保留心跳/回执协议。动作类消息（accept/input/confirm 等）
+                # 已按契约 §2.3-4 删除——服务端不再代执行、也不回声。
+                if msg_type in ("pong", "ack"):
                     continue
-
-                if msg_type == "mediation_accept":
-                    session_id = msg.get("session_id")
-                    await manager.send_to_user(user_id, {
-                        "type": "mediation_status",
-                        "session_id": session_id,
-                        "status": "accepted",
-                    })
-
-                elif msg_type == "mediation_reject":
-                    session_id = msg.get("session_id")
-                    await manager.send_to_user(user_id, {
-                        "type": "mediation_status",
-                        "session_id": session_id,
-                        "status": "rejected",
-                    })
-
-                elif msg_type == "mediation_input_done":
-                    session_id = msg.get("session_id")
-                    await manager.send_to_user(user_id, {
-                        "type": "mediation_status",
-                        "session_id": session_id,
-                        "status": "input_done",
-                    })
-
-                elif msg_type == "mediation_confirm":
-                    session_id = msg.get("session_id")
-                    confirmed = msg.get("confirmed", False)
-                    await manager.send_to_user(user_id, {
-                        "type": "mediation_status",
-                        "session_id": session_id,
-                        "status": "confirmed" if confirmed else "rejected",
-                    })
-
-                elif msg_type == "ack":
-                    pass
 
             except asyncio.TimeoutError:
                 try:

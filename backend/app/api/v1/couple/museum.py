@@ -7,11 +7,17 @@ from typing import Optional
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.features import require_feature
 from app.schemas.common import ApiResponse
 from app.schemas.museum_schema import MuseumItemCreate, MuseumItemUpdate, MuseumItemOut
 from app.services import museum_service
 
-router = APIRouter(prefix="/museum", tags=["关系博物馆"])
+# 收敛期冻结（契约 §1）：整模块挂依赖，W6 删除时连同依赖一起摘除。
+router = APIRouter(
+    prefix="/museum",
+    tags=["关系博物馆"],
+    dependencies=[Depends(require_feature("museum"))],
+)
 
 _MAX_IMAGE_SIZE = 5 * 1024 * 1024
 _ALLOWED_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")

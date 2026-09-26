@@ -66,6 +66,10 @@ class FeedbackRequest(BaseModel):
     rating: int = Field(..., ge=1, le=5)
     feedback_tag: Optional[str] = None
     feedback_text: Optional[str] = None
+    #: 契约 §3.4（只增不减）：建议是否被采纳 / 结果回访。
+    #: 旧 APK 不传 → None（保持「有建议无 outcome」，进入 pending 回访列表）。
+    adopted: Optional[bool] = None
+    outcome: Optional[str] = Field(default=None, max_length=2000)
 
 
 class SceneOut(BaseModel):

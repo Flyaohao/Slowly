@@ -1,14 +1,68 @@
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
 
 from app.models.letter import Letter
 from app.models.couple_relation import CoupleRelation
+from app.core.features import FROZEN_LETTER_TYPES
 from app.repositories import letter_repo, couple_repo
 
 
 CALM_PERIOD_HOURS = 2
 SINGLE_MODE_ALLOWED_TYPES = {"normal", "unsaid"}
+
+#: 契约 §2.5-2：存量未解锁未来信在通知/首页卡上的 title 替身——
+#: 保留字段本身（JSON 只增不减），但绝不带真实标题。
+LOCKED_LETTER_TITLE = "未解锁的信"
+
+
+def _future_letter_locked(letter: Letter, now: Optional[datetime] = None) -> bool:
+    """存量未来信是否处于未解锁状态（与具体查看者无关）。
+
+    契约 §2.5-2：解锁门**只看** `letter_type` + `unlock_time`，不依赖
+    status / is_private 等巧合字段。`unlock_time is NULL` 视为「从未排期」
+    同样锁定——历史客户端从不传 unlock_time，条件落空即全量泄漏，
+    正是本次要堵的洞（未来信创建已冻结，此类行永远不会解锁）。
+    """
+    if letter.letter_type != "future":
+        return False
+    if letter.unlock_time is None:
+        return True
+    return letter.unlock_time > (now or datetime.utcnow())
+
+
+def is_locked_future(letter: Letter, user_id: int, now: Optional[datetime] = None) -> bool:
+    """接收方视角的存量未来信锁：仅拦截收件方；发件方看自己的信不受限。"""
+    if letter.receiver_id != user_id:
+        return False
+    return _future_letter_locked(letter, now)
+
+
+def locked_future_clause(now: Optional[datetime] = None):
+    """`is_locked_future` 的 SQL 同义条款（首页等集合查询用，规则同源）。"""
+    ts = now or datetime.utcnow()
+    return and_(
+        Letter.letter_type == "future",
+        or_(Letter.unlock_time.is_(None), Letter.unlock_time > ts),
+    )
+
+
+def _notification_title(letter: Letter) -> str:
+    """通知可用标题：未解锁未来信解锁前不带真实 title（契约 §2.5-2）。"""
+    if _future_letter_locked(letter):
+        return LOCKED_LETTER_TITLE
+    return letter.title or "无题"
+
+
+def check_letter_type_allowed(letter_type) -> None:
+    """按类型冻结（契约 §2.5-1）：future / private 一律 10006。
+
+    只拒这两类——现有前端还会发 unsaid / calm，信件主体必须保留。
+    服务层用 `ValueError("10006")` 传码，由 API 层翻译成冻结错误。
+    """
+    if letter_type in FROZEN_LETTER_TYPES:
+        raise ValueError("10006")
 
 
 def _get_partner_id(db: Session, relation_id: int, user_id: int) -> Optional[int]:
@@ -26,6 +80,9 @@ def _check_relation(db: Session, user_id: int) -> CoupleRelation:
 
 
 def create_letter(db: Session, user_id: int, data: dict) -> Letter:
+    # 契约 §2.5-1：冻结创建 future / private（在任何其他分支之前，单身模式同理）
+    check_letter_type_allowed(data.get("letter_type", "normal"))
+
     relation = couple_repo.get_active_relation_by_user(db, user_id)
 
     if relation:
@@ -101,6 +158,10 @@ def list_letters(
     relation = couple_repo.get_active_relation_by_user(db, user_id)
     relation_id = relation.id if relation else None
 
+    # 契约 §2.5-2：锁定行在 SQL 层就从 count 与分页中剔除——
+    # 否则 total 含被 Python 层隐藏的行，total / 页数口径与实际返回行数不一致。
+    # SQL 条款与 `is_locked_future` 同源同刻（共用 now），双层过滤互为兜底。
+    now = datetime.utcnow()
     items, total = letter_repo.list_letters(
         db=db,
         relation_id=relation_id,
@@ -113,18 +174,17 @@ def list_letters(
         drafts=drafts,
         page=page,
         page_size=page_size,
+        exclude_locked_for=user_id,
+        now=now,
     )
 
     filtered = []
     for letter in items:
-        if letter.letter_type == "future" and letter.unlock_time:
-            if letter.sender_id == user_id:
-                filtered.append(letter)
-            elif letter.unlock_time > datetime.utcnow():
-                continue
-            else:
-                filtered.append(letter)
-        elif letter.is_private and letter.receiver_id == user_id:
+        # 契约 §2.5-2：存量未解锁 future 信对接收方在列表中整条隐藏
+        # （标题/内容都不给；发件方与已解锁不受影响）
+        if is_locked_future(letter, user_id, now):
+            continue
+        if letter.is_private and letter.receiver_id == user_id:
             letter_content_hidden = Letter(
                 id=letter.id,
                 relation_id=letter.relation_id,
@@ -168,10 +228,10 @@ def get_letter(db: Session, user_id: int, letter_id: int) -> Letter:
         if not relation or letter.relation_id != relation.id:
             raise ValueError("60002")
 
-    # Future letter: receiver can't see before unlock time
-    if letter.letter_type == "future" and letter.unlock_time:
-        if letter.receiver_id == user_id and letter.unlock_time > datetime.utcnow():
-            raise ValueError("60002")
+    # 契约 §2.5-2：存量未解锁 future 信——接收方 detail 在 unlock_time 前
+    # 无条件拒绝（只看 letter_type + unlock_time，不依赖 status 等巧合字段）
+    if is_locked_future(letter, user_id):
+        raise ValueError("60002")
 
     # Auto-mark as read when receiver views
     if letter.receiver_id == user_id and letter.status == "sent":
@@ -187,6 +247,8 @@ def update_letter(db: Session, user_id: int, letter_id: int, data: dict) -> Lett
         raise ValueError("60001")
     if letter.sender_id != user_id:
         raise ValueError("60002")
+    # 契约 §2.5-1：请求体把类型改成 future/private 时拒绝（改回正常类型不受限）
+    check_letter_type_allowed(data.get("letter_type"))
     if letter.status != "draft":
         raise ValueError("60003")
 
@@ -202,6 +264,10 @@ def delete_letter(db: Session, user_id: int, letter_id: int) -> None:
         raise ValueError("60001")
     if letter.sender_id != user_id and letter.receiver_id != user_id:
         raise ValueError("60002")
+    # 契约 §2.5-2：与 detail 同语义同错误码——接收方在 unlock 前不得经
+    # 删除路径探测/操作未解锁 future 信（错误处理路径同 detail：60002）
+    if is_locked_future(letter, user_id):
+        raise ValueError("60002")
 
     letter_repo.soft_delete_letter(db, letter)
     db.commit()
@@ -215,6 +281,12 @@ def batch_delete_letters(db: Session, user_id: int, letter_ids: list) -> int:
             continue
         if letter.sender_id != user_id and letter.receiver_id != user_id:
             continue
+        # 契约 §2.5-2：锁定行**剔除而非整批拒绝**——与 list 语义一致
+        # （列表里这些行本来就不返回，批删自然也不动它们）。
+        # 返回类型仍是 int「成功删除的非锁定行数」，与既有返回契约不冲突，
+        # 只是锁定行不计入 deleted_count（客户端本就看不到这些行）。
+        if is_locked_future(letter, user_id):
+            continue
         letter_repo.soft_delete_letter(db, letter)
         deleted += 1
     return deleted
@@ -226,6 +298,8 @@ def send_letter(db: Session, user_id: int, letter_id: int) -> Letter:
         raise ValueError("60001")
     if letter.sender_id != user_id:
         raise ValueError("60002")
+    # 契约 §2.5-1：草稿本身的类型是 future/private 时拒绝发送
+    check_letter_type_allowed(letter.letter_type)
     if letter.status != "draft":
         raise ValueError("60003")
     if letter.relation_id is None:
@@ -252,22 +326,19 @@ def send_letter(db: Session, user_id: int, letter_id: int) -> Letter:
         extra={"context": f"信件标题：{letter.title}"},
     ))
 
-    # 通知收件人
+    # 通知收件人（契约 §2.5-2：存量未解锁 future 信解锁前通知不带真实 title；
+    # schedule_notify 兼容线程池调用——旧的事件循环探测分支在线程池里恒静默失败）
     if letter.receiver_id:
-        try:
-            import asyncio
-            from app.services.notification_service import notify_letter_received
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.ensure_future(notify_letter_received(
-                    letter.receiver_id, user_id, letter.id, letter.title or "无题"
-                ))
-            else:
-                loop.run_until_complete(notify_letter_received(
-                    letter.receiver_id, user_id, letter.id, letter.title or "无题"
-                ))
-        except Exception:
-            pass
+        from app.services.notification_service import (
+            notify_letter_received,
+            schedule_notify,
+        )
+        schedule_notify(
+            notify_letter_received(
+                letter.receiver_id, user_id, letter.id, _notification_title(letter)
+            ),
+            "letter_received",
+        )
 
     return letter
 
@@ -277,6 +348,10 @@ def toggle_favorite(db: Session, user_id: int, letter_id: int) -> Letter:
     if not letter:
         raise ValueError("60001")
     if letter.sender_id != user_id and letter.receiver_id != user_id:
+        raise ValueError("60002")
+    # 契约 §2.5-2：favorite 响应体是完整 LetterOut（title+content 全文），
+    # 与 detail 同语义同错误码——接收方不得借收藏动作拿到未解锁 future 信
+    if is_locked_future(letter, user_id):
         raise ValueError("60002")
 
     letter.is_favorite = not letter.is_favorite

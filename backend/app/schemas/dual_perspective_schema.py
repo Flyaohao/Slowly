@@ -38,6 +38,9 @@ class DualPerspectiveEventOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     records: List[DualPerspectiveRecordOut] = []
+    #: 契约 §2.1-1（只增不减的新字段）：对方是否已提交视角。
+    #: 对方未公开时其 content 不在 records 里，客户端靠这个字段渲染"对方已写"。
+    partner_submitted: bool = False
 
     model_config = {"from_attributes": True}
 

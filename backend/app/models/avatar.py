@@ -1,4 +1,4 @@
-from sqlalchemy import String, BigInteger, ForeignKey, JSON, DateTime, Index, func
+from sqlalchemy import String, BigInteger, Boolean, ForeignKey, JSON, DateTime, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 from typing import Optional
@@ -26,6 +26,22 @@ class AiAvatar(BigIntPKMixin, TimestampMixin, Base):
         String(10), default="auto", nullable=False, server_default="auto"
     )
     background_url: Mapped[Optional[str]] = mapped_column(String(500))
+
+    # ---- 契约 §3.3 军师设置（与 /api/v1/advisor/settings 同构的 4 个新真列）----
+    #: 军师对用户的称呼；NULL/空串 → 对外口径为 ""（FE 兜底默认）
+    address_name: Mapped[Optional[str]] = mapped_column(String(50))
+    #: 详细程度 brief|standard|detailed
+    detail_level: Mapped[str] = mapped_column(
+        String(10), default="standard", nullable=False, server_default="standard"
+    )
+    #: 主动程度 passive|moderate|active
+    proactivity: Mapped[str] = mapped_column(
+        String(10), default="moderate", nullable=False, server_default="moderate"
+    )
+    #: 是否显示判断依据（prompt 注入 + evidence 面板共用这一开关）
+    show_evidence: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False, server_default="1"
+    )
 
 
 class AiAvatarAsset(BigIntPKMixin, Base):

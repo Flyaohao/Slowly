@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.features import require_feature
 from app.core.limiter import ai_limit
 from app.schemas.common import ApiResponse
 from app.schemas.ai_schema import (
@@ -222,6 +223,9 @@ def submit_feedback(
                 "rating": req.rating,
                 "feedback_tag": req.feedback_tag,
                 "feedback_text": req.feedback_text,
+                # 契约 §3.4：只增不减——旧客户端不传这两项 → None
+                "adopted": req.adopted,
+                "outcome": req.outcome,
             },
         )
     except ValueError:
@@ -230,6 +234,20 @@ def submit_feedback(
             detail={"code": 50002, "message": "无权操作此会话", "data": None},
         )
     return ApiResponse()
+
+
+@router.get("/feedback/pending", response_model=ApiResponse)
+def get_pending_feedback(
+    days: int = Query(7, ge=1, le=90, description="回访窗口天数"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """契约 §3.4：近 N 天「有建议但无 outcome」的反馈摘要。
+
+    会话制过滤（session.user_id == 我）——单人模式无 AI 会话时返回空列表，
+    不要求绑定关系（与本文件其余端点的 per-endpoint 自检风格一致）。
+    """
+    return ApiResponse(data=ai_service.list_pending_feedback(db, current_user.id, days))
 
 
 @router.post("/sessions/{session_id}/close", response_model=ApiResponse)
@@ -407,10 +425,22 @@ def get_generation(
     这正是「退出再进来还能看到上次的解读」的实现方式：先回读，拿不到才调模型。
 
     例：`GET /ai/generations/letter_analysis?target_type=letter&target_id=88`
+
+    契约 §2.5-2（MEDIUM-3）：目标信是未解锁 future 时，本批发布前落库的
+    解读/改写/回信派生内容同样拒绝回读——错误码与 detail 一致（60002/403）。
     """
-    payload = ai_generation_service.get_saved(
-        db, current_user.id, kind, target_type, target_id
-    )
+    try:
+        payload = ai_generation_service.get_saved(
+            db, current_user.id, kind, target_type, target_id
+        )
+    except ValueError as e:
+        code = str(e)
+        if code == "60002":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": 60002, "message": "无权访问此信件", "data": None},
+            )
+        raise
     return ApiResponse(data=payload)
 
 
@@ -718,7 +748,7 @@ def dual_summary_stream(
             {
                 "70001": (404, "事件不存在"),
                 "70002": (403, "无权查看该事件"),
-                "70003": (400, "双方都写下视角后才能生成总结"),
+                "70003": (400, "双方都写下并公开视角后才能生成总结"),
             },
         )
 
@@ -729,7 +759,9 @@ def dual_summary_stream(
     )
 
 
-@router.post("/practice-summary/stream")
+# 收敛期冻结（契约 §1）：练习 AI 摘要随关系练习模块一并冻结
+# （消费源 practice_record 已被判定不可信，见 §2.2）。
+@router.post("/practice-summary/stream", dependencies=[Depends(require_feature("practice_summary"))])
 @ai_limit()
 def practice_summary_stream(
     request: Request,
@@ -761,7 +793,8 @@ def practice_summary_stream(
     )
 
 
-@router.post("/memory-card/stream")
+# 收敛期冻结（契约 §1）：AI 回忆卡随纪念馆/愿望清单一并删除。
+@router.post("/memory-card/stream", dependencies=[Depends(require_feature("memory_card"))])
 @ai_limit()
 def memory_card_stream(
     request: Request,

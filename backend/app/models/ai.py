@@ -95,6 +95,11 @@ class AiChatMessage(BigIntPKMixin, TimestampMixin, Base):
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    #: 契约 §2.4-1：消息作者，仅 role="user" 时写入（调解「双方已提交」按 distinct
+    #: user 判定、改写按作者分组都依赖它）。NULL=旧数据 / assistant 消息。
+    user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("user.id"), nullable=True
+    )
     structured_output: Mapped[Optional[dict]] = mapped_column(JSON)
     risk_level: Mapped[Optional[str]] = mapped_column(String(30))
     token_count: Mapped[Optional[int]] = mapped_column(Integer)
@@ -115,6 +120,9 @@ class AiOutputFeedback(BigIntPKMixin, Base):
     rating: Mapped[Optional[int]] = mapped_column(Integer)
     feedback_tag: Mapped[Optional[str]] = mapped_column(String(50))
     feedback_text: Mapped[Optional[str]] = mapped_column(Text)
+    #: 契约 §3.4：建议是否被采纳 / 采纳结果。NULL=尚未回访（pending 端点的筛选条件）。
+    adopted: Mapped[Optional[bool]] = mapped_column(Boolean)
+    outcome: Mapped[Optional[str]] = mapped_column(Text)
 
 
 class AiKnowledgeDoc(BigIntPKMixin, TimestampMixin, Base):

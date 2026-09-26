@@ -84,7 +84,13 @@ def request_unbind(
 ):
     try:
         couple_service.request_unbind(db, current_user.id)
-    except ValueError:
+    except ValueError as e:
+        # 契约 §2.6-1：冷却期内重复申请 30007（时钟不可被重置）
+        if str(e) == "30007":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 30007, "message": "解绑申请已在冷却期", "data": None},
+            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": 30005, "message": "无权操作此关系", "data": None},

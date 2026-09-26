@@ -236,6 +236,11 @@ def _preprocess(
     persona = build_persona_instruction(
         avatar.name if avatar else None,
         avatar.voice_style if avatar else None,
+        # 契约 §3.3 军师设置注入（偏离基线才产出文本，默认行为空变化）
+        address_name=avatar.address_name if avatar else None,
+        detail_level=avatar.detail_level if avatar else None,
+        proactivity=avatar.proactivity if avatar else None,
+        show_evidence=avatar.show_evidence if avatar else None,
     )
 
     # ---- P-C2 §2：S 层长度 = 空上下文渲染的场景 system（两出口取较长）
@@ -1144,8 +1149,39 @@ def submit_feedback(
         rating=feedback["rating"],
         feedback_tag=feedback.get("feedback_tag"),
         feedback_text=feedback.get("feedback_text"),
+        # 契约 §3.4：可选 adopted/outcome（旧客户端不传 → None）
+        adopted=feedback.get("adopted"),
+        outcome=feedback.get("outcome"),
     )
     db.commit()
+
+
+def list_pending_feedback(db: Session, user_id: int, days: int = 7) -> dict:
+    """契约 §3.4：近 N 天「有建议但无 outcome」的会话/消息摘要。
+
+    供首页 ``feedback_outcome`` 卡（§3.1）与「待反馈结果」页共用。
+    """
+    from datetime import datetime, timedelta
+
+    since = datetime.now() - timedelta(days=days)
+    rows = ai_repo.list_pending_feedback(db, user_id, since)
+    items = [
+        {
+            "session_id": session.id,
+            "scene_key": session.scene_key,
+            "title": session.title,
+            "rating": feedback.rating,
+            "adopted": feedback.adopted,
+            # 筛选条件就是 outcome IS NULL——保留字段（形状固定），恒为 None
+            "outcome": feedback.outcome,
+            "message_id": message.id,
+            "created_at": (
+                message.created_at.isoformat() if message.created_at else None
+            ),
+        }
+        for feedback, message, session in rows
+    ]
+    return {"total": len(items), "items": items}
 
 
 def generate_profile_report(db: Session, user_id: int) -> str:
@@ -1696,13 +1732,19 @@ def prepare_dual_summary(db: Session, user_id: int, event_id: int) -> dict:
     """流式版「双视角 AI 总结」的前处理。
 
     纯 Markdown 长文，无结构化字段（output_model=None）。
-    只有双方都已提交记录后才允许总结——单方视角做不出「对照」。
+
+    契约 §2.1-4：**双方都写下并公开**（status == completed）才允许总结——
+    未 reveal 时对方内容本来就不在响应里（§2.1-1 过滤），做不出「对照」，
+    更不能借总结把未公开内容漏出去。错误码复用 70003。
     """
     from app.services import ai_generation_service  # 局部导入，避免模块加载环
     from app.services import dual_perspective_service
 
     # get_event_detail 内部已校验关系归属，错误码（70001/70002）原样透传
     event = dual_perspective_service.get_event_detail(db, user_id, event_id)
+
+    if event.status != "completed":
+        raise ValueError("70003")
 
     records = list(getattr(event, "records", None) or [])
     if len(records) < 2:

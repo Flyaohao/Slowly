@@ -142,6 +142,37 @@ def get_sessions_by_user(db: Session, user_id: int) -> List[AiChatSession]:
     )
 
 
+def get_mediation_sessions(
+    db: Session, user_id: int, role: str = "mine"
+) -> List[AiChatSession]:
+    """契约 §2.3-3 伴侣侧调解列表。
+
+    - ``invited``：partner_user_id==me 且 status=='inviting'（待处理邀请）
+    - ``mine``（默认）：我发起的且未结束
+    - ``all``：我参与的（两个方向）且未结束
+    """
+    q = db.query(AiChatSession).filter(
+        AiChatSession.session_type == "mediation"
+    )
+    if role == "invited":
+        q = q.filter(
+            AiChatSession.partner_user_id == user_id,
+            AiChatSession.mediation_status == "inviting",
+        )
+    elif role == "all":
+        q = q.filter(
+            (AiChatSession.user_id == user_id)
+            | (AiChatSession.partner_user_id == user_id),
+            AiChatSession.mediation_status != "completed",
+        )
+    else:  # mine
+        q = q.filter(
+            AiChatSession.user_id == user_id,
+            AiChatSession.mediation_status != "completed",
+        )
+    return q.order_by(AiChatSession.created_at.desc()).all()
+
+
 def get_messages_by_session(db: Session, session_id: int) -> List[AiChatMessage]:
     return (
         db.query(AiChatMessage)
@@ -160,17 +191,22 @@ def create_message(
     risk_level: Optional[str] = None,
     token_count: Optional[int] = None,
     chat_mode: Optional[str] = None,
+    user_id: Optional[int] = None,
 ) -> AiChatMessage:
     """写消息并**同步刷新**所属 session 的 last_message_at/message_count/token_total。
 
     不用 onupdate：流式链路落库走独立 SessionLocal（见 _persist_streamed_message），
     必须在本函数内对 session 行做显式 UPDATE。
     token_total 口径：优先 token_count，否则 len(content) 字符数近似（禁 tiktoken）。
+
+    `user_id`（契约 §2.4-1）：role="user" 的消息写作者，供调解按人判定 /
+    按作者分组；assistant 消息与旧调用方一律保持 NULL。
     """
     msg = AiChatMessage(
         session_id=session_id,
         role=role,
         content=content,
+        user_id=user_id,
         structured_output=structured_output,
         risk_level=risk_level,
         token_count=token_count,
@@ -196,6 +232,8 @@ def create_feedback(
     rating: int,
     feedback_tag: Optional[str],
     feedback_text: Optional[str],
+    adopted: Optional[bool] = None,
+    outcome: Optional[str] = None,
 ) -> AiOutputFeedback:
     fb = AiOutputFeedback(
         message_id=message_id,
@@ -203,10 +241,33 @@ def create_feedback(
         rating=rating,
         feedback_tag=feedback_tag,
         feedback_text=feedback_text,
+        # 契约 §3.4：只增不减——旧客户端不传 → None（保持「有建议无 outcome」）
+        adopted=adopted,
+        outcome=outcome,
     )
     db.add(fb)
     db.flush()
     return fb
+
+
+def list_pending_feedback(db: Session, user_id: int, since: datetime):
+    """契约 §3.4 待回访反馈：我的会话、``outcome IS NULL``、消息在 since 之后。
+
+    返回 ``(AiOutputFeedback, AiChatMessage, AiChatSession)`` 三元组，
+    按消息时间倒序。窗口取消息时间（feedback 行无时间戳列）。
+    """
+    return (
+        db.query(AiOutputFeedback, AiChatMessage, AiChatSession)
+        .join(AiChatMessage, AiOutputFeedback.message_id == AiChatMessage.id)
+        .join(AiChatSession, AiChatMessage.session_id == AiChatSession.id)
+        .filter(
+            AiChatSession.user_id == user_id,
+            AiOutputFeedback.outcome.is_(None),
+            AiChatMessage.created_at >= since,
+        )
+        .order_by(AiChatMessage.created_at.desc())
+        .all()
+    )
 
 
 def delete_session(db: Session, session_id: int) -> None:

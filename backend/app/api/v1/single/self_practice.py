@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.features import require_feature
 from app.schemas.common import ApiResponse
 from app.schemas.self_practice_schema import (
     SelfPracticeResponse,
@@ -11,7 +12,12 @@ from app.schemas.self_practice_schema import (
 )
 from app.services import self_practice_service
 
-router = APIRouter(prefix="/self-practices", tags=["自我练习"])
+# 收敛期冻结（契约 §1）：整模块挂依赖，W6 删除时连同依赖一起摘除。
+router = APIRouter(
+    prefix="/self-practices",
+    tags=["自我练习"],
+    dependencies=[Depends(require_feature("self_practices"))],
+)
 
 
 def _to_practice_response(p) -> dict:

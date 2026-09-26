@@ -43,8 +43,10 @@ from pydantic import BaseModel, ValidationError
 
 from app.core.database import SessionLocal
 from app.models.ai_generation import AiGeneration
+from app.models.letter import Letter
 from app.repositories import ai_generation_repo
 from app.services import ai_stream_registry
+from app.services.letter_service import is_locked_future
 from app.services.llm_client import LlmError, llm
 from app.services.safety_service import check_output_safety_detail, merge_risk_levels
 from app.services.sse import stream_with_heartbeat
@@ -101,9 +103,23 @@ def get_saved(
     target_type: str = "none",
     target_id: Optional[int] = None,
 ) -> Optional[Dict[str, Any]]:
-    """回读已保存的生成结果。没有则返回 `None`（客户端据此决定要不要调模型）。"""
+    """回读已保存的生成结果。没有则返回 `None`（客户端据此决定要不要调模型）。
+
+    契约 §2.5-2 解锁门（审查 MEDIUM-3 评估结论：**补门**）：本批发布之前
+    落库的信件解读/改写/回信建议，其 `content` / `structured_output` 派生
+    自信件原文——目标信是接收方视角的未解锁 future 时拒绝回读，
+    与 detail 同语义同错误码（`ValueError("60002")`，由 API 层翻译）。
+    """
     row = ai_generation_repo.get_generation(db, user_id, generation_kind, target_type, target_id)
-    return to_payload(row) if row is not None else None
+    if row is None:
+        return None
+    if row.target_type == "letter" and row.target_id:
+        # 读**含软删行**的原始行：锁只看 letter_type + unlock_time，
+        # 发件方软删信件不应成为收件方解锁前回读派生内容的缺口。
+        letter = db.query(Letter).filter(Letter.id == row.target_id).first()
+        if letter is not None and is_locked_future(letter, user_id):
+            raise ValueError("60002")
+    return to_payload(row)
 
 
 def begin(

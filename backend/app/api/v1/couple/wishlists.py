@@ -3,11 +3,17 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.features import require_feature
 from app.schemas.common import ApiResponse
 from app.schemas.anniversary_schema import WishlistCreate, WishlistUpdate, WishlistOut
 from app.services import anniversary_service
 
-router = APIRouter(prefix="/wishlists", tags=["愿望清单"])
+# 收敛期冻结（契约 §1）：整模块挂依赖，W6 删除时连同依赖一起摘除。
+router = APIRouter(
+    prefix="/wishlists",
+    tags=["愿望清单"],
+    dependencies=[Depends(require_feature("wishlists"))],
+)
 
 
 @router.post("", response_model=ApiResponse)

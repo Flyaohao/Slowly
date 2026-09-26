@@ -6,6 +6,7 @@ from datetime import date
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.features import require_feature
 from app.schemas.common import ApiResponse
 from app.services import presence_service
 
@@ -26,6 +27,7 @@ class CompanionRequest(BaseModel):
     message: Optional[str] = Field(None, max_length=200)
 
 
+# 契约 §1：meet-date 端点**保留**给关系管理使用，不挂冻结依赖。
 @router.put("/couples/me/space/meet-date", response_model=ApiResponse)
 def set_meet_date(
     req: MeetDateUpdate,
@@ -45,7 +47,7 @@ def set_meet_date(
     return ApiResponse(data=data)
 
 
-@router.post("/presence/moment", response_model=ApiResponse)
+@router.post("/presence/moment", response_model=ApiResponse, dependencies=[Depends(require_feature("presence"))])
 def share_moment(
     req: MomentShare,
     current_user=Depends(get_current_user),
@@ -63,7 +65,7 @@ def share_moment(
     return ApiResponse(data=data)
 
 
-@router.get("/presence/feed", response_model=ApiResponse)
+@router.get("/presence/feed", response_model=ApiResponse, dependencies=[Depends(require_feature("presence"))])
 def get_feed(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -78,7 +80,7 @@ def get_feed(
     return ApiResponse(data=data)
 
 
-@router.post("/presence/companion-request", response_model=ApiResponse)
+@router.post("/presence/companion-request", response_model=ApiResponse, dependencies=[Depends(require_feature("presence"))])
 def send_companion_request(
     req: CompanionRequest,
     current_user=Depends(get_current_user),

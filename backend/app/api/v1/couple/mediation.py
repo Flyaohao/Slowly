@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -22,6 +22,17 @@ def start_mediation(
             detail={"code": 30005, "message": "请先绑定情侣关系", "data": None},
         )
     result = mediation_service.start_mediation(db, current_user.id, relation.id)
+    return ApiResponse(data=result)
+
+
+@router.get("", response_model=ApiResponse)
+def list_mediations(
+    role: str = Query("mine", pattern="^(invited|mine|all)$"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """契约 §2.3-3：伴侣侧调解列表（默认 mine）。"""
+    result = mediation_service.list_mediations(db, current_user.id, role)
     return ApiResponse(data=result)
 
 
@@ -99,14 +110,18 @@ def confirm_rewrite(
     db: Session = Depends(get_db),
 ):
     confirmed = body.get("confirmed", True)
+    supplement = body.get("supplement")
     try:
-        result = mediation_service.confirm_rewrite(db, session_id, current_user.id, confirmed)
+        result = mediation_service.confirm_rewrite(
+            db, session_id, current_user.id, confirmed, supplement
+        )
     except ValueError as e:
         code = str(e)
         error_map = {
             "50001": (404, "调解会话不存在"),
             "50002": (403, "无权参与此调解"),
             "50003": (400, "调解状态不允许此操作"),
+            "50000": (500, "AI 服务异常，请稍后重试"),
         }
         sc, msg = error_map.get(code, (500, "服务异常"))
         raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
