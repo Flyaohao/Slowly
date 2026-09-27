@@ -4,14 +4,11 @@ import com.couple.translator.core.data.model.AiDto
 import com.couple.translator.core.data.model.CoupleDto
 import com.couple.translator.core.network.ApiResponse
 import com.couple.translator.feature.couple.data.model.AnniversaryDto
-import com.couple.translator.feature.couple.data.model.AvatarDto
 import com.couple.translator.feature.couple.data.model.DualPerspectiveDto
 import com.couple.translator.feature.couple.data.model.LetterDto
 import com.couple.translator.feature.couple.data.model.MediationDto
 import com.couple.translator.feature.couple.data.model.MemoryDto
 import com.couple.translator.feature.couple.data.model.MuseumDto
-import com.couple.translator.feature.couple.data.model.PresenceDto
-import com.couple.translator.feature.couple.data.model.PracticeDto
 import com.couple.translator.feature.couple.data.model.WishlistDto
 import okhttp3.MultipartBody
 import okhttp3.ResponseBody
@@ -146,11 +143,6 @@ interface CoupleApiService {
     @Streaming
     @POST("api/v1/couple/ai/dual-summary/stream")
     suspend fun dualSummaryStream(@Body body: AiDto.DualSummaryRequest): Response<ResponseBody>
-
-    /** 关系练习 AI 整理流式版（SSE）。纯 Markdown 长文，无结构化字段。 */
-    @Streaming
-    @POST("api/v1/couple/ai/practice-summary/stream")
-    suspend fun practiceSummaryStream(@Body body: AiDto.PracticeSummaryRequest): Response<ResponseBody>
 
     /** 回忆卡片流式版（SSE）。anniversary / wishlist 条目，一条条目一张卡片。 */
     @Streaming
@@ -357,49 +349,6 @@ interface CoupleApiService {
 
     @POST("api/v1/couple/museum/{id}/pin")
     suspend fun toggleMuseumPin(@Path("id") itemId: Long): ApiResponse<MuseumDto.MuseumItemResponse>
-
-    // Avatar（AI 形象）
-    @GET("api/v1/couple/avatars/me")
-    suspend fun getMyAvatar(): ApiResponse<AvatarDto.AvatarResponse>
-
-    @PUT("api/v1/couple/avatars/me")
-    suspend fun updateMyAvatar(@Body body: AvatarDto.AvatarUpdateRequest): ApiResponse<AvatarDto.AvatarResponse>
-
-    @POST("api/v1/couple/avatars/me/voice-style")
-    suspend fun setVoiceStyle(@Body body: AvatarDto.VoiceStyleRequest): ApiResponse<AvatarDto.AvatarResponse>
-
-    // Presence（在场感）
-    @GET("api/v1/couple/presence/feed")
-    suspend fun getPresenceFeed(): ApiResponse<List<PresenceDto.MomentResponse>>
-
-    @POST("api/v1/couple/presence/moment")
-    suspend fun shareMoment(@Body body: PresenceDto.MomentShareRequest): ApiResponse<PresenceDto.MomentResponse>
-
-    @POST("api/v1/couple/presence/companion-request")
-    suspend fun sendCompanionRequest(@Body body: PresenceDto.CompanionRequest): ApiResponse<PresenceDto.MomentResponse>
-
-    /** 设置下次见面日期（couple_space.next_meet_date）。 */
-    @PUT("api/v1/couple/couples/me/space/meet-date")
-    suspend fun setMeetDate(@Body body: PresenceDto.MeetDateUpdate): ApiResponse<PresenceDto.MeetDateResponse>
-
-    // Practice
-    @GET("api/v1/couple/practices")
-    suspend fun getPractices(): ApiResponse<List<PracticeDto.PracticeResponse>>
-
-    @POST("api/v1/couple/practices/{id}/start")
-    suspend fun startPractice(@Path("id") practiceId: Long): ApiResponse<PracticeDto.PracticeRecordResponse>
-
-    @POST("api/v1/couple/practices/records/{rid}/submit")
-    suspend fun submitPractice(
-        @Path("rid") recordId: Long,
-        @Body body: PracticeDto.SubmitPracticeRequest,
-    ): ApiResponse<PracticeDto.PracticeRecordResponse>
-
-    @GET("api/v1/couple/practices/records")
-    suspend fun getPracticeRecords(): ApiResponse<PracticeDto.PracticeRecordListResponse>
-
-    @GET("api/v1/couple/practices/records/{rid}")
-    suspend fun getPracticeRecordDetail(@Path("rid") recordId: Long): ApiResponse<PracticeDto.PracticeRecordDetailResponse>
 
     // Anniversary
     @POST("api/v1/couple/anniversaries")

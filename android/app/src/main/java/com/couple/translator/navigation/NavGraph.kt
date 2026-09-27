@@ -39,13 +39,11 @@ import com.couple.translator.feature.couple.ai.ReviewScreen
 import com.couple.translator.feature.couple.anniversary.AddAnniversaryScreen
 import com.couple.translator.feature.couple.anniversary.AnniversaryListScreen
 import com.couple.translator.feature.couple.memorycard.MemoryCardScreen
-import com.couple.translator.feature.couple.presence.PresenceScreen
 import com.couple.translator.core.ui.advisor.AdvisorSettingsScreen
 import com.couple.translator.core.ui.auth.ForgotPasswordScreen
 import com.couple.translator.core.ui.guide.GuideScreen
 import com.couple.translator.core.ui.auth.LoginScreen
 import com.couple.translator.core.ui.auth.RegisterScreen
-import com.couple.translator.feature.couple.avatar.AvatarCustomizeScreen
 import com.couple.translator.feature.couple.couplebind.CoupleBindScreen
 import com.couple.translator.feature.couple.couplebind.CoupleInfoScreen
 import com.couple.translator.feature.couple.dual.CreateDualEventScreen
@@ -65,9 +63,6 @@ import com.couple.translator.feature.couple.mediation.MediationStep
 import com.couple.translator.feature.couple.museum.AddMuseumItemScreen
 import com.couple.translator.feature.couple.museum.MuseumItemDetailScreen
 import com.couple.translator.feature.couple.museum.MuseumScreen
-import com.couple.translator.feature.couple.practice.PracticeDetailScreen
-import com.couple.translator.feature.couple.practice.PracticeListScreen
-import com.couple.translator.feature.couple.practice.PracticeResultScreen
 import com.couple.translator.core.ui.profile.CoupleProfileScreen
 import com.couple.translator.core.ui.profile.ProfileResultScreen
 import com.couple.translator.core.ui.profile.ProfileScreen
@@ -720,50 +715,6 @@ fun NavGraph(
             )
         }
 
-        // Practice
-        composable(Screen.PracticeList.route) {
-            PracticeListScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToDetail = { recordId ->
-                    navController.navigate("${Screen.PracticeDetail.route}/$recordId")
-                },
-                onNavigateToResult = { recordId ->
-                    navController.navigate("${Screen.PracticeResult.route}/$recordId")
-                },
-            )
-        }
-
-        composable(
-            route = "${Screen.PracticeDetail.route}/{recordId}",
-            arguments = listOf(navArgument("recordId") { type = NavType.LongType }),
-        ) { backStackEntry ->
-            val recordId = backStackEntry.arguments?.getLong("recordId") ?: return@composable
-            PracticeDetailScreen(
-                practiceId = 0L,
-                recordId = recordId,
-                onNavigateBack = { navController.popBackStack() },
-                onSubmitSuccess = { id ->
-                    navController.navigate("${Screen.PracticeResult.route}/$id") {
-                        popUpTo(Screen.PracticeList.route) { inclusive = false }
-                    }
-                },
-            )
-        }
-
-        composable(
-            route = "${Screen.PracticeResult.route}/{recordId}",
-            arguments = listOf(navArgument("recordId") { type = NavType.LongType }),
-        ) { backStackEntry ->
-            val recordId = backStackEntry.arguments?.getLong("recordId") ?: return@composable
-            PracticeResultScreen(
-                recordId = recordId,
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToAddMuseum = {
-                    navController.navigate(Screen.AddMuseumItem.route)
-                },
-            )
-        }
-
         // Anniversary
         composable(Screen.AnniversaryList.route) {
             AnniversaryListScreen(
@@ -823,20 +774,6 @@ fun NavGraph(
             AddWishlistScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onCreated = { navController.popBackStack() },
-            )
-        }
-
-        // 异地陪伴
-        composable(Screen.Presence.route) {
-            PresenceScreen(
-                onNavigateBack = { navController.popBackStack() },
-            )
-        }
-
-        // Avatar Customize
-        composable(Screen.AvatarCustomize.route) {
-            AvatarCustomizeScreen(
-                onNavigateBack = { navController.popBackStack() },
             )
         }
 

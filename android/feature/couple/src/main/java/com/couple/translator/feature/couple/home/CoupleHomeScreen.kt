@@ -81,8 +81,6 @@ import com.couple.translator.core.ui.theme.AppTextTertiary
 import com.couple.translator.core.ui.theme.AppWarm
 import com.couple.translator.core.ui.theme.AppWarmLight
 import com.couple.translator.core.ui.theme.InterFontFamily
-import com.couple.translator.feature.couple.data.model.PresenceDto
-import com.couple.translator.feature.couple.presence.MeetCountdown
 
 /**
  * 情侣模式首页。
@@ -202,18 +200,6 @@ fun NewHomeScreen(
                         }
                     }
 
-                    uiState.partnerMoment?.let { moment ->
-                        StaggeredAppear(5) {
-                            Box(modifier = Modifier.padding(top = AppSpacing.lg)) {
-                                PartnerMomentCard(
-                                    moment = moment,
-                                    companionSent = uiState.companionSent,
-                                    onSendCompanion = viewModel::sendCompanion,
-                                )
-                            }
-                        }
-                    }
-
                     if (uiState.recentItems.isNotEmpty()) {
                         StaggeredAppear(6) {
                             Box(modifier = Modifier.padding(top = AppSpacing.section)) {
@@ -235,13 +221,6 @@ fun NewHomeScreen(
                         }
                     }
 
-                    Box(modifier = Modifier.padding(top = AppSpacing.section)) {
-                        MeetCountdown(
-                            targetDate = uiState.homeData?.space?.nextMeetDate
-                                ?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() },
-                            modifier = Modifier.padding(horizontal = AppSpacing.screenH),
-                        )
-                    }
                 } else {
                     HomeSingleModeSection(
                         onNavigateToComposeLetter = onNavigateToComposeLetter,
@@ -480,51 +459,6 @@ private fun QuickEntryCard(
             color = AppTextTertiary,
             maxLines = 1,
         )
-    }
-}
-
-// ============ 在场感 ============
-
-/** 在场感卡片：对方最新一条动态（此刻状态 / 陪伴请求）+ 发陪伴请求按钮。 */
-@Composable
-private fun PartnerMomentCard(
-    moment: PresenceDto.MomentResponse,
-    companionSent: Boolean,
-    onSendCompanion: () -> Unit,
-) {
-    val accent = AppAccent
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = AppSpacing.screenH)
-            .clip(RoundedCornerShape(AppRadius.lg))
-            .background(AppAccentFaint)
-            .padding(14.dp),
-    ) {
-        Text(
-            text = if (moment.momentType == "companion_request") "TA 需要你的陪伴" else "TA 此刻",
-            style = MaterialTheme.typography.labelMedium,
-            color = accent,
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = moment.content,
-            style = MaterialTheme.typography.bodyMedium,
-            color = AppTextPrimary,
-        )
-        if (moment.momentType != "companion_request") {
-            Spacer(modifier = Modifier.height(8.dp))
-            TextButton(
-                onClick = onSendCompanion,
-                enabled = !companionSent,
-            ) {
-                Text(
-                    text = if (companionSent) "陪伴请求已发出" else "TA 需要我 · 发陪伴请求",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = accent,
-                )
-            }
-        }
     }
 }
 

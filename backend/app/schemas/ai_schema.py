@@ -133,10 +133,6 @@ class DualSummaryRequest(BaseModel):
     event_id: int = Field(..., description="双视角事件 id")
 
 
-class PracticeSummaryRequest(BaseModel):
-    record_id: int = Field(..., description="关系练习记录 id")
-
-
 class MemoryCardRequest(BaseModel):
     target_type: str = Field(..., pattern="^(anniversary|wishlist)$", description="条目类型")
     target_id: int = Field(..., description="条目 id")

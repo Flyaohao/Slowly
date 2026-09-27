@@ -239,17 +239,6 @@ fun GuideScreen(
                     route = Screen.AnniversaryList.route,
                     onNavigateToRoute = onNavigateToRoute,
                 )
-                // 分隔线随下方两个已隐藏/合并的条目一并注释（本卡现在只剩一条）
-                // GuideDivider()
-                // [W1 隐藏] 关系练习跳转项（P0-2 裁决冻结 10006）
-                // GuideEntryRow(
-                //     icon = Icons.Outlined.Book,
-                //     title = "关系练习",
-                //     desc = "按题目做练习，做完生成记录，可以回顾两个人的答案。",
-                //     route = Screen.PracticeList.route,
-                //     onNavigateToRoute = onNavigateToRoute,
-                // )
-                // GuideDivider()
                 // [W4.3 合并] 关系画像并入「军师如何理解我们」（条目在下方「左侧菜单」卡）
                 // GuideEntryRow(
                 //     icon = Icons.Outlined.ViewSidebar,

@@ -45,16 +45,11 @@ enum class Screen(val route: String) {
     Museum("museum"),
     MuseumItemDetail("museum_item_detail"),
     AddMuseumItem("add_museum_item"),
-    PracticeList("practice_list"),
-    PracticeDetail("practice_detail"),
-    PracticeResult("practice_result"),
     AnniversaryList("anniversary_list"),
     AddAnniversary("add_anniversary"),
     Wishlist("wishlist"),
     AddWishlist("add_wishlist"),
     MemoryCard("memory_card?targetType={targetType}&targetId={targetId}&itemTitle={itemTitle}"),
-    Presence("presence"),
-    AvatarCustomize("avatar_customize"),
 
     // 收敛期新增页（W4.3 画像三合一 / W4.4 军师设置；仅新增，既有路由字符串不动）
     Understanding("understanding"),

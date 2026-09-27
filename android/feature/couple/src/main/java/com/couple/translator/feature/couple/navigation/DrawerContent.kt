@@ -135,24 +135,12 @@ fun DrawerContent(
             //     label = "双视角记录",
             //     onClick = { onNavigateToRoute(Screen.DualPerspectiveList.route) },
             // )
-            // [W1 隐藏] 关系练习入口（P0-2 裁决：整体冻结 10006）
-            // DrawerNavItem(
-            //     icon = Icons.Outlined.People,
-            //     label = "关系练习",
-            //     onClick = { onNavigateToRoute(Screen.PracticeList.route) },
-            // )
             // [W4.4] AI 形象入口保留，但指向页改造为「军师设置」（见 AdvisorSettingsScreen）
             DrawerNavItem(
                 icon = Icons.Outlined.AutoAwesome,
                 label = "军师设置",
                 onClick = { onNavigateToRoute(Screen.AdvisorSettings.route) },
             )
-            // [W1 隐藏] 异地陪伴入口（收敛期冻结 10006）
-            // DrawerNavItem(
-            //     icon = Icons.Outlined.LocationOn,
-            //     label = "异地陪伴",
-            //     onClick = { onNavigateToRoute(Screen.Presence.route) },
-            // )
         }
 
         // 解绑冷静期提示

@@ -102,29 +102,6 @@ class AiRepository @Inject constructor(
     }
 
     /**
-     * 流式「关系练习 AI 整理」（纯 Markdown 长文，无结构化字段）。
-     * 按练习记录回读：同一条记录只保留最新一份整理。
-     */
-    fun practiceSummaryStream(recordId: Long): Flow<GenerationStreamEvent> =
-        generationStreamFlow(generationDecoder) {
-            apiService.practiceSummaryStream(AiDto.PracticeSummaryRequest(recordId))
-        }
-
-    /** 回读某条练习记录上次的 AI 整理；`null` 表示还没整理过。 */
-    suspend fun getSavedPracticeSummary(recordId: Long): Result<AiDto.GenerationPayload?> {
-        return try {
-            val response = apiService.getGeneration(PRACTICE_SUMMARY_KIND, "practice_record", recordId)
-            if (response.isSuccess) {
-                Result.success(response.data)
-            } else {
-                Result.failure(Exception(response.message))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    /**
      * 流式「回忆卡片」（纯 Markdown 长文，无结构化字段）。
      * [targetType] 为 `anniversary` 或 `wishlist`，按条目回读互不覆盖。
      */
@@ -270,7 +247,6 @@ class AiRepository @Inject constructor(
         /** 与后端 `ai_generation.generation_kind` 一致，改这里必须同步后端 */
         const val REVIEW_KIND = "relationship_review"
         const val DUAL_SUMMARY_KIND = "dual_summary"
-        const val PRACTICE_SUMMARY_KIND = "practice_summary"
         const val MEMORY_CARD_KIND = "memory_card"
     }
 

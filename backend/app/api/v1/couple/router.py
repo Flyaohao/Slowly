@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 from app.api.v1.couple import (
     ai, letters, mediation, memory, ws,
-    dual_perspectives, museum, practices,
+    dual_perspectives, museum,
     anniversaries, wishlists, avatars, presence
 )
 
@@ -16,7 +16,6 @@ router.include_router(memory.router)
 router.include_router(ws.router)
 router.include_router(dual_perspectives.router)
 router.include_router(museum.router)
-router.include_router(practices.router)
 router.include_router(anniversaries.router)
 router.include_router(wishlists.router)
 router.include_router(avatars.router)

@@ -63,9 +63,6 @@ def t_frozen_endpoints_10006():
             ("GET", "/api/v1/couple/wishlists", None, "wishlists"),
             ("GET", "/api/v1/couple/presence/feed", None, "presence"),
             ("GET", "/api/v1/single/self-practices", None, "self_practices"),
-            ("GET", "/api/v1/couple/practices", None, "practices"),
-            ("POST", "/api/v1/couple/ai/practice-summary/stream",
-             {"record_id": 1}, "practice_summary"),
             ("POST", "/api/v1/couple/ai/memory-card/stream",
              {"target_type": "anniversary", "target_id": 1}, "memory_card"),
             # §1 AI 形象（捏脸）：assets 整端点冻结（不带 token 也是 10006）

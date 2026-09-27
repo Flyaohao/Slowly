@@ -24,7 +24,6 @@ from app.schemas.ai_schema import (
     ReviewRequest,
     ReviewOutcomeRequest,
     DualSummaryRequest,
-    PracticeSummaryRequest,
     MemoryCardRequest,
 )
 from app.services import (
@@ -901,40 +900,6 @@ def dual_summary_stream(
                 "70001": (404, "事件不存在"),
                 "70002": (403, "无权查看该事件"),
                 "70003": (400, "双方都写下并公开视角后才能生成总结"),
-            },
-        )
-
-    return StreamingResponse(
-        sse_encode(ai_generation_service.stream_generation_events(prepared)),
-        media_type="text/event-stream",
-        headers=_SSE_HEADERS,
-    )
-
-
-# 收敛期冻结（契约 §1）：练习 AI 摘要随关系练习模块一并冻结
-# （消费源 practice_record 已被判定不可信，见 §2.2）。
-@router.post("/practice-summary/stream", dependencies=[Depends(require_feature("practice_summary"))])
-@ai_limit()
-def practice_summary_stream(
-    request: Request,
-    req: PracticeSummaryRequest,
-    current_user=Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """关系练习 AI 整理流式接口（SSE），纯 Markdown 长文。
-
-    至少一方作答即可：整理这次练习看到了什么、彼此的呼应、还没对上的地方，
-    以及一件今天就能试着做的小事。
-    """
-    try:
-        prepared = ai_service.prepare_practice_summary(db, current_user.id, req.record_id)
-    except ValueError as e:
-        _raise_prepared_error(
-            e,
-            {
-                "90002": (404, "练习记录不存在"),
-                "90003": (403, "无权查看该练习"),
-                "90004": (400, "还没有任何作答，先完成练习再来整理"),
             },
         )
 

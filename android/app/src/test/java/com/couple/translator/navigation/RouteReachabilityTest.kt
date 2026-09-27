@@ -47,10 +47,8 @@ class RouteReachabilityTest {
          * 每一条都要能指着契约条文说清为什么——它们是「隐藏」的对象，不是被遗忘的页面。
          */
         val HIDDEN_WITHOUT_ENTRY = mapOf(
-            // §1 冻结表中的模块：纪念馆（museum 系列）/ 愿望清单 / 异地陪伴 / 自我练习。
-            "avatar_customize" to "§1/W4.4：AI 形象页已由「军师设置」替代，路由保留备查",
+            // §1 冻结表中的模块：纪念馆（museum 系列）/ 愿望清单 / 自我练习。
             "couple_profile" to "W4.3：关系画像已并入「军师如何理解我们」，路由保留备查",
-            "presence" to "§1：异地陪伴冻结 10006，入口按收敛期裁决切断",
             "self_practice_list" to "§1：自我练习冻结 10006，入口按收敛期裁决切断",
         )
 

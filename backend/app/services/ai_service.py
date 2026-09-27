@@ -27,7 +27,6 @@ from app.services.prompt_builder import (
     build_persona_instruction,
     build_profile_report_prompt,
     build_dual_summary_prompt,
-    build_practice_summary_prompt,
     build_memory_card_prompt,
     messages_to_text,
     resolve_chat_mode,
@@ -2014,54 +2013,6 @@ def prepare_dual_summary(db: Session, user_id: int, event_id: int) -> dict:
         "target_id": event_id,
         "user_id": user_id,
         "relation_id": event.relation_id,
-        "prompt": prompt,
-        "output_model": None,
-        "temperature": 0.6,
-        "max_tokens": 2000,
-    }
-
-
-def prepare_practice_summary(db: Session, user_id: int, record_id: int) -> dict:
-    """流式版「关系练习 AI 整理」的前处理（纯 Markdown 长文）。
-
-    至少有一方作答才整理；双方都作答时做对照，只差一方时只整理已有内容。
-    """
-    from app.services import ai_generation_service  # 局部导入，避免模块加载环
-    from app.services import practice_service
-
-    # get_record 内部已校验关系归属，错误码（90002/90003）原样透传
-    record = practice_service.get_record(db, user_id, record_id)
-
-    self_text = (record.get("my_submission") or "").strip()
-    partner_text = (record.get("partner_submission") or "").strip()
-    if not self_text and not partner_text:
-        raise ValueError("90004")
-
-    prompt = build_practice_summary_prompt(
-        practice_title=record.get("practice_title") or "关系练习",
-        side_self=self_text,
-        side_partner=partner_text,
-    )
-
-    generation_id, cancel_event = ai_generation_service.begin(
-        db,
-        user_id=user_id,
-        relation_id=record["relation_id"],
-        generation_kind="practice_summary",
-        scene_key="practice_summary",
-        target_type="practice_record",
-        target_id=record_id,
-    )
-
-    return {
-        "generation_id": generation_id,
-        "cancel_event": cancel_event,
-        "generation_kind": "practice_summary",
-        "scene_key": "practice_summary",
-        "target_type": "practice_record",
-        "target_id": record_id,
-        "user_id": user_id,
-        "relation_id": record["relation_id"],
         "prompt": prompt,
         "output_model": None,
         "temperature": 0.6,
