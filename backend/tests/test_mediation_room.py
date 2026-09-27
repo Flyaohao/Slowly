@@ -197,6 +197,57 @@ def main():
     check("短轮询返回 state 快照", out["state"]["my_role"] == "user_a"
           and out["state"]["status"] == "settled")
 
+    # ---- 8. 性别称呼标签（09-28 军师叫错性别事故回归）----
+    from app.services.party_labels import (
+        NEUTRAL_A, NEUTRAL_B, gender_label, has_explicit_gender, party_labels,
+    )
+    from app.models.user_profile import UserProfile
+    check("gender_label 映射", gender_label("男") == "男方" and gender_label("F") == "女方"
+          and gender_label("不愿透露") is None and gender_label(None) is None)
+    check("绑定校验：明确性别才放行",
+          has_explicit_gender("男") and not has_explicit_gender("其他"))
+    labels = party_labels(db, rel)
+    check("未填 profile → 中性称呼",
+          labels["user_a"] == NEUTRAL_A and labels["user_b"] == NEUTRAL_B)
+    db.add(UserProfile(user_id=ua.id, gender="男"))
+    db.add(UserProfile(user_id=ub.id, gender="女"))
+    db.commit()
+    db.expire_all()
+    labels = party_labels(db, rel)
+    check("填性别 → 男方/女方", labels["user_a"] == "男方" and labels["user_b"] == "女方")
+
+    class _FakeMsg:
+        def __init__(self, sender_type, content):
+            self.sender_type = sender_type
+            self.content = content
+
+    rendered = advisor_svc._render_window(
+        [_FakeMsg("user_a", "hi"), _FakeMsg("advisor", "yo")], labels)
+    check("窗口渲染带性别标签", "[男方] hi" in rendered and "[军师] yo" in rendered)
+
+    # ---- 9. 绑定性别强制（30008=自己未填 / 30009=对方未填）----
+    from app.services import couple_service
+    u3 = make_user(db, 3)  # 无 profile → 不能发邀请码
+    try:
+        couple_service.generate_invite_code(db, u3.id)
+        check("未填性别不能发邀请码(30008)", False)
+    except ValueError as e:
+        check("未填性别不能发邀请码(30008)", str(e) == "30008")
+    db.add(UserProfile(user_id=u3.id, gender="女"))
+    db.commit()
+    code_row = couple_service.generate_invite_code(db, u3.id)
+    check("填了性别能发邀请码", bool(code_row["invite_code"]))
+    u4 = make_user(db, 4)  # 绑定方无 profile → 绑定被拒
+    try:
+        couple_service.bind_couple(db, u4.id, code_row["invite_code"])
+        check("绑定方未填性别被拒(30008)", False)
+    except ValueError as e:
+        check("绑定方未填性别被拒(30008)", str(e) == "30008")
+    db.add(UserProfile(user_id=u4.id, gender="男"))
+    db.commit()
+    out = couple_service.bind_couple(db, u4.id, code_row["invite_code"])
+    check("双方性别齐全绑定成功", out["user_a_id"] in (u3.id, u4.id))
+
     db.close()
     fails = [n for n, ok in _checks if not ok]
     print("\n== %d checks, %d failed ==" % (len(_checks), len(fails)))

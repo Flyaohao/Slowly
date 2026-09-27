@@ -14,10 +14,16 @@ router = APIRouter(prefix="/couples", tags=["情侣"])
 def generate_invite(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         result = couple_service.generate_invite_code(db, current_user.id)
-    except ValueError:
+    except ValueError as e:
+        code = str(e)
+        error_map = {
+            "30002": (409, "用户已有绑定关系"),
+            "30008": (400, "请先在「我的 → 资料编辑」填写性别（男/女）后再试"),
+        }
+        sc, message = error_map.get(code, (400, "生成恋爱码失败"))
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": 30002, "message": "用户已有绑定关系", "data": None},
+            status_code=sc,
+            detail={"code": int(code), "message": message, "data": None},
         )
     return ApiResponse(data=result)
 
@@ -36,6 +42,8 @@ def bind_couple(
             "30001": (400, "恋爱码无效或过期"),
             "30002": (409, "用户已有绑定关系"),
             "30003": (400, "不能绑定自己"),
+            "30008": (400, "请先在「我的 → 资料编辑」填写性别（男/女）后再试"),
+            "30009": (400, "对方尚未填写性别，请 TA 在资料页补填后再试"),
         }
         sc, message = error_map.get(code, (400, "绑定失败"))
         raise HTTPException(

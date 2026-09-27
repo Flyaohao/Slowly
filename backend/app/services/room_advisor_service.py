@@ -30,6 +30,7 @@ from app.models.ai import AiMemory
 from app.models.couple_relation import CoupleRelation
 from app.models.mediation_room import MediationRoom, RoomMessage
 from app.repositories import mediation_room_repo as room_repo
+from app.services.party_labels import NEUTRAL_A, NEUTRAL_B, party_labels
 from app.repositories import profile_repo
 from app.services import mediation_styles
 from app.services.lc_prompt_builder import build_chat_messages
@@ -64,7 +65,7 @@ WINDOW_HARD_LIMIT = 60
 #: 窗口消息的字符预算（超出截断最旧的部分）
 WINDOW_CHAR_BUDGET = 8000
 
-_SYSTEM_TEMPLATE_HEAD = """你是情侣双人调解室里的「军师」——房间里有女方、男方和你三个角色，
+_SYSTEM_TEMPLATE_HEAD = """你是情侣双人调解室里的「军师」——房间里有{label_a}、{label_b}和你三个角色，
 你只在你被召唤时发言，发言对象是**双方**（不是某一个人的私聊军师）。
 
 ## 本次调解事件卡（创建时双方已确认）
@@ -94,6 +95,7 @@ def build_messages(db: Session, room: MediationRoom, relation: CoupleRelation) -
     summary_text = (room.advisor_summary or "").strip()
     memory_text = _format_memories(db, room)
     window_msgs = _dialog_window(db, room)
+    labels = party_labels(db, relation)
 
     system_template = _SYSTEM_TEMPLATE_HEAD.format(
         event_name=room.name,
@@ -105,9 +107,11 @@ def build_messages(db: Session, room: MediationRoom, relation: CoupleRelation) -
         user_profile=profile_a,
         partner_profile=profile_b,
         conflict_pattern="",
+        label_a=labels["user_a"],
+        label_b=labels["user_b"],
     )
 
-    window_text = _render_window(window_msgs)
+    window_text = _render_window(window_msgs, labels)
     user_input = (
         "双方正在房间里继续沟通。请以军师身份，基于上面的风格方法与事件卡，"
         "对当前局面给出你的回应。\n\n" + window_text
@@ -309,12 +313,16 @@ def _fit_budget(msgs: List[RoomMessage]) -> List[RoomMessage]:
     return msgs[cutoff:] if cutoff else msgs
 
 
-def _render_window(msgs: List[RoomMessage]) -> str:
+def _render_window(msgs: List[RoomMessage], labels: Optional[dict] = None) -> str:
+    """窗口消息渲染。labels 为 {"user_a": 称呼, "user_b": 称呼}；不传时用中性称呼。"""
+    labels = labels or {"user_a": NEUTRAL_A, "user_b": NEUTRAL_B}
     lines = []
     for m in msgs:
-        who = {"user_a": "女方", "user_b": "男方", "advisor": "军师"}.get(
-            m.sender_type, m.sender_type
-        )
+        who = {
+            "user_a": labels["user_a"],
+            "user_b": labels["user_b"],
+            "advisor": "军师",
+        }.get(m.sender_type, m.sender_type)
         prefix = "" if m.sender_type == "advisor" else ""
         lines.append("[%s] %s" % (who, m.content))
     if not lines:

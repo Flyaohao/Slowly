@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.models.couple_relation import CoupleRelation
 from app.models.diary_entry import DiaryEntry
+from app.services.party_labels import NEUTRAL_A, NEUTRAL_B, party_labels
 from app.models.mediation_room import (
     MediationEvent,
     MediationRoom,
@@ -55,15 +56,15 @@ class SettlementOutput(BaseModel):
     result: str = Field(description="结果判定，只能是：reconciled / deferred / cold_war")
     summary_text: str = Field(description="调解书正文：对本次事件的复盘与双方达成的理解")
     agreements: List[str] = Field(description="双方共同约定，每条一句可执行的话，2-5 条")
-    responsibility_a: str = Field(description="女方（user_a）各自要做的责任与行动")
-    responsibility_b: str = Field(description="男方（user_b）各自要做的责任与行动")
+    responsibility_a: str = Field(description="user_a 当事人（称谓见对话记录标签）要做的责任与行动")
+    responsibility_b: str = Field(description="user_b 当事人（称谓见对话记录标签）要做的责任与行动")
     viewpoint_a: str = Field(
-        description="把女方在调解室里的发言压缩成一条第一人称观点（150 字内），"
-        "只呈现她的立场与感受，不加评判"
+        description="把 user_a 当事人在调解室里的发言压缩成一条第一人称观点（150 字内），"
+        "只呈现其立场与感受，不加评判"
     )
     viewpoint_b: str = Field(
-        description="把男方在调解室里的发言压缩成一条第一人称观点（150 字内），"
-        "只呈现他的立场与感受，不加评判"
+        description="把 user_b 当事人在调解室里的发言压缩成一条第一人称观点（150 字内），"
+        "只呈现其立场与感受，不加评判"
     )
 
 
@@ -126,7 +127,7 @@ def _run_settlement(room_id: int) -> None:
             .filter(CoupleRelation.id == room.relation_id)
             .first()
         )
-        transcript = _transcript(db, room_id)
+        transcript = _transcript(db, room_id, party_labels(db, relation))
         output = _invoke_settlement(room, transcript)
 
         now = datetime.utcnow()
@@ -215,7 +216,9 @@ def _invoke_settlement(room: MediationRoom, transcript: str) -> SettlementOutput
     )
 
 
-def _transcript(db: Session, room_id: int) -> str:
+def _transcript(db: Session, room_id: int, labels: Optional[dict] = None) -> str:
+    """全文对话记录。labels 为 {"user_a": 称呼, "user_b": 称呼}；不传用中性称呼。"""
+    labels = labels or {"user_a": NEUTRAL_A, "user_b": NEUTRAL_B}
     rows = (
         db.query(RoomMessage)
         .filter(RoomMessage.room_id == room_id)
@@ -224,9 +227,11 @@ def _transcript(db: Session, room_id: int) -> str:
     )
     lines = []
     for m in rows:
-        who = {"user_a": "女方", "user_b": "男方", "advisor": "军师"}.get(
-            m.sender_type, m.sender_type
-        )
+        who = {
+            "user_a": labels["user_a"],
+            "user_b": labels["user_b"],
+            "advisor": "军师",
+        }.get(m.sender_type, m.sender_type)
         lines.append("[%s] %s" % (who, m.content))
     text = "\n".join(lines)
     if len(text) > TRANSCRIPT_CHAR_LIMIT:
@@ -267,11 +272,20 @@ def _run_summary(room: MediationRoom) -> None:
         if len(msgs) < SUMMARY_BATCH:
             # 窗口还没攒满一批：等下一次（保持标记，避免频繁小压缩）
             return
+        relation = (
+            db.query(CoupleRelation)
+            .filter(CoupleRelation.id == fresh.relation_id)
+            .first()
+        )
+        labels = party_labels(db, relation) if relation else None
+        labels = labels or {"user_a": NEUTRAL_A, "user_b": NEUTRAL_B}
         new_text = "\n".join(
             "[%s] %s" % (
-                {"user_a": "女方", "user_b": "男方", "advisor": "军师"}.get(
-                    m.sender_type, m.sender_type
-                ),
+                {
+                    "user_a": labels["user_a"],
+                    "user_b": labels["user_b"],
+                    "advisor": "军师",
+                }.get(m.sender_type, m.sender_type),
                 m.content,
             )
             for m in msgs

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.repositories import couple_repo, user_repo, invite_code_repo
+from app.services.party_labels import has_explicit_gender
 
 
 async def _disconnect_user_websockets(user_id: int):
@@ -24,8 +25,21 @@ async def _notify_unbind_confirmed(user_a_id: int, user_b_id: int):
     await notify_unbind_confirmed(user_a_id, user_b_id)
 
 
+def _gender_or_error(db: Session, user_id: int, error_code: str) -> None:
+    """绑定链路强制校验：必须填写明确性别（男/女），否则拒绝。
+
+    调解室按 gender 映射双方称呼，缺失会让军师乱猜性别（09-28 事故）。
+    注意 30004/30005 已被解绑链路占用，性别校验用 30008/30009。
+    """
+    profile = user_repo.get_profile_by_user_id(db, user_id)
+    if not has_explicit_gender(profile.gender if profile else None):
+        raise ValueError(error_code)
+
+
 def generate_invite_code(db: Session, user_id: int) -> dict:
     """生成恋爱码"""
+    # 发起方也必须已填性别（否则对方绑定时会卡在 30009）
+    _gender_or_error(db, user_id, "30008")
     existing = couple_repo.get_relation_by_user_including_unbinding(db, user_id)
     if existing:
         raise ValueError("30002")
@@ -51,6 +65,10 @@ def bind_couple(db: Session, user_id: int, invite_code_str: str) -> dict:
     inviter_id = code.user_id
     if inviter_id == user_id:
         raise ValueError("30003")
+
+    # 双方性别强制：自己没填 → 30008；发起人没填 → 30009
+    _gender_or_error(db, user_id, "30008")
+    _gender_or_error(db, inviter_id, "30009")
 
     # 检查邀请者是否已有关系
     if couple_repo.get_relation_by_user_including_unbinding(db, inviter_id):
