@@ -25,6 +25,7 @@ import com.couple.translator.core.data.repository.GuideStore
 import com.couple.translator.core.data.repository.NotificationPermissionStore
 import com.couple.translator.core.data.repository.ThemeStore
 import com.couple.translator.core.data.repository.TokenStore
+import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.ui.settings.SettingsViewModel
 import com.couple.translator.core.ui.theme.ThemeMode
@@ -104,6 +105,21 @@ fun NavGraph(
     var startDest by remember { mutableStateOf<String?>(null) }
     val coupleState = coupleStateManager?.state?.collectAsState()?.value
     val isCoupleMode = coupleState?.mode != com.couple.translator.feature.couple.data.repository.AppMode.SINGLE
+
+    // 壳外入口（使用指南跳转 / 通知深链）的统一派发。
+    // 「深度表达」（tab_mailbox）只注册在 CoupleShell 的内层 NavHost，根导航没有这个
+    // 目的地，直接 navigate 会崩：先回壳，再经 CoupleStateManager.pendingInnerRoute
+    // 请壳转内层导航。壳内入口（抽屉 / 关系页）已在 CoupleShell 里直接拦截，不走这里。
+    val openRouteFromOutsideShell: (String) -> Unit = { route ->
+        if (route == BottomTab.Mailbox.route) {
+            coupleStateManager?.pendingInnerRoute?.value = route
+            if (navController.currentDestination?.route != Screen.Main.route) {
+                navController.popBackStack(Screen.Main.route, inclusive = false)
+            }
+        } else {
+            navController.navigate(route)
+        }
+    }
 
     LaunchedEffect(Unit) {
         val hasToken = tokenStore?.isLoggedIn() == true
@@ -210,7 +226,7 @@ fun NavGraph(
         composable(Screen.Guide.route) {
             GuideScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToRoute = { route -> navController.navigate(route) },
+                onNavigateToRoute = { route -> openRouteFromOutsideShell(route) },
                 isCoupleMode = isCoupleMode,
             )
         }
@@ -977,7 +993,7 @@ fun NavGraph(
     LaunchedEffect(deepLinkRoute) {
         val target = deepLinkRoute ?: return@LaunchedEffect
         if (startDest == Screen.Main.route) {
-            navController.navigate(target) { launchSingleTop = true }
+            openRouteFromOutsideShell(target)
         }
         onDeepLinkConsumed()
     }

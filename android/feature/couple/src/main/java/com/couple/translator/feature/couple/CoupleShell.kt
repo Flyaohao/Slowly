@@ -145,6 +145,18 @@ fun CoupleShell(
         }
     }
 
+    // 壳外入口（使用指南跳转 / 通知深链）请求打开的内层 tab（见 pendingInnerRoute 注释）：
+    // 这里转内层导航并清掉请求。StateFlow 会重放最后一次值，冷启动深链也不丢。
+    LaunchedEffect(coupleStateManager) {
+        val stateManager = coupleStateManager ?: return@LaunchedEffect
+        stateManager.pendingInnerRoute.collect { route ->
+            if (route != null) {
+                tabNavController.navigate(route) { launchSingleTop = true }
+                stateManager.pendingInnerRoute.value = null
+            }
+        }
+    }
+
     // 每次回到前台时刷新情侣状态 + 待办角标
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
