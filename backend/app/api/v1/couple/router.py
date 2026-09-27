@@ -4,7 +4,8 @@ from fastapi import APIRouter
 from app.api.v1.couple import (
     ai, letters, mediation, memory, ws,
     dual_perspectives, museum,
-    anniversaries, wishlists, avatars, presence
+    anniversaries, wishlists, avatars, presence,
+    relationship_events,
 )
 
 router = APIRouter()
@@ -20,3 +21,4 @@ router.include_router(anniversaries.router)
 router.include_router(wishlists.router)
 router.include_router(avatars.router)
 router.include_router(presence.router)
+router.include_router(relationship_events.router)

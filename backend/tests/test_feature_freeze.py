@@ -60,7 +60,6 @@ def t_frozen_endpoints_10006():
     try:
         cases = [
             ("GET", "/api/v1/couple/museum", None, "museum"),
-            ("GET", "/api/v1/couple/wishlists", None, "wishlists"),
             ("GET", "/api/v1/couple/presence/feed", None, "presence"),
             ("GET", "/api/v1/single/self-practices", None, "self_practices"),
             ("POST", "/api/v1/couple/ai/memory-card/stream",
@@ -104,8 +103,9 @@ def t_unregistered_feature_fails_fast():
 def t_unfrozen_not_affected():
     from app.core.features import FEATURE_FLAGS
 
-    check("八个开关当前全为 False（收敛期冻结）",
-          FEATURE_FLAGS == {k: False for k in FEATURE_FLAGS}
+    check("wishlists 已解冻为 True，其余开关仍全为 False",
+          FEATURE_FLAGS.get("wishlists") is True
+          and all(v is False for k, v in FEATURE_FLAGS.items() if k != "wishlists")
           and set(FEATURE_FLAGS) == {
               "museum", "wishlists", "presence", "self_practices",
               "practices", "memory_card", "practice_summary",

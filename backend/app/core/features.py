@@ -40,7 +40,8 @@ FROZEN_LETTER_TYPES = frozenset({"future", "private"})
 #: 避免拼写错误把冻结悄悄变成放行。
 FEATURE_FLAGS: dict = {
     "museum": False,          # §1 纪念馆 7 个
-    "wishlists": False,       # §1 愿望清单 5 个
+    # 2026-09-27 用户裁决：愿望清单解冻——抽屉新增「愿望」入口，需手动增删改查。
+    "wishlists": True,        # §1 愿望清单 5 个
     "presence": False,         # §1 异地陪伴 3 个（meet-date 保留，不挂本依赖）
     "self_practices": False,  # §1 自我练习 5 个
     "practices": False,       # §1 关系练习 5 个
