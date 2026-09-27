@@ -248,6 +248,13 @@ def main():
     out = couple_service.bind_couple(db, u4.id, code_row["invite_code"])
     check("双方性别齐全绑定成功", out["user_a_id"] in (u3.id, u4.id))
 
+    # ---- 10. 军师回复纯文本清洗（09-28 用户要求禁 #/* 等符号）----
+    dirty = "#### 给双方的复述\n\n**女方这边**：你想要的不是「赢」，`代码`、~~删~~、3*4\n- 甲"
+    clean = advisor_svc._strip_markdown(dirty)
+    check("清洗：标题/粗体/代码/删除线/孤立符号全剥",
+          all(ch not in clean for ch in "#*`~") and "女方这边" in clean and "3 4" not in clean)
+    check("清洗：正文与换行保留", "给双方的复述" in clean and "\n\n" in clean and clean.startswith("给双方"))
+
     db.close()
     fails = [n for n, ok in _checks if not ok]
     print("\n== %d checks, %d failed ==" % (len(_checks), len(fails)))

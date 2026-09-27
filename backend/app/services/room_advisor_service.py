@@ -22,6 +22,7 @@ prompt 组装（"收拢上面的对话"的正确做法，§四）：
 """
 
 import logging
+import re
 from typing import Iterator, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
@@ -67,6 +68,8 @@ WINDOW_CHAR_BUDGET = 8000
 
 _SYSTEM_TEMPLATE_HEAD = """你是情侣双人调解室里的「军师」——房间里有{label_a}、{label_b}和你三个角色，
 你只在你被召唤时发言，发言对象是**双方**（不是某一个人的私聊军师）。
+回复必须是纯文本：禁止使用任何 Markdown 语法（#、*、`、~~ 等），
+标题与要点用自然段或「一/二/三」「- 」开头表达即可。
 
 ## 本次调解事件卡（创建时双方已确认）
 - 事件名称：{event_name}
@@ -241,7 +244,7 @@ def _write_back(db: Session, room_id: int, *, content: str, thinking: Optional[s
             own,
             room_id,
             sender_type="advisor",
-            content=content,
+            content=_strip_markdown(content),
             thinking=thinking,
             risk_level="low",
             round_no=int(room.round_no or 0) + 1,
@@ -300,6 +303,21 @@ def _dialog_window(db: Session, room: MediationRoom) -> List[RoomMessage]:
     )
     msgs = room_repo.get_messages(db, room.id, after_id=boundary, limit=WINDOW_HARD_LIMIT)
     return _fit_budget(msgs)
+
+
+#: 军师消息只允许纯文本：剥掉 Markdown 符号（09-28 用户要求，写回前兜底）
+_MD_HEADING_RE = re.compile(r"^#{1,6}\s*", re.MULTILINE)
+_MD_EMPHASIS_RE = re.compile(r"\*\*|__|~~|`")
+_MD_LONE_RE = re.compile(r"\*|#")
+
+
+def _strip_markdown(text: str) -> str:
+    """剥掉军师回复里的 Markdown 符号。prompt 禁令不可靠，这里确定性兜底。"""
+    if not text:
+        return text or ""
+    text = _MD_HEADING_RE.sub("", text)
+    text = _MD_EMPHASIS_RE.sub("", text)
+    return _MD_LONE_RE.sub("", text)
 
 
 def _fit_budget(msgs: List[RoomMessage]) -> List[RoomMessage]:
