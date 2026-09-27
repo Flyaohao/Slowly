@@ -174,3 +174,13 @@ volumes:
   mysql_data:
   chroma_data:
   uploads_data:
+
+networks:
+  default:
+    # 钉死子网到 172.16/12：宿主 iptables 只放行该段访问 3306（其余 DROP）。
+    # 2026-09-27 部署事故：down 重建网络后 Docker 把新网络分到 192.168.16.0/20，
+    # 落进 DROP 区，容器连不上宿主 MySQL，应用起不来（timed out）。
+    # 显式 ipam 后每次重建都拿到同一段，不再依赖 Docker 地址池的分配顺序。
+    ipam:
+      config:
+        - subnet: 172.19.0.0/16
