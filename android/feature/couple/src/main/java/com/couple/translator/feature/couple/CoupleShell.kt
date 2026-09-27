@@ -178,7 +178,14 @@ fun CoupleShell(
                 DrawerContent(
                     onNavigateToRoute = { route ->
                         closeDrawer()
-                        onNavigateToRoute(route)
+                        // 抽屉「深度表达」（tab_mailbox）与关系页入口同一拦截规则：
+                        // 该路由只注册在本壳的内层 NavHost，根导航够不到；
+                        // 其余路由照旧走根导航（压在壳之上可返回）。
+                        if (route == BottomTab.Mailbox.route) {
+                            tabNavController.navigate(route) { launchSingleTop = true }
+                        } else {
+                            onNavigateToRoute(route)
+                        }
                     },
                     onLogout = {
                         scope.launch {

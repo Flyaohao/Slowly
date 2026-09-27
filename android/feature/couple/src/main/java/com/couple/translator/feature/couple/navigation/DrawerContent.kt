@@ -47,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
@@ -169,7 +170,10 @@ fun DrawerContent(
             DrawerNavItem(
                 icon = Icons.Outlined.MailOutline,
                 label = "深度表达",
-                onClick = { onNavigateToRoute(Screen.LetterList.route) },
+                // 进内层信箱 tab（tab_mailbox）而不是 letter_list：信箱 tab 从底栏
+                // 隐藏后路由只注册在 CoupleShell 内层 NavHost，由壳拦截转内层导航，
+                // 打开的是「深度表达」二级页；走根导航 letter_list 会变成全屏一级页。
+                onClick = { onNavigateToRoute(BottomTab.Mailbox.route) },
             )
             DrawerNavItem(
                 icon = Icons.Outlined.EventNote,
