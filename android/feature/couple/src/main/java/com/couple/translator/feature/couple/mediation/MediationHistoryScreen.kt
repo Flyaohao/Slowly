@@ -74,78 +74,83 @@ fun MediationHistoryScreen(
                 subtitle = "已经谈完的那些，随时可以回来看看当时说定了什么",
             )
 
-            if (uiState.isLoading) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(vertical = AppSpacing.block),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    CircularProgressIndicator(color = AppAccent)
+            // 注意不能用 return@Column：Column 是 inline composable，qualified return
+            // 会触发 Compose 编译器 group 错位 bug（compose-jb#2230 类闪退，同
+            // RelationshipEventScreen 963fd76 的根因），必须用 when 分支结构。
+            when {
+                uiState.isLoading -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(vertical = AppSpacing.block),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        CircularProgressIndicator(color = AppAccent)
+                    }
                 }
-                return@Column
-            }
 
-            if (uiState.items.isEmpty()) {
-                // 空 ≠ 读不到：只有拿到成功响应且确实为空才说「还没有」。
-                if (uiState.loadFailed) {
-                    AppEmptyState(
-                        icon = Icons.Outlined.History,
-                        title = "调解记录没读出来",
-                        subtitle = "网络或服务异常，重试一次试试",
-                        action = { AppPrimaryButton(text = "重试", onClick = { viewModel.load() }) },
-                    )
-                } else {
-                    AppEmptyState(
-                        icon = Icons.Outlined.History,
-                        title = "还没有完成的调解",
-                        subtitle = "谈完之后，总结会留在这里",
-                        // 空列表也留一条出路：用户点进「调解回看」却没看到东西时，
-                        // 最可能的意图就是「那再谈一次」。
-                        action = { AppPrimaryButton(text = "发起调解", onClick = onRestartMediation) },
-                    )
+                uiState.items.isEmpty() -> {
+                    // 空 ≠ 读不到：只有拿到成功响应且确实为空才说「还没有」。
+                    if (uiState.loadFailed) {
+                        AppEmptyState(
+                            icon = Icons.Outlined.History,
+                            title = "调解记录没读出来",
+                            subtitle = "网络或服务异常，重试一次试试",
+                            action = { AppPrimaryButton(text = "重试", onClick = { viewModel.load() }) },
+                        )
+                    } else {
+                        AppEmptyState(
+                            icon = Icons.Outlined.History,
+                            title = "还没有完成的调解",
+                            subtitle = "谈完之后，总结会留在这里",
+                            // 空列表也留一条出路：用户点进「调解回看」却没看到东西时，
+                            // 最可能的意图就是「那再谈一次」。
+                            action = { AppPrimaryButton(text = "发起调解", onClick = onRestartMediation) },
+                        )
+                    }
                 }
-                return@Column
-            }
 
-            AppCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = AppSpacing.screenH),
-            ) {
-                var isFirst = true
-                uiState.items.forEach { item ->
-                    if (!isFirst) AppListItemDivider()
-                    isFirst = false
-                    AppListItem(
-                        title = item.title ?: "双人调解",
-                        subtitle = listOfNotNull(
-                            item.myRole?.let { if (it == "inviter") "你发起的" else "对方发起的" },
-                            // 整改 B4.3 P0-2：状态标签由 [MediationFlow.historyStatusLabel]
-                            // 统一裁决，**不在这一行里写 when**。
-                            // 为什么必须集中：安全终止（safety_blocked）绝不能显示成
-                            // 「已完成」——那等于告诉用户「你们把这件事谈开了」，而事实
-                            // 是 AI 拒绝了这次调解。标签规则一旦分散到各个列表里，
-                            // 总有一个列表会漏掉这个区分。
-                            MediationFlow.historyStatusLabel(item.mediationStatus),
-                            item.updatedAt?.take(10) ?: item.createdAt?.take(10),
-                        ).joinToString(" · "),
-                        leadingIcon = Icons.Outlined.History,
-                        showChevron = true,
-                        // 整改 B4.1-6：行尾「重新发起」。它在整行的点击区里，
-                        // AppLinkText 自己消费了点击，所以点它不会连带打开详情。
-                        trailing = {
-                            AppLinkText(
-                                label = "重新发起",
-                                onClick = onRestartMediation,
+                else -> {
+                    AppCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = AppSpacing.screenH),
+                    ) {
+                        var isFirst = true
+                        uiState.items.forEach { item ->
+                            if (!isFirst) AppListItemDivider()
+                            isFirst = false
+                            AppListItem(
+                                title = item.title ?: "双人调解",
+                                subtitle = listOfNotNull(
+                                    item.myRole?.let { if (it == "inviter") "你发起的" else "对方发起的" },
+                                    // 整改 B4.3 P0-2：状态标签由 [MediationFlow.historyStatusLabel]
+                                    // 统一裁决，**不在这一行里写 when**。
+                                    // 为什么必须集中：安全终止（safety_blocked）绝不能显示成
+                                    // 「已完成」——那等于告诉用户「你们把这件事谈开了」，而事实
+                                    // 是 AI 拒绝了这次调解。标签规则一旦分散到各个列表里，
+                                    // 总有一个列表会漏掉这个区分。
+                                    MediationFlow.historyStatusLabel(item.mediationStatus),
+                                    item.updatedAt?.take(10) ?: item.createdAt?.take(10),
+                                ).joinToString(" · "),
+                                leadingIcon = Icons.Outlined.History,
+                                showChevron = true,
+                                // 整改 B4.1-6：行尾「重新发起」。它在整行的点击区里，
+                                // AppLinkText 自己消费了点击，所以点它不会连带打开详情。
+                                trailing = {
+                                    AppLinkText(
+                                        label = "重新发起",
+                                        onClick = onRestartMediation,
+                                    )
+                                },
+                                onClick = { onOpenSession(item.sessionId) },
                             )
-                        },
-                        onClick = { onOpenSession(item.sessionId) },
-                    )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(AppSpacing.block))
                 }
             }
-
-            Spacer(modifier = Modifier.height(AppSpacing.block))
         }
     }
 }
