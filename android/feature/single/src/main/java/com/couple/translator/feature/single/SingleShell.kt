@@ -163,7 +163,7 @@ fun SingleShell(
                 composable(BottomTab.SingleHome.route) {
                     SingleHomeScreen(
                         onOpenDrawer = openDrawer,
-                        // [W4.3 合并] 画像两格合一，指向「军师如何理解我们」
+                        // [W4.3 合并] 画像两格合一，指向「人格画像」
                         onNavigateToUnderstanding = {
                             onNavigateToRoute(Screen.Understanding.route)
                         },

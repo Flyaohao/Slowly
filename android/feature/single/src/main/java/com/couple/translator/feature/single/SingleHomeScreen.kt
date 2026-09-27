@@ -43,7 +43,7 @@ fun SingleHomeScreen(
     onOpenDrawer: () -> Unit,
     onNavigateToQuestionnaire: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
-    /** [W4.3 合并] 了解自己/我的画像两格 → 单一「军师如何理解我们」页 */
+    /** [W4.3 合并] 了解自己/我的画像两格 → 单一「人格画像」页 */
     onNavigateToUnderstanding: () -> Unit = {},
     onNavigateToBind: () -> Unit = {},
     onNavigateToDiary: () -> Unit = {},
@@ -83,11 +83,11 @@ fun SingleHomeScreen(
             )
 
             SectionTitle(text = "快捷入口")
-            // [W4.3 合并] 「了解自己」+「我的画像」两格 → 单一「军师如何理解我们」
+            // [W4.3 合并] 「了解自己」+「我的画像」两格 → 单一「人格画像」
             // （旧回调 onNavigateToQuestionnaire/onNavigateToProfile 保留给遗留壳，本页不再引用）
             AppListCard(
                 items = listOf(
-                    Triple(Icons.Outlined.Person, "军师如何理解我们", "画像、问卷与关系画像三合一"),
+                    Triple(Icons.Outlined.Person, "人格画像", "画像、问卷与关系画像三合一"),
                     Triple(Icons.Outlined.Edit, "绑定情侣", "邀请 TA，解锁完整功能"),
                 ),
                 modifier = Modifier.padding(horizontal = AppSpacing.screenH),
@@ -98,7 +98,7 @@ fun SingleHomeScreen(
                     leadingIcon = icon,
                     showChevron = true,
                     onClick = when (label) {
-                        "军师如何理解我们" -> onNavigateToUnderstanding
+                        "人格画像" -> onNavigateToUnderstanding
                         else -> onNavigateToBind
                     },
                 )

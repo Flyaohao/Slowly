@@ -97,14 +97,14 @@ fun DrawerContent(
             onClick = { onNavigateToRoute(Screen.Understanding.route) },
         )
         // 整改 §8.8：正式「记忆与隐私」入口。
-        // 记忆此前只能从「军师如何理解我们 → 我要纠正军师」绕进去，用户找不到；
+        // 记忆此前只能从「人格画像 → 我要纠正军师」绕进去，用户找不到；
         // 而契约把「AI 记忆必须可查看、可删除」定为隐私硬规则，入口就不该是暗门。
         DrawerNavItem(
             icon = Icons.Outlined.Lock,
             label = "记忆与隐私",
             onClick = { onNavigateToRoute(Screen.Memory.route) },
         )
-        // [W4.3 合并] 了解自己入口并入上方「军师如何理解我们」
+        // [W4.3 合并] 了解自己入口并入上方「人格画像」
         // DrawerNavItem(
         //     icon = Icons.Outlined.Analytics,
         //     label = "了解自己",
@@ -113,7 +113,7 @@ fun DrawerContent(
 
         // 以下功能仅情侣模式可用
         if (isCoupleMode) {
-            // [W4.3 合并] 关系画像入口并入「军师如何理解我们」
+            // [W4.3 合并] 关系画像入口并入「人格画像」
             // DrawerNavItem(
             //     icon = Icons.Outlined.ViewSidebar,
             //     label = "关系画像",

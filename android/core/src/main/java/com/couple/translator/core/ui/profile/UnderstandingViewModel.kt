@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * 「军师如何理解我们」页（契约 §3.2 画像三合一，零新后端）。
+ * 「人格画像」页（原名「军师如何理解我们」，契约 §3.2 画像三合一，零新后端）。
  * 组合现有端点：GET /profiles/me、/profiles/me/dimensions、/profiles/couple。
  * 单身/未做双人问卷时 coupleProfile 拉取失败 → null → 关系画像区块降级为提示文案。
  */

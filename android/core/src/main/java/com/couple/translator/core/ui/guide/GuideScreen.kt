@@ -239,7 +239,7 @@ fun GuideScreen(
                     route = Screen.AnniversaryList.route,
                     onNavigateToRoute = onNavigateToRoute,
                 )
-                // [W4.3 合并] 关系画像并入「军师如何理解我们」（条目在下方「左侧菜单」卡）
+                // [W4.3 合并] 关系画像并入「人格画像」（条目在下方「左侧菜单」卡）
                 // GuideEntryRow(
                 //     icon = Icons.Outlined.ViewSidebar,
                 //     title = "关系画像",
@@ -253,11 +253,11 @@ fun GuideScreen(
             SectionTitle("左侧菜单里还有什么", "点左上角图标打开")
             Spacer(modifier = Modifier.height(8.dp))
             GuideCard {
-                // [W4.3 合并] 我的画像 + 了解自己 + 关系画像 三入口 → 单一「军师如何理解我们」
+                // [W4.3 合并] 我的画像 + 了解自己 + 关系画像 三入口 → 单一「人格画像」
                 // 页内含判断依据与纠正入口；旧路由 ProfileResult/QuestionnaireIntro/CoupleProfile 保留。
                 GuideEntryRow(
                     icon = Icons.Outlined.Person,
-                    title = "军师如何理解我们",
+                    title = "人格画像",
                     desc = "画像、问卷、关系画像三合一，含「判断来自哪里」。",
                     route = Screen.Understanding.route,
                     onNavigateToRoute = onNavigateToRoute,
@@ -271,7 +271,7 @@ fun GuideScreen(
                     route = Screen.Memory.route,
                     onNavigateToRoute = onNavigateToRoute,
                 )
-                // [W4.3 合并] 了解自己并入上方「军师如何理解我们」
+                // [W4.3 合并] 了解自己并入上方「人格画像」
                 // GuideDivider()
                 // GuideEntryRow(
                 //     icon = Icons.Outlined.Analytics,
@@ -345,8 +345,8 @@ fun GuideScreen(
                 // GuideDivider()
                 // QuickCaseRow("想让 TA 明白我当时真实的感受", "双视角记录")
                 GuideDivider()
-                // L3：关系画像入口已并入「军师如何理解我们」（W4.3 合并），速查文案同步改指合并后的入口
-                QuickCaseRow("为什么我们总在同一件事上吵", "军师如何理解我们 + 军师里的 AI 记忆")
+                // L3：关系画像入口已并入「人格画像」（W4.3 合并），速查文案同步改指合并后的入口
+                QuickCaseRow("为什么我们总在同一件事上吵", "人格画像 + 军师里的 AI 记忆")
                 // [W1 隐藏] 关系练习 / 愿望清单均已隐藏，整条速查一并隐藏
                 // GuideDivider()
                 // QuickCaseRow("想一起做点什么", "关系练习 / 愿望清单")

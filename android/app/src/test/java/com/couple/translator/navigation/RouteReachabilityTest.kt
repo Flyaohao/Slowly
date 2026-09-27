@@ -48,9 +48,9 @@ class RouteReachabilityTest {
          */
         val HIDDEN_WITHOUT_ENTRY = mapOf(
             // §1 冻结表中的模块：纪念馆（museum 系列）/ 愿望清单 / 自我练习。
-            "couple_profile" to "W4.3：关系画像已并入「军师如何理解我们」，路由保留备查",
+            "couple_profile" to "W4.3：关系画像已并入「人格画像」，路由保留备查",
             // W4.3 合并：我的画像入口随遗留壳 MainScreen 的删除消失，路由保留备查
-            "profile_result" to "W4.3：我的画像已并入「军师如何理解我们」，路由保留备查",
+            "profile_result" to "W4.3：我的画像已并入「人格画像」，路由保留备查",
             "self_practice_list" to "§1：自我练习冻结 10006，入口按收敛期裁决切断",
         )
 

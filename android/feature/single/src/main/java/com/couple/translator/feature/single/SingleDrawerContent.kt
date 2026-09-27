@@ -62,15 +62,15 @@ fun SingleDrawerContent(
         Spacer(modifier = Modifier.height(32.dp))
 
         // 菜单项
-        // [W4.3 合并] 我的画像 + 了解自己 → 单一「军师如何理解我们」页（隐藏 ≠ 删除，
+        // [W4.3 合并] 我的画像 + 了解自己 → 单一「人格画像」页（隐藏 ≠ 删除，
         // ProfileResult / QuestionnaireIntro 路由保留，页内有问卷与结果深链）
         DrawerNavItem(
             icon = Icons.Outlined.Person,
-            label = "军师如何理解我们",
+            label = "人格画像",
             onClick = { onNavigateToRoute(Screen.Understanding.route) },
         )
 
-        // [W4.3 合并] 了解自己入口并入上方「军师如何理解我们」
+        // [W4.3 合并] 了解自己入口并入上方「人格画像」
         // DrawerNavItem(
         //     icon = Icons.Outlined.Quiz,
         //     label = "了解自己",

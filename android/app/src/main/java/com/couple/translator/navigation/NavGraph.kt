@@ -292,7 +292,7 @@ fun NavGraph(
                         popUpTo(0) { inclusive = true }
                     }
                 },
-                // [W4.3 合并] 问卷结果 → 画像两跳全部改指「军师如何理解我们」
+                // [W4.3 合并] 问卷结果 → 画像两跳全部改指「人格画像」
                 // （ProfileResult / CoupleProfile 路由与页面保留）
                 onNavigateToProfile = {
                     navController.navigate(Screen.Understanding.route)
@@ -315,7 +315,7 @@ fun NavGraph(
         composable(Screen.ProfileResult.route) {
             ProfileResultScreen(
                 onNavigateBack = { navController.popBackStack() },
-                // [W4.3 合并] 「看关系画像」改指「军师如何理解我们」（CoupleProfile 路由保留）
+                // [W4.3 合并] 「看关系画像」改指「人格画像」（CoupleProfile 路由保留）
                 onNavigateToCoupleProfile = {
                     navController.navigate(Screen.Understanding.route)
                 },

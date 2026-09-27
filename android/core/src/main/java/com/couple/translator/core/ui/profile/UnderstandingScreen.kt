@@ -36,7 +36,9 @@ import com.couple.translator.core.ui.theme.AppTextSecondary
 import kotlin.math.roundToInt
 
 /**
- * 「军师如何理解我们」（契约 §3.2 画像三合一，W4.3）。
+ * 「人格画像」（契约 §3.2 画像三合一，W4.3）。
+ *
+ * 2026-09-27 用户裁决：名称由「军师如何理解我们」改为「人格画像」。
  *
  * 合并原「我的画像 / 了解自己 / 关系画像」三入口，纯组合现有端点（零新后端）：
  * - 我的画像：GET /profiles/me（summary + confidence）
@@ -58,7 +60,7 @@ fun UnderstandingScreen(
     Scaffold(
         containerColor = AppBackground,
         topBar = {
-            AppBackTopBar(onBack = onNavigateBack, title = "军师如何理解我们")
+            AppBackTopBar(onBack = onNavigateBack, title = "人格画像")
         },
     ) { padding ->
         Column(
@@ -68,7 +70,7 @@ fun UnderstandingScreen(
                 .verticalScroll(rememberScrollState()),
         ) {
             AppPageHeader(
-                title = "军师如何理解我们",
+                title = "人格画像",
                 subtitle = "画像来自你的问卷作答与你们的互动。这里能看到依据，也能纠正。",
             )
 
