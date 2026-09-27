@@ -229,3 +229,53 @@ def unlink_viewpoint_memory(
         db, current_user.id, "diary", diary_id
     )
     return ApiResponse(data={"deleted": deleted})
+
+
+# ============================================================
+# 军师记忆沉淀总开关（记忆系统升级 P0④，2026-09-27）
+#
+# 服务端能力，不是 UI 假开关：关闭后 distill 入口（chat 蒸馏 / 会话摘要 /
+# 事件蒸馏）直接阻断，连模型调用都不发。关系级开关，任一成员可改——
+# 军师是双人共同资产，记忆按 relation 隔离召回，单方关掉 = 整段关系停止沉淀。
+# ============================================================
+
+
+@router.get("/distill-switch", response_model=ApiResponse)
+def get_distill_switch(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """当前关系的军师记忆沉淀开关状态（设置页初始状态）。"""
+    relation = couple_repo.get_active_relation_by_user(db, current_user.id)
+    if relation is None:
+        return ApiResponse(
+            code=30005, message="还没绑定情侣关系，暂时没有军师记忆", data=None
+        )
+    return ApiResponse(data={"enabled": bool(relation.memory_distill_enabled)})
+
+
+@router.put("/distill-switch", response_model=ApiResponse)
+def update_distill_switch(
+    body: dict,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """开关军师记忆沉淀。幂等：重复设置同值无副作用。"""
+    enabled = body.get("enabled")
+    if not isinstance(enabled, bool):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40001, "message": "enabled 必须是布尔值", "data": None},
+        )
+    relation = couple_repo.get_active_relation_by_user(db, current_user.id)
+    if relation is None:
+        return ApiResponse(
+            code=30005, message="还没绑定情侣关系，暂时没有军师记忆", data=None
+        )
+    relation.memory_distill_enabled = enabled
+    db.commit()
+    logger.info(
+        "[MEMORY] 军师记忆沉淀开关 user=%s relation=%s -> %s",
+        current_user.id, relation.id, enabled,
+    )
+    return ApiResponse(data={"enabled": enabled})

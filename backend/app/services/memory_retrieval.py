@@ -265,8 +265,57 @@ def _embed_query_fast(text: str, timeout: float = QUERY_EMBED_TIMEOUT) -> Option
         return None
 
 
+def _mark_index_pending(memory_id, exc) -> None:
+    """失败补偿（记忆系统升级 P0①）：向量化失败的记忆标成待重投。
+
+    旧行为「失败即丢、无补偿」已造成真实数据缺陷（开发库 2 条缺向量 + 1 条
+    孤儿向量）。这里复用 v3.2 的 index_status 状态机：`skipped/failed →
+    pending_upsert` 是合法转换（§8 ③ 批量回填入口），`claim_index_work` 对
+    无 pipeline_task 的 legacy 行也照常领取。只动索引路径，不动蒸馏。
+
+    幂等/归属安全：只在 `skipped`（legacy 从未进索引）与 `failed`（此前重投
+    又失败）两种状态上改写，绝不碰 pending_upsert/indexing/pending_remove
+    等在途状态——那些由索引 worker 状态机管辖。改完延迟调度一次积压清扫。
+    """
+    if memory_id is None:
+        return
+    try:
+        from sqlalchemy import update
+
+        from app.core.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            db.execute(
+                update(AiMemory)
+                .where(
+                    AiMemory.id == int(memory_id),
+                    AiMemory.index_status.in_(("skipped", "failed")),
+                )
+                .values(
+                    index_status="pending_upsert",
+                    index_error=str(exc)[:480],
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+        from app.services.memory_index_worker import schedule_backlog_sweep
+
+        schedule_backlog_sweep()
+        logger.info(
+            "[MEM-RET] 向量化失败已标 pending_upsert 等待补偿 id=%s", memory_id
+        )
+    except Exception:  # noqa: BLE001——补偿本身绝不影响调用方
+        logger.warning("[MEM-RET] 补偿标记失败 id=%s", memory_id, exc_info=True)
+
+
 def vectorize_memory_async(memory: Dict[str, Any]) -> None:
-    """create_memory 挂钩：后台把新记忆写入 couple_memory（约束②写入侧）。"""
+    """create_memory 挂钩：后台把新记忆写入 couple_memory（约束②写入侧）。
+
+    失败不再「即丢」：chroma 不可用或 embed/upsert 异常都会标
+    `index_status='pending_upsert'`，由积压清扫（启动 + 失败延迟触发）重投。
+    """
     if not memory or memory.get("id") is None:
         return
     text = (memory.get("memory_text") or "").strip()
@@ -277,6 +326,9 @@ def vectorize_memory_async(memory: Dict[str, Any]) -> None:
         try:
             col = _get_collection()
             if col is None:
+                # collection 加载失败在进程内是持续态（懒加载缓存），
+                # 标 pending 留给下次启动清扫恢复
+                _mark_index_pending(memory["id"], "chroma collection unavailable")
                 return
             mid = str(memory["id"])
             existing = col.get(ids=[mid])
@@ -323,6 +375,7 @@ def vectorize_memory_async(memory: Dict[str, Any]) -> None:
             logger.info("[MEM-RET] 已向量化 memory_id=%s", mid)
         except Exception as exc:
             logger.warning("[MEM-RET] 写入向量失败 id=%s: %s", memory.get("id"), exc)
+            _mark_index_pending(memory.get("id"), exc)
 
     threading.Thread(target=_worker, name="mem-vectorize", daemon=True).start()
 
@@ -517,11 +570,30 @@ def _extract_terms(text: str) -> Tuple[Set[str], Set[str]]:
     return full, grams
 
 
+#: 整段短语精确命中的免稀释线（修「画像关键词稀释」）：
+#: query 里 ≥6 字的**完整短语**原样出现在 memory_text 中 → 关键词通道直接满分。
+#: 覆盖率口径（分母 = 全 query 短语 + 2-gram 总量）衡量「这条记忆覆盖了多少
+#: query」，画像关键词四源共享同一分母，会把单个 12 字事件标题的命中稀释到
+#: 门槛之下（实测 top-5 召回失败）；精确命中口径衡量「query 里有没有一个高
+#: 辨识度片段整段落在这条记忆里」，与分母无关，事件标题/专有名词因此单独成
+#: 信号。≥6 字是「足以排除巧合」的长度（"第一次看海" 5 字在短 query 下分母
+#: 小、覆盖率本身够用，不需要走本通道）。
+EXACT_PHRASE_MIN_LEN = 6
+
+
 def _keyword_score(memory_text: str, q_full: Set[str], q_grams: Set[str]) -> float:
-    """命中词数 / 加权：整段短语 2 分、2-gram 1 分，分母为 query 侧总量。"""
+    """命中词数 / 加权：整段短语 2 分、2-gram 1 分，分母为 query 侧总量。
+
+    例外（精确短语通道）：≥EXACT_PHRASE_MIN_LEN 字的完整 query 短语在
+    memory_text 中整段出现 → 直接 1.0（免稀释，见常量处说明）。
+    """
     denom = 2 * len(q_full) + len(q_grams)
     if denom <= 0 or not memory_text:
         return 0.0
+    if any(
+        len(t) >= EXACT_PHRASE_MIN_LEN and t in memory_text for t in q_full
+    ):
+        return 1.0
     hit = 2 * sum(1 for t in q_full if t in memory_text)
     hit += sum(1 for g in q_grams if g in memory_text)
     return round(hit / denom, 4)

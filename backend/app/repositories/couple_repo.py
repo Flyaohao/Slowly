@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
+from app.core.config import MEMORY_PURGE_RETENTION_DAYS
 from app.models.couple_relation import CoupleRelation
 from app.models.couple_space import CoupleSpace
 
@@ -83,6 +84,12 @@ def confirm_unbind(db: Session, relation_id: int) -> Optional[CoupleRelation]:
         return None
     relation.status = "dissolved"
     relation.unbind_confirmed_at = datetime.utcnow()
+    # 记忆治理（记忆系统升级 P0⑥）：解绑落定即排定清理时刻 = now + 保留期。
+    # 到期且无 legal_hold 由 memory_purge_service 执行 purge（DB + Chroma）；
+    # 保留期内记忆仍在库里（管理读可见、AI 召回已被 active 硬边界挡住）。
+    relation.memory_purge_after = datetime.utcnow() + timedelta(
+        days=MEMORY_PURGE_RETENTION_DAYS
+    )
     db.commit()
     db.refresh(relation)
     return relation
@@ -95,6 +102,9 @@ def cancel_unbind(db: Session, relation_id: int) -> Optional[CoupleRelation]:
     relation.status = "active"
     relation.unbind_requested_by = None
     relation.unbind_requested_at = None
+    # 撤销解绑 = 撤销解绑排定的清理时刻（否则旧时刻残留，虽然 purge 只认
+    # dissolved 状态不会误删，但留着是脏数据）
+    relation.memory_purge_after = None
     db.commit()
     db.refresh(relation)
     return relation

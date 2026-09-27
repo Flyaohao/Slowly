@@ -64,6 +64,12 @@ MEMORY_ASSERTION_REQUIRE_COMPLETE: bool = os.getenv("MEMORY_ASSERTION_REQUIRE_CO
 #: DUAL_WRITE=0 时新行不会写 pending_upsert，worker 空转（文档化 no-op 组合）。
 MEMORY_ASSERTION_INDEX_WORKER: bool = os.getenv("MEMORY_ASSERTION_INDEX_WORKER", "0") == "1"
 
+#: 解绑后记忆保留期（天）。dissolve 时写 memory_purge_after = now + 本值，
+#: 到期且无 legal_hold 由清理线程执行 purge（DB + Chroma）。
+#: 保留期是给「反悔/数据导出/争议取证」留的窗口，不是软删除展示期——
+#: dissolved 关系的记忆早已被 AI_RECALL 硬边界挡在召回之外。
+MEMORY_PURGE_RETENTION_DAYS: int = int(os.getenv("MEMORY_PURGE_RETENTION_DAYS", "30"))
+
 # ---- 接口文档与跨域 ----
 #: /docs、/redoc、/openapi.json 的保护口令（HTTP Basic）。
 #: openapi.json 会给出全部接口的参数与结构，等同一份攻击说明书，因此不对外敞开。

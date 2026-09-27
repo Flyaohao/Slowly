@@ -143,6 +143,32 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(v1_router)
 
+
+# ---------------------------------------------------------------------------
+# 记忆治理后台任务（记忆系统升级 P0①/P0⑥，2026-09-27）
+#
+# 两个 daemon 线程，全部自吞异常、不阻塞启动：
+#   1. 索引积压清扫 —— legacy 向量化「失败即丢」的补偿出口：失败行标
+#      pending_upsert，启动扫一次积压 + 失败路径延迟再扫（去抖）；
+#   2. 解绑记忆清理 —— dissolve 排定的 memory_purge_after 到期后
+#      执行 DB+Chroma purge 并留痕（保留期 MEMORY_PURGE_RETENTION_DAYS）。
+# 测试隔离：COUPLE_DISABLE_MEMORY_DISTILL=1 时两者都不调度。
+# ---------------------------------------------------------------------------
+@app.on_event("startup")
+def _memory_governance_background() -> None:
+    try:
+        from app.services.memory_index_worker import schedule_backlog_sweep
+
+        schedule_backlog_sweep(delay=5.0)
+    except Exception:  # noqa: BLE001——后台治理绝不影响服务启动
+        logger.warning("[MEM-IDX] 启动积压清扫调度失败", exc_info=True)
+    try:
+        from app.services.memory_purge_service import ensure_started
+
+        ensure_started()
+    except Exception:  # noqa: BLE001
+        logger.warning("[MEM-PURGE] 清理线程启动失败", exc_info=True)
+
 # ---------------------------------------------------------------------------
 # 静态文件：/uploads 下存放上传的图片（头像、纪念馆藏品配图等）。
 # 此前 upload_avatar 把文件写到 uploads/avatars 并返回 /uploads/... URL，

@@ -535,6 +535,33 @@ def build_distill_user_message(
     return "\n\n".join(parts)
 
 
+def memory_distill_enabled(db: Session, relation_id: Optional[int]) -> bool:
+    """军师记忆沉淀总开关（记忆系统升级 P0④，关系级）。
+
+    relation 行存在且 `memory_distill_enabled=False` → 阻断；其余情况
+    （行缺失/列读失败）一律放行，保持旧行为——开关故障绝不能扩大成
+    「所有记忆都停了」。调用点只有 distill 入口（AI 替用户做决定的路径）；
+    用户主动「计入军师记忆」的直写不受它管。
+    """
+    if relation_id is None:
+        return True
+    try:
+        from app.models.couple_relation import CoupleRelation
+
+        row = (
+            db.query(CoupleRelation.memory_distill_enabled)
+            .filter(CoupleRelation.id == relation_id)
+            .first()
+        )
+        if row is None:
+            return True
+        return bool(row[0])
+    except Exception:  # noqa: BLE001——读不到开关时按「开」处理
+        logger.warning("[MEMORY] 读取记忆沉淀开关失败 relation=%s", relation_id,
+                       exc_info=True)
+        return True
+
+
 def distill_and_save(
     db: Session,
     user_id: int,
@@ -561,6 +588,14 @@ def distill_and_save(
     """
     text = (user_input or "").strip()
     if len(text) < _MIN_INPUT_LEN:
+        return None
+
+    # 军师记忆沉淀总开关（P0④）：关闭时在 distill 入口阻断，连模型调用都不发
+    if not memory_distill_enabled(db, relation_id):
+        logger.info(
+            "[MEMORY] 军师记忆沉淀已关闭，跳过蒸馏 relation=%s scene=%s",
+            relation_id, scene_key,
+        )
         return None
 
     try:
@@ -685,6 +720,9 @@ def distill_session_summary_in_background(
 
         db = SessionLocal()
         try:
+            # 军师记忆沉淀总开关（P0④）：会话摘要同属蒸馏产物，一并受控
+            if not memory_distill_enabled(db, relation_id):
+                return
             msgs = (
                 db.query(AiChatMessage)
                 .filter(AiChatMessage.session_id == session_id)

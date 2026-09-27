@@ -36,4 +36,12 @@ class CoupleRelation(BigIntPKMixin, TimestampMixin, Base):
         Boolean, default=False, server_default="0", nullable=False
     )
 
+    # ---- 军师记忆沉淀总开关（记忆系统升级 P0④，关系级）----
+    #: False = 服务端在 distill 入口直接阻断（不是 UI 假开关）。
+    #: 只挡 AI 蒸馏（chat/会话摘要/事件蒸馏）；用户主动「计入军师记忆」的
+    #: 直写不受影响——那是对既有内容的显式处置，不是 AI 替用户做决定。
+    memory_distill_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False
+    )
+
     space: Mapped["CoupleSpace"] = relationship(back_populates="relation", uselist=False)

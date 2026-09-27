@@ -21,6 +21,9 @@ Stage A 已知边界：`indexing` 行无租约（崩溃残留由断言离场联�
 = 关键词兜底）。测试通过 patch `_collection` / `_embed` 注入。
 """
 import logging
+import os
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
@@ -411,3 +414,80 @@ def _maybe_finish_task(db: Session, task_id: Optional[int]) -> None:
     except Exception:
         db.rollback()
         logger.exception("[MEM-IDX] 任务终结判定异常 task=%s", task_id)
+
+
+# ---------------------------------------------------------------------------
+# 补偿式积压清扫（记忆系统升级 P0①：legacy 向量化失败行的重投出口）
+#
+# 背景：legacy 向量化（vectorize_memory_async）跑在 daemon 线程里，此前
+# 「失败即丢、无补偿」，已造成真实数据缺陷（缺向量行）。失败行现在会标
+# `index_status='pending_upsert'`（见 memory_retrieval._mark_index_pending），
+# 本节负责把积压清掉。flags 全关（无 pipeline worker）时它也独立可用：
+# claim_index_work 的 CAS 认领对无 pipeline_task 的 legacy 行同样生效，
+# process_index_work 收尾的 _maybe_finish_task 对 task_id=None 是 no-op。
+# ---------------------------------------------------------------------------
+
+#: 单次清扫最多处理的行数（embed 是外呼，防一次性打爆预算）
+SWEEP_MAX_ROWS = 50
+#: 失败路径触发的清扫延迟（秒）：给瞬时故障一个恢复窗
+SWEEP_DELAY_SECONDS = 30.0
+
+_sweep_lock = threading.Lock()
+_sweep_scheduled = False
+
+
+def run_backlog_sweep(limit: int = SWEEP_MAX_ROWS) -> int:
+    """清扫积压：把 pending_upsert 行逐条领出处理（含 legacy 无任务行）。
+
+    claim_index_work 的乐观认领保证多线程/多进程并发清扫不重复处理；
+    返回处理行数。轮次级异常上抛，由调用方记日志（清扫线程自吞）。
+    """
+    from app.core.database import SessionLocal
+
+    processed = 0
+    db = SessionLocal()
+    try:
+        while processed < limit:
+            works = claim_index_work(db, limit=1)
+            if not works:
+                break
+            for work in works:
+                process_index_work(db, work)
+                processed += 1
+    finally:
+        db.close()
+    return processed
+
+
+def schedule_backlog_sweep(delay: float = SWEEP_DELAY_SECONDS) -> None:
+    """调度一次积压清扫（去抖：已有待执行的清扫则跳过）。
+
+    两个触发点：
+    - 服务启动（main.py startup，delay=5s）：扫上次进程退出/失败遗留的积压；
+    - vectorize_memory_async 失败路径：延迟触发，给瞬时故障一个恢复窗。
+    测试隔离：`COUPLE_DISABLE_MEMORY_DISTILL=1` 时不调度（与 pipeline
+    worker 同款 kill switch），避免测试进程碰库/外呼 embedding。
+    """
+    global _sweep_scheduled
+    if os.getenv("COUPLE_DISABLE_MEMORY_DISTILL") == "1":
+        return
+    with _sweep_lock:
+        if _sweep_scheduled:
+            return
+        _sweep_scheduled = True
+
+    def _run() -> None:
+        global _sweep_scheduled
+        try:
+            if delay > 0:
+                time.sleep(delay)
+            n = run_backlog_sweep()
+            if n:
+                logger.info("[MEM-IDX] 积压清扫完成，处理 %s 行", n)
+        except Exception:  # noqa: BLE001——清扫线程绝不带崩进程
+            logger.exception("[MEM-IDX] 积压清扫异常")
+        finally:
+            with _sweep_lock:
+                _sweep_scheduled = False
+
+    threading.Thread(target=_run, name="mem-idx-sweep", daemon=True).start()

@@ -291,7 +291,7 @@ class LlmClient:
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
-        resp = self._request(payload, scene=scene)
+        resp = self._request(payload, scene=scene, no_thinking=True)
         return resp["choices"][0]["message"]
 
     def invoke_structured(
@@ -330,7 +330,7 @@ class LlmClient:
                 "temperature": temperature,
                 "max_tokens": max_tokens,
             }
-            resp = self._request(payload, scene=scene, cancel_event=cancel_event)
+            resp = self._request(payload, scene=scene, cancel_event=cancel_event, no_thinking=True)
             message = resp["choices"][0]["message"]
             data = self._extract_tool_arguments(message)
             if data is not None:
@@ -355,7 +355,7 @@ class LlmClient:
                 "temperature": 0.2,
                 "max_tokens": max_tokens,
             }
-            resp = self._request(payload, scene=scene, cancel_event=cancel_event)
+            resp = self._request(payload, scene=scene, cancel_event=cancel_event, no_thinking=True)
             data = self._extract_tool_arguments(resp["choices"][0]["message"])
             if data is not None:
                 return self._validate(model_cls, data, scene)
@@ -429,12 +429,18 @@ class LlmClient:
         payload: Dict[str, Any],
         scene: str = "unknown",
         cancel_event: Optional[threading.Event] = None,
+        no_thinking: bool = False,
     ) -> Dict[str, Any]:
         """带模型降级与重试的底层请求。
 
         ``cancel_event`` 置位时在**候选模型之间**提前退出：非流式 POST 本身
         无法中断，但可以避免「主模型失败 → 再试 3 个备用模型」把已经无人在等的
         请求继续烧下去（单次超时 120s × 候选数）。
+
+        ``no_thinking=True`` 强制关闭思考（覆盖 `_thinking_params`）：工具调用
+        路径（invoke_structured / invoke_with_tools）的产出是工具参数或结构化
+        字段，没有「思考面板」可展示——留着思考只会拖慢每一次重试（主模型
+        实测单次多花 ~19s）。主聊天流式链路**不受影响**，照常带思考。
         """
         last_error: Optional[str] = None
 
@@ -442,6 +448,9 @@ class LlmClient:
             if cancel_event is not None and cancel_event.is_set():
                 raise LlmError("LLM 调用已被调用方取消")
             body = dict(payload, model=model, **self._thinking_params())
+            if no_thinking:
+                body["enable_thinking"] = False
+                body.pop("thinking_budget", None)
             started = time.time()
             try:
                 with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:
