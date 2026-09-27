@@ -2,6 +2,7 @@ package com.couple.translator.feature.couple.mediation
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -200,5 +201,80 @@ class MediationFlowTest {
         assertTrue(MediationFlow.resultReady("completed"))
         listOf("inviting", "accepted", "inputting", "rewriting", "confirming", "summarizing")
             .forEach { assertFalse("$it 还不算结果就绪", MediationFlow.resultReady(it)) }
+    }
+
+    // ------------------------------------------------------------------ #
+    // 整改 B4.3 P0-2：安全终止是**独立终态**
+    // ------------------------------------------------------------------ #
+
+    /**
+     * 终态矩阵：安全终止与 completed 对用户含义**完全相反**
+     * ——「你们谈完了」vs「这次不能替你们谈下去」。
+     *
+     * 混成一个状态的后果很具体：结果页会给安全终止配上一整排
+     * 「继续沟通 / 结束调解 / 重试生成」，而 `continue` 还会把它拉回正常流程
+     * （服务端对 safety_blocked 返回 50003）。
+     */
+    @Test
+    fun `安全终止不给任何推进动作`() {
+        assertTrue(MediationFlow.showsNextStepActions("completed"))
+        assertFalse(
+            "安全终止不是「谈完了」，不得出现继续沟通/结束调解",
+            MediationFlow.showsNextStepActions("safety_blocked"),
+        )
+        // 其它在途态也都不给
+        listOf(
+            "inviting", "accepted", "inputting", "rewriting", "confirming",
+            "summarizing", "rewrite_failed", "summary_failed",
+        ).forEach { assertFalse("$it 不该有下一步动作", MediationFlow.showsNextStepActions(it)) }
+    }
+
+    @Test
+    fun `安全终止不是失败因此不给重试`() {
+        assertFalse("安全终止不是生成失败", MediationFlow.allowsRetry("safety_blocked"))
+        assertFalse("已完成没有可重试的东西", MediationFlow.allowsRetry("completed"))
+        // 在途态与失败态都还能重试
+        listOf("rewriting", "summarizing", "rewrite_failed", "summary_failed")
+            .forEach { assertTrue("$it 应当可以重试", MediationFlow.allowsRetry(it)) }
+    }
+
+    @Test
+    fun `安全终止是终态不再轮询`() {
+        assertTrue(MediationFlow.shouldKeepPolling("summarizing"))
+        assertFalse(
+            "安全终止是终态，服务端不会再有产出",
+            MediationFlow.shouldKeepPolling("safety_blocked"),
+        )
+        assertFalse(MediationFlow.shouldKeepPolling("completed"))
+    }
+
+    @Test
+    fun `等待循环读到安全终止必须立刻离开等待`() {
+        // 留在等待态会让用户对着一个永远不会来的改写继续等，
+        // 直到轮询窗口用尽，然后被告知「还在处理中」——而服务端早就停了。
+        assertEquals(MediationStep.RESULT, MediationFlow.whileWaiting("safety_blocked"))
+        assertEquals(MediationStep.RESULT, MediationFlow.afterSubmit("safety_blocked"))
+        assertEquals(
+            MediationStep.RESULT,
+            MediationFlow.afterConfirm("safety_blocked", myConfirmed = false, partnerConfirmed = false),
+        )
+    }
+
+    @Test
+    fun `历史列表把安全终止标成已安全终止而不是已完成`() {
+        assertEquals("已完成", MediationFlow.historyStatusLabel("completed"))
+        assertEquals(
+            "把安全终止写成「已完成」等于告诉用户「你们把这件事谈开了」",
+            "已安全终止",
+            MediationFlow.historyStatusLabel("safety_blocked"),
+        )
+        // 在途态不产生标签（列表不显示状态词）
+        listOf("inviting", "inputting", "rewriting", "confirming", "summarizing")
+            .forEach { assertNull("$it 不该有状态标签", MediationFlow.historyStatusLabel(it)) }
+    }
+
+    @Test
+    fun `终态集合只含 completed 与 safety_blocked`() {
+        assertEquals(setOf("completed", "safety_blocked"), MediationFlow.TERMINAL_STATUSES)
     }
 }

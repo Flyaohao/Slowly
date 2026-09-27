@@ -1153,8 +1153,11 @@ def t_high_risk_blocks_mediation():
             ai_task_service.run_due_tasks(db, worker_id="test-worker")
 
             session = _session(db, sid)
-            check("高风险会话被终止为 completed",
-                  session.mediation_status == "completed", session.mediation_status)
+            # 整改 B4.3 P0-2：安全阻断是**独立终态** safety_blocked，不再与
+            # 「正常谈完」共用 completed——客户端必须能区分两者（前者不给任何
+            # 推进动作、历史里显示「已安全终止」）。
+            check("高风险会话被终止为 safety_blocked",
+                  session.mediation_status == "safety_blocked", session.mediation_status)
             check("不是失败态（不该给用户「重试」）",
                   session.mediation_failure_code is None,
                   str(session.mediation_failure_code))
@@ -1199,7 +1202,11 @@ def t_risk_payload_normalized():
     bad = mediation_service._normalize_generation_payload(
         {"rewrite_a": "a", "rewrite_b": "b", "risk_level": "HIGH"}, summary=False
     )
-    check("未知等级按 normal 处理", bad["risk_level"] == "normal", str(bad))
+    # 整改 B4.3 P0-4：未知/无法识别的等级**不再降级为 normal 放行**（fail open），
+    # 一律收敛成 unknown 并在写回时阻断产物。完整矩阵见
+    # tests/test_mediation_safety_terminal.py::t_risk_level_matrix_fail_closed。
+    check("未知等级收敛为 unknown（fail closed）",
+          bad["risk_level"] == mediation_service.RISK_LEVEL_UNKNOWN, str(bad))
 
     summary = mediation_service._normalize_generation_payload(
         {

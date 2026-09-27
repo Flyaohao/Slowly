@@ -295,7 +295,14 @@ def child_main() -> int:
         idx.get("uq_ai_output_feedback_msg_user") == 0,
         str(idx.get("uq_ai_output_feedback_msg_user")),
     )
-    check("最终 alembic 版本 = e5f6a7b8c9d0（本轮 head）", ver == "e5f6a7b8c9d0", str(ver))
+    # 期望值取自 alembic 脚本目录的**实际 head**，不写死 revision id：
+    # 写死的话每加一条迁移这一步就假红一次（B4.2 加 `a9c8b7d6e5f4` 后即如此），
+    # 而它要证的其实只是「全链确实跑到头了」，不是「头恰好是某个 id」。
+    from alembic.config import Config as _Config  # noqa: E402
+    from alembic.script import ScriptDirectory as _ScriptDirectory  # noqa: E402
+
+    expected_head = _ScriptDirectory.from_config(alembic_cfg()).get_current_head()
+    check("最终 alembic 版本 = head（%s）" % expected_head, ver == expected_head, str(ver))
     check(
         "ai_task 表已建（含幂等键）",
         "id" in task_cols and "idempotency_key" in task_cols,
