@@ -49,13 +49,6 @@ class CoupleStateManager @Inject constructor(
     private val _state = MutableStateFlow(CoupleState())
     val state: StateFlow<CoupleState> = _state.asStateFlow()
 
-    /**
-     * 壳外入口（使用指南跳转 / 通知深链）请求情侣壳打开的内层 tab 路由。
-     * tab_mailbox 这类路由只注册在 CoupleShell 的内层 NavHost，根导航够不着：
-     * 壳外先写这里再回到壳，壳内收集后转内层导航并置空（一次性请求）。
-     */
-    val pendingInnerRoute = MutableStateFlow<String?>(null)
-
     val isCoupleMode: Boolean get() = _state.value.mode != AppMode.SINGLE
 
     /** 缓存写入用的独立作用域：setCoupleBound/clearCouple 是同步函数，不能挂起 */

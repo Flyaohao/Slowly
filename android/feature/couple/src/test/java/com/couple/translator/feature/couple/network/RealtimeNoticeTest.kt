@@ -1,6 +1,5 @@
 package com.couple.translator.feature.couple.network
 
-import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.notification.AppNotifications
 import org.junit.Assert.assertEquals
@@ -43,14 +42,14 @@ class RealtimeNoticeTest {
     }
 
     @Test
-    fun `收信缺 letter_id 时退回深度表达信箱`() {
+    fun `收信缺 letter_id 时退回深度表达二级页`() {
         assertEquals(
-            BottomTab.Mailbox.route,
+            Screen.Mailbox.route,
             event("letter_received").toNotice()!!.route,
         )
         // 老服务端可能给 0 而不是不给
         assertEquals(
-            BottomTab.Mailbox.route,
+            Screen.Mailbox.route,
             event("letter_received", letterId = 0L).toNotice()!!.route,
         )
     }

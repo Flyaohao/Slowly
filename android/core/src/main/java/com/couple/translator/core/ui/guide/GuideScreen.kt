@@ -48,7 +48,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
@@ -203,14 +202,14 @@ fun GuideScreen(
             Spacer(modifier = Modifier.height(8.dp))
             GuideCard {
                 // 信件是情侣间功能；单身模式没有信箱（抽屉同款门控）。
-                // 跳转目标是内层信箱 tab（tab_mailbox）：根导航派发层会先回壳再请壳
-                // 转内层导航，落点是「深度表达」二级页，不是 letter_list 全屏列表。
+                // 跳转目标是根导航的「深度表达」二级页（Screen.Mailbox）：压栈全屏、
+                // 返回箭头顶栏，不是信箱 tab 一级页，也不是 letter_list 全屏列表。
                 if (isCoupleMode) {
                     GuideEntryRow(
                         icon = Icons.Outlined.MailOutline,
                         title = "深度表达",
                         desc = "写信、存草稿、收发往来。可以收藏，也可以让 AI 帮你解读或改写。",
-                        route = BottomTab.Mailbox.route,
+                        route = Screen.Mailbox.route,
                         onNavigateToRoute = onNavigateToRoute,
                     )
                 }

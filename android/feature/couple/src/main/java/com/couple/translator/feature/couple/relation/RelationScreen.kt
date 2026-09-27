@@ -24,7 +24,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
@@ -205,8 +204,8 @@ private fun BackgroundSection(
             onClick = { onNavigateToRoute(Screen.Understanding.route) },
         )
 
-        // 深度表达（原「信件收件箱」）：进内层信箱 tab（tab_mailbox），
-        // 由 CoupleShell 拦截该路由转内层导航——根导航没有 tab_mailbox 目的地。
+        // 深度表达（原「信件收件箱」）：走根导航的「深度表达」二级页（Screen.Mailbox，
+        // 2026-09-28 用户裁决：压栈全屏、返回箭头顶栏，不再是内层信箱 tab 一级页）。
         // 未读计数是真实数据（inboxCount），照旧展示。
         AppListItemDivider()
         AppListItem(
@@ -214,7 +213,7 @@ private fun BackgroundSection(
             subtitle = if (uiState.inboxCount > 0) "${uiState.inboxCount} 封信在等你" else "写下来，比说出来容易",
             leadingIcon = Icons.Outlined.MailOutline,
             showChevron = true,
-            onClick = { onNavigateToRoute(BottomTab.Mailbox.route) },
+            onClick = { onNavigateToRoute(Screen.Mailbox.route) },
         )
 
         // §8.5-6「能回看」：已完成的调解必须有一条**用户看得见**的路——

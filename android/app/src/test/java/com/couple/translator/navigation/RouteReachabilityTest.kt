@@ -181,13 +181,17 @@ class RouteReachabilityTest {
         // 三个 tab 路由由 CoupleShell / SingleShell 的内层 NavHost 提供，
         // 根导航图没有它们的目的地，自然也没入口——
         // 这里显式记录，避免以后有人把它们当成「漏注册」或者贴上豁免表。
+        //
+        // 例外说明：Screen.Mailbox（深度表达）2026-09-28 用户裁决翻转为根导航
+        // 二级页（压栈全屏、返回箭头顶栏），从此**必须**注册在根导航图里并有
+        // 真实入口——它已从本禁注清单移除，由上方「已注册必须有入口」主断言看守。
         val tabRoutes: List<String> = listOf(
             BottomTab.AiChat.route,
             BottomTab.Relation.route,
             BottomTab.SingleHome.route,
             BottomTab.Diary.route,
         )
-        listOf(Screen.Home.route, Screen.Mailbox.route, Screen.AiChat.route).forEach { route ->
+        listOf(Screen.Home.route, Screen.AiChat.route).forEach { route ->
             assertTrue("$route 不该出现在根导航图注册头里", !registrations.containsKey(route))
         }
         tabRoutes.forEach { route ->

@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.AppLinkRow
 import com.couple.translator.core.ui.components.AppListCard
@@ -40,6 +41,13 @@ import com.couple.translator.feature.couple.data.model.LetterDto
 /**
  * 深度表达（情侣模式，原「信箱」）/ 我的观点（单身模式）。
  *
+ * 两种形态共用同一份内容（2026-09-28 用户裁决）：
+ * - **tab 形态**（默认）：[onNavigateBack] 为 null，顶栏是叠头像 + 抽屉入口，
+ *   挂在 CoupleShell 内层 NavHost 的 tab_mailbox 上（底栏隐藏 ≠ 删除）；
+ * - **二级页形态**：[onNavigateBack] 非空，顶栏换成返回箭头、无头像无 tab 栏，
+ *   注册在根导航 Screen.Mailbox 上——使用指南 / 抽屉 / 关系页 / 收信通知兜底
+ *   四个「深度表达」入口全部走这一形态（压栈，系统返回可退回来源页）。
+ *
  * 排版原则和首页对齐：**顶栏只放叠头像入口，标题交给正文大标题**；
  * 列表不再是「裸行 + 全宽分隔线」，而是收进卡片里 —— 分组一看就清楚，
  * 屏底那个居中的纯文字链接也换成了有容器的行。
@@ -52,6 +60,7 @@ fun NewMailboxScreen(
     onNavigateToLetterDetail: (Long) -> Unit,
     isCoupleMode: Boolean = true,
     identity: TopBarIdentity = TopBarIdentity(),
+    onNavigateBack: (() -> Unit)? = null,
     viewModel: MailboxViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -75,11 +84,16 @@ fun NewMailboxScreen(
                 .background(AppBackground)
                 .verticalScroll(rememberScrollState()),
         ) {
-            AppTopBar(
-                onOpenDrawer = onOpenDrawer,
-                isCoupleMode = isCoupleMode,
-                identity = identity,
-            )
+            if (onNavigateBack != null) {
+                // 二级页形态：返回箭头顶栏，没有抽屉头像（正文大标题由 AppPageHeader 提供）。
+                AppBackTopBar(onBack = onNavigateBack)
+            } else {
+                AppTopBar(
+                    onOpenDrawer = onOpenDrawer,
+                    isCoupleMode = isCoupleMode,
+                    identity = identity,
+                )
+            }
 
             if (isCoupleMode) {
                 CoupleMailboxContent(

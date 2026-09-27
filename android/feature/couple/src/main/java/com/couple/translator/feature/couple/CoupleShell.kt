@@ -145,18 +145,6 @@ fun CoupleShell(
         }
     }
 
-    // 壳外入口（使用指南跳转 / 通知深链）请求打开的内层 tab（见 pendingInnerRoute 注释）：
-    // 这里转内层导航并清掉请求。StateFlow 会重放最后一次值，冷启动深链也不丢。
-    LaunchedEffect(coupleStateManager) {
-        val stateManager = coupleStateManager ?: return@LaunchedEffect
-        stateManager.pendingInnerRoute.collect { route ->
-            if (route != null) {
-                tabNavController.navigate(route) { launchSingleTop = true }
-                stateManager.pendingInnerRoute.value = null
-            }
-        }
-    }
-
     // 每次回到前台时刷新情侣状态 + 待办角标
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -190,14 +178,9 @@ fun CoupleShell(
                 DrawerContent(
                     onNavigateToRoute = { route ->
                         closeDrawer()
-                        // 抽屉「深度表达」（tab_mailbox）与关系页入口同一拦截规则：
-                        // 该路由只注册在本壳的内层 NavHost，根导航够不到；
-                        // 其余路由照旧走根导航（压在壳之上可返回）。
-                        if (route == BottomTab.Mailbox.route) {
-                            tabNavController.navigate(route) { launchSingleTop = true }
-                        } else {
-                            onNavigateToRoute(route)
-                        }
+                        // 深度表达等全部路由统一走根导航：深度表达二级页（Screen.Mailbox）
+                        // 注册在根 NavGraph，压栈全屏可返回，无需壳内拦截。
+                        onNavigateToRoute(route)
                     },
                     onLogout = {
                         scope.launch {
@@ -373,18 +356,9 @@ fun CoupleShell(
                 composable(BottomTab.Relation.route) {
                     RelationScreen(
                         onOpenDrawer = openDrawer,
-                        // 关系页 → 信箱（tab_mailbox）走内层导航：该路由只注册在本壳的
-                        // 内层 NavHost，根导航够不到会崩；其余路由（letter_list /
-                        // compose_letter 等）仍走根导航，压在壳之上可返回。
-                        // 刻意不 popUpTo(startDestination)：系统返回键要能从信箱退回关系页。
-                        // 隐藏 ≠ 删除：tab_mailbox 的 composable、抽屉与回调全部复用。
-                        onNavigateToRoute = { route ->
-                            if (route == BottomTab.Mailbox.route) {
-                                tabNavController.navigate(route) { launchSingleTop = true }
-                            } else {
-                                onNavigateToRoute(route)
-                            }
-                        },
+                        // 全部路由直通根导航：深度表达二级页（Screen.Mailbox）注册在
+                        // 根 NavGraph，压栈全屏、系统返回可退回关系页。
+                        onNavigateToRoute = onNavigateToRoute,
                         identity = topBarIdentity,
                     )
                 }

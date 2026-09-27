@@ -25,7 +25,6 @@ import com.couple.translator.core.data.repository.GuideStore
 import com.couple.translator.core.data.repository.NotificationPermissionStore
 import com.couple.translator.core.data.repository.ThemeStore
 import com.couple.translator.core.data.repository.TokenStore
-import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.ui.settings.SettingsViewModel
 import com.couple.translator.core.ui.theme.ThemeMode
@@ -57,6 +56,7 @@ import com.couple.translator.feature.couple.dual.SubmitRecordScreen
 import com.couple.translator.feature.couple.letter.ComposeLetterScreen
 import com.couple.translator.feature.couple.letter.LetterDetailScreen
 import com.couple.translator.feature.couple.letter.LetterListScreen
+import com.couple.translator.feature.couple.letter.NewMailboxScreen
 import com.couple.translator.feature.couple.mediation.MediationExplanationScreen
 import com.couple.translator.feature.couple.mediation.MediationConfirmScreen
 import com.couple.translator.feature.couple.mediation.MediationHistoryScreen
@@ -105,21 +105,6 @@ fun NavGraph(
     var startDest by remember { mutableStateOf<String?>(null) }
     val coupleState = coupleStateManager?.state?.collectAsState()?.value
     val isCoupleMode = coupleState?.mode != com.couple.translator.feature.couple.data.repository.AppMode.SINGLE
-
-    // 壳外入口（使用指南跳转 / 通知深链）的统一派发。
-    // 「深度表达」（tab_mailbox）只注册在 CoupleShell 的内层 NavHost，根导航没有这个
-    // 目的地，直接 navigate 会崩：先回壳，再经 CoupleStateManager.pendingInnerRoute
-    // 请壳转内层导航。壳内入口（抽屉 / 关系页）已在 CoupleShell 里直接拦截，不走这里。
-    val openRouteFromOutsideShell: (String) -> Unit = { route ->
-        if (route == BottomTab.Mailbox.route) {
-            coupleStateManager?.pendingInnerRoute?.value = route
-            if (navController.currentDestination?.route != Screen.Main.route) {
-                navController.popBackStack(Screen.Main.route, inclusive = false)
-            }
-        } else {
-            navController.navigate(route)
-        }
-    }
 
     LaunchedEffect(Unit) {
         val hasToken = tokenStore?.isLoggedIn() == true
@@ -226,7 +211,7 @@ fun NavGraph(
         composable(Screen.Guide.route) {
             GuideScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToRoute = { route -> openRouteFromOutsideShell(route) },
+                onNavigateToRoute = { route -> navController.navigate(route) },
                 isCoupleMode = isCoupleMode,
             )
         }
@@ -384,6 +369,26 @@ fun NavGraph(
         // P-C3 §4.3：记忆管理页（此前无任何 destination 接线）
         composable(Screen.Memory.route) {
             MemoryScreen(
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        // 深度表达二级页（2026-09-28 用户裁决）：使用指南 / 抽屉 / 关系页 / 收信通知
+        // 兜底四个入口都压到这里——压栈全屏、返回箭头顶栏，无 tab 栏无抽屉头像。
+        // 信箱 tab（tab_mailbox）仍注册在 CoupleShell 内层，隐藏 ≠ 删除。
+        composable(Screen.Mailbox.route) {
+            NewMailboxScreen(
+                onOpenDrawer = {},
+                onNavigateToCompose = {
+                    navController.navigate(Screen.ComposeLetter.route)
+                },
+                onNavigateToLetterList = {
+                    navController.navigate(Screen.LetterList.route)
+                },
+                onNavigateToLetterDetail = { letterId ->
+                    navController.navigate("${Screen.LetterDetail.route}/$letterId")
+                },
+                isCoupleMode = isCoupleMode,
                 onNavigateBack = { navController.popBackStack() },
             )
         }
@@ -993,7 +998,7 @@ fun NavGraph(
     LaunchedEffect(deepLinkRoute) {
         val target = deepLinkRoute ?: return@LaunchedEffect
         if (startDest == Screen.Main.route) {
-            openRouteFromOutsideShell(target)
+            navController.navigate(target) { launchSingleTop = true }
         }
         onDeepLinkConsumed()
     }
