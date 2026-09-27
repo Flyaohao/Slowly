@@ -137,20 +137,20 @@ object AiDto {
      * `dimensions` 里**没有分数**：AI 只回答方向与强度，具体移动多少由服务端算。
      */
     data class ViewpointAnalysis(
-        val summary: String = "",
-        val values: List<String> = emptyList(),
-        val stance: String = "",
-        val confidence: Float = 0f,
-        val basis: List<String> = emptyList(),
-        val suggestEnrich: Boolean = false,
-        val dimensions: List<SuggestedDimension> = emptyList(),
+        @Json(name = "summary") val summary: String = "",
+        @Json(name = "values") val values: List<String> = emptyList(),
+        @Json(name = "stance") val stance: String = "",
+        @Json(name = "confidence") val confidence: Float = 0f,
+        @Json(name = "basis") val basis: List<String> = emptyList(),
+        @Json(name = "suggest_enrich") val suggestEnrich: Boolean = false,
+        @Json(name = "dimensions") val dimensions: List<SuggestedDimension> = emptyList(),
     )
 
     data class SuggestedDimension(
-        val dimensionKey: String,
+        @Json(name = "dimension_key") val dimensionKey: String,
         /** up = 这一项更强 / down = 更弱。 */
-        val direction: String,
-        val strength: String = "mild",
+        @Json(name = "direction") val direction: String,
+        @Json(name = "strength") val strength: String = "mild",
     )
 
     /**
