@@ -16,6 +16,8 @@ data class AddWishlistUiState(
     val title: String = "",
     val description: String = "",
     val isLoading: Boolean = false,
+    /** true = 编辑已有愿望（从列表点进来），false = 新建。 */
+    val isEditing: Boolean = false,
     val error: String = "",
     val created: Boolean = false,
 )
@@ -41,26 +43,76 @@ class AddWishlistViewModel @Inject constructor(
         _uiState.update { it.copy(description = description) }
     }
 
-    fun createWishlist() {
+    private var wishlistId: Long? = null
+
+    /**
+     * [id] 非空 = 编辑已有愿望。
+     *
+     * 没有「单条愿望详情」接口，所以从列表里回读——愿望量级很小，
+     * 不值得为它单开一个端点。
+     */
+    fun start(id: Long?) {
+        wishlistId = id
+        if (id == null) return
+        _uiState.update { it.copy(isLoading = true, isEditing = true, error = "") }
+        viewModelScope.launch {
+            repository.getWishlists().fold(
+                onSuccess = { data ->
+                    val item = data?.items?.firstOrNull { it.id == id }
+                    if (item == null) {
+                        _uiState.update { it.copy(isLoading = false, error = "愿望不存在") }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                title = item.title,
+                                description = item.description.orEmpty(),
+                            )
+                        }
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isLoading = false, error = error.message ?: "加载失败")
+                    }
+                },
+            )
+        }
+    }
+
+    /** 新建或更新——由 [start] 是否带 id 决定。 */
+    fun save() {
         val state = _uiState.value
         if (state.title.isBlank()) {
             _uiState.update { it.copy(error = "请输入愿望") }
             return
         }
+        val id = wishlistId
         _uiState.update { it.copy(isLoading = true, error = "") }
         viewModelScope.launch {
-            repository.createWishlist(
-                WishlistDto.CreateWishlistRequest(
-                    title = state.title,
-                    description = state.description.ifBlank { null },
-                ),
-            ).fold(
+            val result = if (id == null) {
+                repository.createWishlist(
+                    WishlistDto.CreateWishlistRequest(
+                        title = state.title,
+                        description = state.description.ifBlank { null },
+                    ),
+                )
+            } else {
+                repository.updateWishlist(
+                    id,
+                    WishlistDto.UpdateWishlistRequest(
+                        title = state.title,
+                        description = state.description.ifBlank { null },
+                    ),
+                )
+            }
+            result.fold(
                 onSuccess = {
                     _uiState.update { it.copy(isLoading = false, created = true) }
                 },
                 onFailure = { error ->
                     _uiState.update {
-                        it.copy(isLoading = false, error = error.message ?: "创建失败")
+                        it.copy(isLoading = false, error = error.message ?: "保存失败")
                     }
                 },
             )

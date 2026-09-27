@@ -9,6 +9,7 @@ import com.couple.translator.feature.couple.data.model.LetterDto
 import com.couple.translator.feature.couple.data.model.MediationDto
 import com.couple.translator.feature.couple.data.model.MemoryDto
 import com.couple.translator.feature.couple.data.model.MuseumDto
+import com.couple.translator.feature.couple.data.model.RelationshipEventDto
 import com.couple.translator.feature.couple.data.model.WishlistDto
 import okhttp3.MultipartBody
 import okhttp3.ResponseBody
@@ -349,6 +350,29 @@ interface CoupleApiService {
 
     @POST("api/v1/couple/museum/{id}/pin")
     suspend fun toggleMuseumPin(@Path("id") itemId: Long): ApiResponse<MuseumDto.MuseumItemResponse>
+
+    // 关系事件（用户手动记录的历史事件；必带写入原因与作用方向）
+    @GET("api/v1/couple/relationship-events")
+    suspend fun getRelationshipEvents(): ApiResponse<RelationshipEventDto.EventListResponse>
+
+    @GET("api/v1/couple/relationship-events/{id}")
+    suspend fun getRelationshipEvent(
+        @Path("id") id: Long,
+    ): ApiResponse<RelationshipEventDto.RelationshipEventResponse>
+
+    @POST("api/v1/couple/relationship-events")
+    suspend fun createRelationshipEvent(
+        @Body body: RelationshipEventDto.CreateEventRequest,
+    ): ApiResponse<RelationshipEventDto.RelationshipEventResponse>
+
+    @PUT("api/v1/couple/relationship-events/{id}")
+    suspend fun updateRelationshipEvent(
+        @Path("id") id: Long,
+        @Body body: RelationshipEventDto.UpdateEventRequest,
+    ): ApiResponse<RelationshipEventDto.RelationshipEventResponse>
+
+    @DELETE("api/v1/couple/relationship-events/{id}")
+    suspend fun deleteRelationshipEvent(@Path("id") id: Long): ApiResponse<Unit>
 
     // Anniversary
     @POST("api/v1/couple/anniversaries")

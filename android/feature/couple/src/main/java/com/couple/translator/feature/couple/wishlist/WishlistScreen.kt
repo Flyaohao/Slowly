@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.CardGiftcard
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.HistoryEdu
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -54,6 +55,7 @@ import com.couple.translator.feature.couple.data.model.WishlistDto
 fun WishlistScreen(
     onNavigateBack: () -> Unit,
     onNavigateToAdd: () -> Unit,
+    onNavigateToEdit: (Long) -> Unit = {},
     onNavigateToMemoryCard: (targetType: String, targetId: Long, itemTitle: String) -> Unit = { _, _, _ -> },
     viewModel: WishlistViewModel = hiltViewModel(),
 ) {
@@ -121,6 +123,7 @@ fun WishlistScreen(
                             onMemoryCard = {
                                 onNavigateToMemoryCard("wishlist", item.id, item.title)
                             },
+                            onEdit = { onNavigateToEdit(item.id) },
                             onComplete = { viewModel.completeWishlist(item.id) },
                             onDelete = { viewModel.deleteWishlist(item.id) },
                         )
@@ -142,6 +145,7 @@ fun WishlistScreen(
                             onMemoryCard = {
                                 onNavigateToMemoryCard("wishlist", item.id, item.title)
                             },
+                            onEdit = { onNavigateToEdit(item.id) },
                             onComplete = {},
                             onDelete = { viewModel.deleteWishlist(item.id) },
                         )
@@ -158,6 +162,7 @@ fun WishlistScreen(
 private fun WishlistItemCard(
     item: WishlistDto.WishlistResponse,
     onMemoryCard: () -> Unit,
+    onEdit: () -> Unit,
     onComplete: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -213,6 +218,13 @@ private fun WishlistItemCard(
                         tint = AppSuccessGreen,
                     )
                 }
+            }
+            IconButton(onClick = onEdit) {
+                Icon(
+                    Icons.Outlined.Edit,
+                    contentDescription = "编辑",
+                    tint = AppTextTertiary,
+                )
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Filled.Delete, contentDescription = "删除", tint = AppErrorRed)

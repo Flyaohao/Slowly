@@ -39,9 +39,13 @@ import com.couple.translator.core.ui.theme.AppTextSecondary
 fun AddWishlistScreen(
     onNavigateBack: () -> Unit,
     onCreated: () -> Unit,
+    wishlistId: Long? = null,
     viewModel: AddWishlistViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    // wishlistId 非空 = 编辑模式：先回读该条愿望填进表单
+    LaunchedEffect(wishlistId) { viewModel.start(wishlistId) }
 
     LaunchedEffect(uiState.created) {
         if (uiState.created) onCreated()
@@ -54,7 +58,10 @@ fun AddWishlistScreen(
     Scaffold(
         containerColor = AppBackground,
         topBar = {
-            AppBackTopBar(onBack = onNavigateBack, title = "许愿")
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = if (uiState.isEditing) "编辑愿望" else "许愿",
+            )
         },
     ) { padding ->
         if (uiState.isLoading) {
@@ -86,7 +93,7 @@ fun AddWishlistScreen(
                 .padding(horizontal = AppSpacing.screenH),
         ) {
             Text(
-                text = "写下你们想一起做的事",
+                text = if (uiState.isEditing) "改一改这个愿望" else "写下你们想一起做的事",
                 style = MaterialTheme.typography.bodyMedium,
                 color = AppTextSecondary,
             )
@@ -130,8 +137,8 @@ fun AddWishlistScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             AppPrimaryButton(
-                text = "许愿",
-                onClick = { viewModel.createWishlist() },
+                text = if (uiState.isEditing) "保存" else "许愿",
+                onClick = { viewModel.save() },
             )
         }
     }

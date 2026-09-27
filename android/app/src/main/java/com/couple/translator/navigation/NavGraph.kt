@@ -37,6 +37,8 @@ import com.couple.translator.feature.couple.ai.PendingSessionHolder
 import com.couple.translator.feature.couple.ai.ReviewHistoryScreen
 import com.couple.translator.feature.couple.ai.ReviewScreen
 import com.couple.translator.feature.couple.anniversary.AddAnniversaryScreen
+import com.couple.translator.feature.couple.relationship_event.RelationshipEventEditScreen
+import com.couple.translator.feature.couple.relationship_event.RelationshipEventScreen
 import com.couple.translator.feature.couple.anniversary.AnniversaryListScreen
 import com.couple.translator.feature.couple.memorycard.MemoryCardScreen
 import com.couple.translator.core.ui.advisor.AdvisorSettingsScreen
@@ -715,6 +717,43 @@ fun NavGraph(
             )
         }
 
+        // 关系事件（用户手动记录的历史事件；必带写入原因与作用方向）
+        composable(Screen.RelationshipEvent.route) {
+            RelationshipEventScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToEdit = { id ->
+                    if (id == null) {
+                        navController.navigate(Screen.AddRelationshipEvent.route)
+                    } else {
+                        navController.navigate("${Screen.AddRelationshipEvent.route}?eventId=$id")
+                    }
+                },
+            )
+        }
+
+        composable(
+            route = "${Screen.AddRelationshipEvent.route}?eventId={eventId}",
+            arguments = listOf(
+                navArgument("eventId") {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
+            ),
+        ) { entry ->
+            val rawId = entry.arguments?.getLong("eventId") ?: -1L
+            RelationshipEventEditScreen(
+                eventId = if (rawId > 0L) rawId else null,
+                onNavigateBack = { navController.popBackStack() },
+                // 重建列表页以触发重新加载：同一个 NavBackStackEntry 复用旧 VM
+                // 时不会重跑 init，返回后会看到过期的列表。
+                onSaved = {
+                    navController.navigate(Screen.RelationshipEvent.route) {
+                        popUpTo(Screen.RelationshipEvent.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
         // Anniversary
         composable(Screen.AnniversaryList.route) {
             AnniversaryListScreen(
@@ -761,6 +800,11 @@ fun NavGraph(
                 onNavigateToAdd = {
                     navController.navigate(Screen.AddWishlist.route)
                 },
+                onNavigateToEdit = { wishlistId ->
+                    navController.navigate(
+                        "${Screen.AddWishlist.route}?wishlistId=$wishlistId"
+                    )
+                },
                 onNavigateToMemoryCard = { targetType, targetId, itemTitle ->
                     navController.navigate(
                         "memory_card?targetType=$targetType&targetId=$targetId&itemTitle=" +
@@ -770,10 +814,21 @@ fun NavGraph(
             )
         }
 
-        composable(Screen.AddWishlist.route) {
+        composable(
+            route = "${Screen.AddWishlist.route}?wishlistId={wishlistId}",
+            arguments = listOf(
+                navArgument("wishlistId") {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
+            ),
+        ) { entry ->
+            val rawWishlistId = entry.arguments?.getLong("wishlistId") ?: -1L
             AddWishlistScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onCreated = { navController.popBackStack() },
+                // -1 表示新建（默认值），>0 表示编辑已有愿望
+                wishlistId = if (rawWishlistId > 0L) rawWishlistId else null,
             )
         }
 

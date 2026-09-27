@@ -23,7 +23,9 @@ import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.EventNote
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Person
@@ -85,11 +87,12 @@ fun DrawerContent(
         HorizontalDivider(color = AppBorderLight)
         Spacer(modifier = Modifier.height(8.dp))
 
-        // [W4.3 合并] 我的画像 + 了解自己 + 关系画像 三入口 → 单一「军师如何理解我们」页。
+        // [W4.3 合并] 我的画像 + 了解自己 + 关系画像 三入口 → 单一页。
+        // 2026-09-27 用户裁决：名称由「军师如何理解我们」改为「人格画像」。
         // 旧路由 ProfileResult / QuestionnaireIntro / CoupleProfile 全部保留（隐藏 ≠ 删除）。
         DrawerNavItem(
             icon = Icons.Outlined.Person,
-            label = "军师如何理解我们",
+            label = "人格画像",
             onClick = { onNavigateToRoute(Screen.Understanding.route) },
         )
         // 整改 §8.8：正式「记忆与隐私」入口。
@@ -140,6 +143,22 @@ fun DrawerContent(
                 icon = Icons.Outlined.AutoAwesome,
                 label = "军师设置",
                 onClick = { onNavigateToRoute(Screen.AdvisorSettings.route) },
+            )
+            // 2026-09-27 用户裁决：抽屉补齐关系内容入口。
+            DrawerNavItem(
+                icon = Icons.Outlined.MailOutline,
+                label = "深度表达",
+                onClick = { onNavigateToRoute(Screen.LetterList.route) },
+            )
+            DrawerNavItem(
+                icon = Icons.Outlined.EventNote,
+                label = "纪念事件",
+                onClick = { onNavigateToRoute(Screen.RelationshipEvent.route) },
+            )
+            DrawerNavItem(
+                icon = Icons.Outlined.StarOutline,
+                label = "愿望",
+                onClick = { onNavigateToRoute(Screen.Wishlist.route) },
             )
         }
 

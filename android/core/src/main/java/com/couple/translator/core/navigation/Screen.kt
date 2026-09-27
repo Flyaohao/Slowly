@@ -49,6 +49,8 @@ enum class Screen(val route: String) {
     AddAnniversary("add_anniversary"),
     Wishlist("wishlist"),
     AddWishlist("add_wishlist"),
+    RelationshipEvent("relationship_event"),
+    AddRelationshipEvent("add_relationship_event"),
     MemoryCard("memory_card?targetType={targetType}&targetId={targetId}&itemTitle={itemTitle}"),
 
     // 收敛期新增页（W4.3 画像三合一 / W4.4 军师设置；仅新增，既有路由字符串不动）
