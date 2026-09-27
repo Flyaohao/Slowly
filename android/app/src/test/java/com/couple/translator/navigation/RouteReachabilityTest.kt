@@ -49,6 +49,8 @@ class RouteReachabilityTest {
         val HIDDEN_WITHOUT_ENTRY = mapOf(
             // §1 冻结表中的模块：纪念馆（museum 系列）/ 愿望清单 / 自我练习。
             "couple_profile" to "W4.3：关系画像已并入「军师如何理解我们」，路由保留备查",
+            // W4.3 合并：我的画像入口随遗留壳 MainScreen 的删除消失，路由保留备查
+            "profile_result" to "W4.3：我的画像已并入「军师如何理解我们」，路由保留备查",
             "self_practice_list" to "§1：自我练习冻结 10006，入口按收敛期裁决切断",
         )
 
@@ -61,8 +63,8 @@ class RouteReachabilityTest {
         val REQUIRED_ENTRIES: Map<String, Set<String>> = mapOf(
             // §8.1 深度表达（信件）
             Screen.LetterList.route to setOf("CoupleShell.kt"),
-            Screen.ComposeLetter.route to setOf("CoupleShell.kt", "MainScreen.kt"),
-            Screen.LetterDetail.route to setOf("CoupleShell.kt", "MainScreen.kt"),
+            Screen.ComposeLetter.route to setOf("CoupleShell.kt"),
+            Screen.LetterDetail.route to setOf("CoupleShell.kt"),
             // §8.2 AI 行动
             Screen.FeedbackOutcome.route to setOf("CoupleShell.kt", "NewAiChatScreen.kt"),
             Screen.RelationshipReview.route to setOf("CoupleShell.kt", "NavGraph.kt"),
@@ -172,8 +174,8 @@ class RouteReachabilityTest {
     @Test
     fun `被壳托管的 tab 路由不出现在根导航图注册头里`() {
         val registrations = scanRegistrations()
-        // 三个 tab 路由由 CoupleShell / SingleShell / 遗留 MainScreen 的
-        // 内层 NavHost 提供，根导航图没有它们的目的地，自然也没入口——
+        // 三个 tab 路由由 CoupleShell / SingleShell 的内层 NavHost 提供，
+        // 根导航图没有它们的目的地，自然也没入口——
         // 这里显式记录，避免以后有人把它们当成「漏注册」或者贴上豁免表。
         val tabRoutes: List<String> = listOf(
             BottomTab.AiChat.route,

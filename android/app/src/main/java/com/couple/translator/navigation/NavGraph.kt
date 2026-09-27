@@ -761,6 +761,11 @@ fun NavGraph(
                 onNavigateToAdd = {
                     navController.navigate(Screen.AddAnniversary.route)
                 },
+                onNavigateToEdit = { anniversaryId ->
+                    navController.navigate(
+                        "${Screen.AddAnniversary.route}?anniversaryId=$anniversaryId"
+                    )
+                },
                 onNavigateToMemoryCard = { targetType, targetId, itemTitle ->
                     navController.navigate(
                         "memory_card?targetType=$targetType&targetId=$targetId&itemTitle=" +
@@ -786,10 +791,20 @@ fun NavGraph(
             )
         }
 
-        composable(Screen.AddAnniversary.route) {
+        composable(
+            route = "${Screen.AddAnniversary.route}?anniversaryId={anniversaryId}",
+            arguments = listOf(
+                navArgument("anniversaryId") {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
+            ),
+        ) { entry ->
+            val rawAnniversaryId = entry.arguments?.getLong("anniversaryId") ?: -1L
             AddAnniversaryScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onCreated = { navController.popBackStack() },
+                anniversaryId = if (rawAnniversaryId > 0L) rawAnniversaryId else null,
             )
         }
 

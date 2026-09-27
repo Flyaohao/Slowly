@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.HistoryEdu
 import androidx.compose.material3.FloatingActionButton
@@ -52,6 +53,7 @@ import com.couple.translator.feature.couple.data.model.AnniversaryDto
 fun AnniversaryListScreen(
     onNavigateBack: () -> Unit,
     onNavigateToAdd: () -> Unit,
+    onNavigateToEdit: (Long) -> Unit = {},
     onNavigateToMemoryCard: (targetType: String, targetId: Long, itemTitle: String) -> Unit = { _, _, _ -> },
     viewModel: AnniversaryListViewModel = hiltViewModel(),
 ) {
@@ -108,6 +110,7 @@ fun AnniversaryListScreen(
                         onMemoryCard = {
                             onNavigateToMemoryCard("anniversary", anniversary.id, anniversary.title)
                         },
+                        onEdit = { onNavigateToEdit(anniversary.id) },
                         onDelete = { viewModel.deleteAnniversary(anniversary.id) },
                     )
                 }
@@ -121,6 +124,7 @@ fun AnniversaryListScreen(
 private fun AnniversaryListItem(
     anniversary: AnniversaryDto.AnniversaryResponse,
     onMemoryCard: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     AppCard(
@@ -176,6 +180,13 @@ private fun AnniversaryListItem(
             //         tint = AppAccent,
             //     )
             // }
+            IconButton(onClick = onEdit) {
+                Icon(
+                    Icons.Outlined.Edit,
+                    contentDescription = "编辑",
+                    tint = AppAccent,
+                )
+            }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Filled.Delete, contentDescription = "删除", tint = AppErrorRed)
             }

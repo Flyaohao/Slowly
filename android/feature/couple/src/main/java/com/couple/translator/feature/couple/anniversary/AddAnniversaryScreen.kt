@@ -42,9 +42,13 @@ import com.couple.translator.core.ui.theme.AppTextSecondary
 fun AddAnniversaryScreen(
     onNavigateBack: () -> Unit,
     onCreated: () -> Unit,
+    anniversaryId: Long? = null,
     viewModel: AddAnniversaryViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    // anniversaryId 非空 = 编辑模式：先回读该条纪念日填进表单
+    LaunchedEffect(anniversaryId) { viewModel.start(anniversaryId) }
 
     LaunchedEffect(uiState.created) {
         if (uiState.created) onCreated()
@@ -57,7 +61,10 @@ fun AddAnniversaryScreen(
     Scaffold(
         containerColor = AppBackground,
         topBar = {
-            AppBackTopBar(onBack = onNavigateBack, title = "新增纪念日")
+            AppBackTopBar(
+                onBack = onNavigateBack,
+                title = if (uiState.isEditing) "编辑纪念日" else "新增纪念日",
+            )
         },
     ) { padding ->
         if (uiState.isLoading) {
@@ -184,7 +191,7 @@ fun AddAnniversaryScreen(
 
             AppPrimaryButton(
                 text = "保存",
-                onClick = { viewModel.createAnniversary() },
+                onClick = { viewModel.save() },
             )
         }
     }

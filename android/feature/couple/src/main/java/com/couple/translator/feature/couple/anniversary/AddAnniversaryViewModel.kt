@@ -22,6 +22,8 @@ data class AddAnniversaryUiState(
     val repeatAnnually: Boolean = true,
     val description: String = "",
     val isLoading: Boolean = false,
+    /** true = 编辑已有纪念日（从列表点进来），false = 新建。 */
+    val isEditing: Boolean = false,
     val error: String = "",
     val created: Boolean = false,
 )
@@ -55,7 +57,42 @@ class AddAnniversaryViewModel @Inject constructor(
         _uiState.update { it.copy(description = description) }
     }
 
-    fun createAnniversary() {
+    private var anniversaryId: Long? = null
+
+    /** [id] 非空 = 编辑已有纪念日（从列表点进来）。 */
+    fun start(id: Long?) {
+        anniversaryId = id
+        if (id == null) return
+        _uiState.update { it.copy(isLoading = true, isEditing = true, error = "") }
+        viewModelScope.launch {
+            repository.getAnniversaries().fold(
+                onSuccess = { data ->
+                    val item = data?.items?.firstOrNull { it.id == id }
+                    if (item == null) {
+                        _uiState.update { it.copy(isLoading = false, error = "纪念日不存在") }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                title = item.title,
+                                date = item.anniversaryDate,
+                                repeatAnnually = item.repeatAnnually,
+                                description = item.description.orEmpty(),
+                            )
+                        }
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(isLoading = false, error = error.message ?: "加载失败")
+                    }
+                },
+            )
+        }
+    }
+
+    /** 新建或更新——由 [start] 是否带 id 决定。 */
+    fun save() {
         val state = _uiState.value
         if (state.title.isBlank()) {
             _uiState.update { it.copy(error = "请输入标题") }
@@ -71,22 +108,36 @@ class AddAnniversaryViewModel @Inject constructor(
             _uiState.update { it.copy(error = "日期格式应为 YYYY-MM-DD，例如 2024-11-20") }
             return
         }
+        val id = anniversaryId
         _uiState.update { it.copy(isLoading = true, error = "") }
         viewModelScope.launch {
-            repository.createAnniversary(
-                AnniversaryDto.CreateAnniversaryRequest(
-                    title = state.title,
-                    anniversaryDate = state.date,
-                    repeatAnnually = state.repeatAnnually,
-                    description = state.description.ifBlank { null },
-                ),
-            ).fold(
+            val result = if (id == null) {
+                repository.createAnniversary(
+                    AnniversaryDto.CreateAnniversaryRequest(
+                        title = state.title,
+                        anniversaryDate = state.date,
+                        repeatAnnually = state.repeatAnnually,
+                        description = state.description.ifBlank { null },
+                    ),
+                )
+            } else {
+                repository.updateAnniversary(
+                    id,
+                    AnniversaryDto.UpdateAnniversaryRequest(
+                        title = state.title,
+                        anniversaryDate = state.date,
+                        repeatAnnually = state.repeatAnnually,
+                        description = state.description.ifBlank { null },
+                    ),
+                )
+            }
+            result.fold(
                 onSuccess = {
                     _uiState.update { it.copy(isLoading = false, created = true) }
                 },
                 onFailure = { error ->
                     _uiState.update {
-                        it.copy(isLoading = false, error = error.message ?: "创建失败")
+                        it.copy(isLoading = false, error = error.message ?: "保存失败")
                     }
                 },
             )
