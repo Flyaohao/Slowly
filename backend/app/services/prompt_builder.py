@@ -364,6 +364,43 @@ SYSTEM_PROMPTS = {
 ## 条目
 {item_detail}
 """,
+
+    #: 观点分析（用户需求 #5）：把用户主动写下的一段观点翻译成「它说明了什么」
+    #: +「要不要写进画像」。
+    #: 关键约束是**不产出分数**——只给方向与强度。让模型直接给分数，等于把
+    #: 「画像改成什么样」交给一次生成；分数由 profile_service 按幅度规则算。
+    "viewpoint_analysis": """你是关系军师。用户主动写下了一段自己的观点。
+你要读懂它，并判断能否据此更新"你对这个人的理解"。
+
+## 军师目前对他的理解
+{user_profile}
+
+## 他写下的观点
+{viewpoint_text}
+
+## 可以调整的维度（**只能从这里选，不得自造 key**）
+{dimension_catalog}
+
+## 你要给出的判断
+1. **summary**：一句话概括这段观点，40 字以内。尽量沿用他自己的说法，不要替换成
+   你的术语——他之后要靠这句话认出"这是我说的"。
+2. **values**：它体现了哪些价值取向，2-4 条，每条不超过 12 字。
+3. **stance**：他对这段关系的态度倾向，一句话。
+4. **confidence**：你对上述判断的把握，0 到 1 之间的小数。拿不准就写低。
+5. **basis**：依据，引用观点原文里的句子，1-3 条。必须是原文里真实出现的片段。
+6. **suggest_enrich**：是否建议写进画像。
+7. **dimensions**：若要写进画像，建议调整哪些维度、往哪个方向。
+
+## 判断规则（重要）
+- 只有**表述稳定、指向明确**的观点才建议写入。当天情绪化的一句抱怨不算。
+- 一段观点通常只对应 1-2 个维度。不要为了显得"丰富"而多选。
+- `direction` 只能是 `up` 或 `down` 之一；`strength` 只能是 `mild` 或 `moderate`。
+- 观点自相矛盾、过于笼统、或只是在转述别人的看法时，`suggest_enrich` 设为 false，
+  `dimensions` 留空。
+- **不要给出任何分数**。你只回答方向与强度，具体移动多少由系统决定。
+- 只分析**这位用户自己**的表达，不要替他的伴侣下结论。
+
+请以 JSON 格式回复，包含字段：summary / values / stance / confidence / basis / suggest_enrich / dimensions""",
 }
 
 
@@ -871,6 +908,28 @@ def build_memory_card_prompt(item_kind: str, item_detail: str) -> str:
     return with_human_base(template.format(
         item_kind=item_kind,
         item_detail=item_detail,
+    ))
+
+
+def build_viewpoint_analysis_prompt(
+    profile_digest: str,
+    viewpoint_text: str,
+    dimension_catalog: str,
+) -> str:
+    """构建「观点分析」的 prompt（用户需求 #5）。
+
+    与其它场景的两点不同，都是刻意的：
+
+    1. 输入里带上**现有画像摘要**。不带的话，模型会把用户早就说过、画像里
+       已经有的事当成新发现再建议写一次；带上之后它才知道「已知什么」。
+    2. 提示词明确要求**不给分数**。分数由 `profile_service` 按幅度规则算，
+       模型只回答方向与强度——否则一次生成就能把画像拉到底。
+    """
+    template = SYSTEM_PROMPTS["viewpoint_analysis"]
+    return with_human_base(template.format(
+        user_profile=profile_digest or "（还没有任何画像，这是第一次记录）",
+        viewpoint_text=viewpoint_text,
+        dimension_catalog=dimension_catalog,
     ))
 
 

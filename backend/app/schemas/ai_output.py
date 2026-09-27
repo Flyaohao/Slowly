@@ -466,6 +466,42 @@ class MemoryDistillOutput(BaseModel):
     )
 
 
+class ViewpointDimensionSuggestion(BaseModel):
+    """建议调整的单个维度。
+
+    **刻意不含分数**（用户需求 #5）：让模型给出「改成多少分」，等于把画像的
+    最终形态交给一次生成；这里只让它回答方向与强度，具体移动多少分由
+    `profile_service.compute_enriched_score` 按幅度规则换算（单次 ≤12、
+    相对问卷基线累计 ≤20）。
+    """
+
+    dimension_key: str = Field(..., description="维度 key，必须来自 prompt 里给出的清单")
+    direction: Literal["up", "down"] = Field(..., description="up=这一项更强 / down=更弱")
+    strength: Literal["mild", "moderate"] = Field("mild", description="变化强度，拿不准用 mild")
+
+
+class ViewpointAnalysisOutput(BaseModel):
+    """观点分析：把用户主动写下的一段观点翻译成「它说明了什么」+「要不要写进画像」。
+
+    `dimensions` 里的 key 由服务端按白名单二次过滤——模型自造的 key 会被丢弃，
+    因为「有哪些维度」是产品配置，不该在模型输出里再有一个真相源。
+    """
+
+    summary: str = Field(..., description="一句话概括，40 字以内，尽量沿用用户自己的说法")
+    values: List[str] = Field(
+        default_factory=list, description="体现的价值取向，2-4 条，每条不超过 12 字"
+    )
+    stance: str = Field("", description="对这段关系的态度倾向，一句话")
+    confidence: float = Field(0.0, ge=0.0, le=1.0, description="判断的把握程度（0-1）")
+    basis: List[str] = Field(
+        default_factory=list, description="依据：引用观点原文里的句子，1-3 条"
+    )
+    suggest_enrich: bool = Field(False, description="是否建议写进画像")
+    dimensions: List[ViewpointDimensionSuggestion] = Field(
+        default_factory=list, description="建议调整的维度（仅在 suggest_enrich 为真时有意义）"
+    )
+
+
 #: 场景 → 输出模型。未登记的 scene_key 统一回退到 TranslateOutput。
 SCENE_OUTPUT_MODELS: Dict[str, Any] = {
     # 私人军师 / 对方翻译用 AdvisorOutput（= TranslateOutput + suggest_mediation）：
@@ -487,6 +523,9 @@ SCENE_OUTPUT_MODELS: Dict[str, Any] = {
     "relationship_review": ReviewOutput,
     # 内部辅助场景：不属于用户可选场景，由对话链路后台调用
     "memory_distill": MemoryDistillOutput,
+    # 观点分析（用户需求 #5）：产出「要不要写进画像 + 改哪些维度」的建议，
+    # 不直接写入画像——写入必须由用户确认后走 profile_service。
+    "viewpoint_analysis": ViewpointAnalysisOutput,
 }
 
 #: 输出纯文本、不走结构化解析的场景

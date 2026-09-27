@@ -25,6 +25,7 @@ from app.schemas.ai_schema import (
     ReviewOutcomeRequest,
     DualSummaryRequest,
     MemoryCardRequest,
+    ViewpointAnalysisRequest,
 )
 from app.services import (
     ai_generation_service,
@@ -902,6 +903,33 @@ def dual_summary_stream(
                 "70003": (400, "双方都写下并公开视角后才能生成总结"),
             },
         )
+
+    return StreamingResponse(
+        sse_encode(ai_generation_service.stream_generation_events(prepared)),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
+
+
+@router.post("/viewpoint-analysis/stream")
+@ai_limit()
+def viewpoint_analysis_stream(
+    request: Request,
+    req: ViewpointAnalysisRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """观点分析（SSE）：读懂用户主动写下的一段观点，判断能否写进画像。
+
+    **只是建议**：真正的写入要用户在前端确认后调 `POST /profiles/me/enrich`，
+    由 `profile_service` 按幅度规则落库。这里不碰画像。
+    """
+    try:
+        prepared = ai_service.prepare_viewpoint_analysis(
+            db, current_user.id, req.viewpoint_id
+        )
+    except ValueError as e:
+        _raise_prepared_error(e, {"90011": (404, "观点不存在")})
 
     return StreamingResponse(
         sse_encode(ai_generation_service.stream_generation_events(prepared)),

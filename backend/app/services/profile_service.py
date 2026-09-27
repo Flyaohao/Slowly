@@ -126,6 +126,21 @@ DIMENSION_DEFINITIONS = {
         },
         "advice": {"do": "私下说、先肯定再提不足", "dont": "当众指责、用质问语气"},
     },
+    # ---- 以下维度的分数语义与上面 11 个不同，务必注意 ----
+    # 上面 11 个测的是「某行为倾向的强弱」，高分低分都只是描述。
+    # 本维度测的是「价值主张的**清晰与稳定程度**」——刻意**不**测「三观好不好」：
+    # 一个人重坦诚、另一个人重陪伴，都是成立的，不该被排成高低。
+    # 所以 band 文案全部围绕「有多明确、多稳定」，而不是围绕「有多正确」。
+    "values_orientation": {
+        "label": "价值取向", "source": "用户观点", "from_questionnaire": False,
+        "bands": {
+            "high":     (75, "价值判断清晰且稳定，愿意为认定的原则让步；清楚什么对自己重要"),
+            "mid_high": (50, "多数事情有明确倾向，个别领域还在摸索"),
+            "mid_low":  (25, "倾向尚未成形，容易被当下情绪或对方意见带动"),
+            "low":      (0,  "较少表达自己的价值判断，习惯先看对方怎么想"),
+        },
+        "advice": {"do": "把你在意的那条原则直接说出来", "dont": "为了不吵架而含糊掉自己的立场"},
+    },
 }
 
 # bands 档位 → 中文等级名（画像卡展示用）
@@ -275,8 +290,12 @@ def _calculate_dimension_scores(answers_with_meta: List[dict]) -> Dict[str, floa
         else:
             result[dim] = 50.0
 
-    for dim in DIMENSION_DEFINITIONS:
-        if dim not in result:
+    # 只补「问卷能产出」的维度。values_orientation 这类 `from_questionnaire=False`
+    # 的维度**不能**补——补了就等于对模型宣称「这个人价值取向中等（50 分）」，
+    # 而事实是**没有任何证据**。编造数据比缺数据危险：缺数据会走「无依据」分支，
+    # 编造出来的分数会被当成真实画像参与后续推理。
+    for dim, defn in DIMENSION_DEFINITIONS.items():
+        if dim not in result and defn.get("from_questionnaire", True):
             result[dim] = 50.0
 
     return result
@@ -548,3 +567,479 @@ def _apply_voice_style(db: Session, avatar, mapped: Optional[str]) -> Optional[s
     db.commit()
     logger.info("[VOICE] 画像自动选语气 -> %s", mapped)
     return mapped
+
+
+# ============================================================
+# 画像版本管理 + 观点补充（用户需求 #5）
+#
+# 设计要点（三句话）：
+# 1. 画像是**版本化**的：每次变更派生一个新版本（version+1），旧版本原样保留。
+#    「撤回」不是就地改回去，而是把旧版本的内容**再派生一次**——这样撤回本身
+#    也留下历史，用户可以连撤两次而不丢失中间任何一步。
+# 2. 观点补充画像时，分数**渐进**移动（单次 ≤12、相对问卷基线累计 ≤20），
+#    同时把观点原文摘要**追加**进 explanation。只改分会让依据丢失，只叠文本
+#    会让正文与分数互相打架——两者必须同向且同时发生。
+# 3. 所有写入都经过本模块（`profile_service` 是画像的唯一出口）；AI 链路只
+#    产出「建议改哪个维度、往哪个方向」，**不产出分数**。
+# ============================================================
+
+#: 单次丰富时，单个维度分数最多移动多少分。
+#: 一条观点是一次表达，不是一次量表测量。允许它一次把分数拉到底，等于让
+#: 「随手写的一句话」获得比整份问卷更高的权重。
+ENRICH_MAX_DELTA_ONCE = 12.0
+
+#: 相对「问卷基线」的累计偏移上限，防止长期单方向丰富把某一维拖到极端。
+ENRICH_MAX_DELTA_TOTAL = 20.0
+
+#: 低于此置信度禁止写入画像（用户裁决 #5：禁止，不是「提示后允许」）。
+ENRICH_MIN_CONFIDENCE = 0.6
+
+#: 每个维度的 explanation 里最多保留几条证据行（超出丢最旧的）。
+ENRICH_MAX_EVIDENCE_LINES = 5
+
+#: 画像版本保留上限（用户裁决 #6）。
+PROFILE_VERSION_KEEP = 20
+
+PROFILE_ORIGIN_LABELS = {
+    "questionnaire": "问卷",
+    "viewpoint_enrich": "观点补充",
+    "restore": "撤回",
+    "manual": "手动保存",
+}
+
+#: AI 给的「强度」→ 向目标值逼近的比例。故意不给 1.0（那就成了直接赋值）。
+_STRENGTH_RATIO = {"mild": 0.15, "moderate": 0.30}
+
+_EVIDENCE_PREFIX = "· "
+
+
+def _profile_scores(db: Session, profile_id: int) -> Dict[str, dict]:
+    """{dimension_key: {"score": float, "explanation": str}}"""
+    return {
+        s.dimension_key: {"score": s.score, "explanation": s.explanation or ""}
+        for s in profile_repo.get_dimension_scores(db, profile_id)
+    }
+
+
+def get_baseline_scores(db: Session, user_id: int) -> Dict[str, float]:
+    """取「问卷基线」= 最近一次由问卷产生的版本的维度分。
+
+    累计偏移上限必须相对某个**固定参照**，否则「累计 20 分」在连续丰富里会被
+    反复重置，等于没有上限。选最近一次问卷版本作为参照，语义最直白：
+    不管用户后来通过观点调过多少次，偏离最初测量的距离不超过 20 分。
+    """
+    for p in profile_repo.get_profile_history(db, user_id):
+        if (p.origin or "questionnaire") == "questionnaire":
+            return {s.dimension_key: s.score for s in profile_repo.get_dimension_scores(db, p.id)}
+    return {}
+
+
+def compute_enriched_score(
+    old: float, direction: str, strength: str, baseline: float
+) -> float:
+    """观点补充后的新分数。**只按方向与强度移动，不接受 AI 给的具体分数。**
+
+    先向 0/100 逼近一小步，再夹两道上限（单次、累计）。两道上限的分工：
+    前者防「一条观点掀桌」，后者防「十条同向观点把这一维拖到极端」。
+    """
+    ratio = _STRENGTH_RATIO.get(strength, _STRENGTH_RATIO["mild"])
+    target = 100.0 if direction == "up" else 0.0
+    raw = old + (target - old) * ratio
+    delta = max(-ENRICH_MAX_DELTA_ONCE, min(ENRICH_MAX_DELTA_ONCE, raw - old))
+    new = old + delta
+
+    lo = max(0.0, baseline - ENRICH_MAX_DELTA_TOTAL)
+    hi = min(100.0, baseline + ENRICH_MAX_DELTA_TOTAL)
+    new = max(lo, min(hi, new))
+    return round(max(0.0, min(100.0, new)), 1)
+
+
+def _split_explanation(text: Optional[str]):
+    """把 explanation 拆成 (基础文案行, 证据行)。证据行统一以「· 」开头。"""
+    base_lines, evidence = [], []
+    for line in (text or "").split("\n"):
+        if line.startswith(_EVIDENCE_PREFIX):
+            evidence.append(line)
+        elif line.strip():
+            base_lines.append(line)
+    return base_lines, evidence
+
+
+def _merge_explanation(
+    dim_key: str, score: float, old_explanation: Optional[str], new_evidence: Optional[str]
+) -> str:
+    """新分数对应的基础文案 + 全部证据行（新的追加在最后，超出上限丢最旧）。
+
+    为什么基础文案要**按新分数重新生成**而不是直接继承：`_explain_dimension`
+    的输出里带分数（「安全感确认需求水平较高（82分）」）。分数变了却沿用旧文案，
+    就会出现「正文写 82 分、字段是 74」的自相矛盾——正是要避免的那类问题。
+    """
+    _, evidence = _split_explanation(old_explanation)
+    if new_evidence:
+        # 同一来源重复丰富时替换而不是追加，避免同一句话叠两遍
+        key = new_evidence.split("：")[0]
+        evidence = [e for e in evidence if not e.startswith(key)]
+        evidence.append(new_evidence)
+    evidence = evidence[-ENRICH_MAX_EVIDENCE_LINES:]
+    base = _explain_dimension(dim_key, score)
+    return "\n".join([base] + evidence)
+
+
+def _derive_version(
+    db: Session,
+    user_id: int,
+    *,
+    source_profile,  # RelationshipProfile：内容来源（维度分从它复制）
+    entries: Dict[str, dict],  # {dim_key: {"score":…, "explanation":…}}：覆盖项
+    origin: str,
+    origin_note: Optional[str],
+    source_viewpoint_id: Optional[int] = None,
+    replace: bool = False,
+):
+    """从 `source_profile` 派生一个新版本。
+
+    - `replace=False`（默认，丰富画像用）：在源版本基础上**合并** `entries`，
+      未提到的维度原样保留。
+    - `replace=True`（撤回复原用）：**只保留** `entries`，源版本里多出来的维度
+      一律丢弃。
+
+    为什么撤回必须走 `replace`：如果沿用合并，撤回到一个还没有
+    `values_orientation` 的版本后，这个维度会**留在画像里**——用户看到的是
+    「撤回了，但三观还在」。那就不是撤回，是「回到过去 + 保留后来加的东西」，
+    等于给了用户一个假的后悔药。（2026-09-27 由 test_profile_version 第 44 项
+    断言抓出。）
+
+    不 commit——由调用方决定事务边界（便于把「派生 + 裁剪」放在一次提交里）。
+    """
+    if replace:
+        scores = dict(entries)
+    else:
+        scores = _profile_scores(db, source_profile.id)
+        scores.update(entries)
+
+    anxiety = scores.get("attachment_anxiety", {}).get("score", 50)
+    avoidance = scores.get("attachment_avoidance", {}).get("score", 50)
+    flat = {k: v["score"] for k, v in scores.items()}
+    profile_type = _classify_attachment(anxiety, avoidance)
+
+    # 问卷 id 沿用来源版本：本版本是它的衍生，不是另一次测量
+    new_profile = profile_repo.create_profile(
+        db,
+        user_id=user_id,
+        questionnaire_id=source_profile.questionnaire_id,
+        profile_type=profile_type,
+        confidence=_calculate_confidence(anxiety, avoidance),
+        summary=_build_summary(profile_type, flat),
+        version=profile_repo.get_next_version(db, user_id),
+        origin=origin,
+        origin_note=origin_note,
+        source_viewpoint_id=source_viewpoint_id,
+    )
+    profile_repo.add_dimension_scores(
+        db,
+        new_profile.id,
+        [
+            {"dimension_key": k, "score": v["score"], "explanation": v["explanation"]}
+            for k, v in scores.items()
+        ],
+    )
+    return new_profile
+
+
+def enrich_from_viewpoint(
+    db: Session,
+    user_id: int,
+    *,
+    viewpoint_id: int,
+    dimensions: List[str],
+    summary: str,
+    directions: Dict[str, dict],
+    confidence: float,
+) -> dict:
+    """把一条观点补充进画像（派生新版本）。`directions` 描述**方向与强度**。
+
+    入参里**没有分数**——这是刻意的。AI 只回答「这条观点说明用户在 X 上更强还是
+    更弱、强多少」，具体移动多少分由 `compute_enriched_score` 决定。
+
+    抛 ValueError（业务错误码）的情况：
+      70001 还没有画像    70002 维度列表为空/全部非法
+      70003 置信度过低    70004 目标维度没有任何有效变化（已到上限）
+    """
+    if confidence < ENRICH_MIN_CONFIDENCE:
+        raise ValueError("70003")
+
+    profile = profile_repo.get_latest_profile(db, user_id)
+    if profile is None:
+        raise ValueError("70001")
+
+    valid_dims = [d for d in dimensions if d in DIMENSION_DEFINITIONS]
+    if not valid_dims:
+        raise ValueError("70002")
+
+    baseline = get_baseline_scores(db, user_id)
+    current = _profile_scores(db, profile.id)
+
+    entries: Dict[str, dict] = {}
+    changed: Dict[str, dict] = {}
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    for dim in valid_dims:
+        spec = directions.get(dim) or {}
+        direction = spec.get("direction")
+        if direction not in ("up", "down"):
+            continue
+        strength = spec.get("strength") if spec.get("strength") in _STRENGTH_RATIO else "mild"
+
+        old_entry = current.get(dim)
+        base_score = baseline.get(dim, old_entry["score"] if old_entry else 50.0)
+        if old_entry is None:
+            # 首次出现（典型是 values_orientation）：没有历史分。起点取基线的
+            # 中性位置，再走一次幅度约束——不因为「新维度」就破例给高权重。
+            old_score = 50.0
+            old_explanation = None
+        else:
+            old_score = old_entry["score"]
+            old_explanation = old_entry["explanation"]
+
+        new_score = compute_enriched_score(old_score, direction, strength, base_score)
+        evidence = f"{_EVIDENCE_PREFIX}你的观点（{today}）：{summary}"
+        entries[dim] = {
+            "score": new_score,
+            "explanation": _merge_explanation(dim, new_score, old_explanation, evidence),
+        }
+        changed[dim] = {"from": old_score, "to": new_score}
+
+    if not entries:
+        raise ValueError("70002")
+
+    note = f"由观点《{summary[:24]}》补充" if summary else "由观点补充"
+    new_profile = _derive_version(
+        db,
+        user_id,
+        source_profile=profile,
+        entries=entries,
+        origin="viewpoint_enrich",
+        origin_note=note[:200],
+        source_viewpoint_id=viewpoint_id,
+    )
+    pruned = prune_versions(db, user_id)
+    db.commit()
+
+    return {
+        "profile_id": new_profile.id,
+        "version": new_profile.version,
+        "origin": new_profile.origin,
+        "origin_note": new_profile.origin_note,
+        "changed": changed,
+        "pruned": pruned,
+    }
+
+
+def restore_version(db: Session, user_id: int, version_id: int) -> dict:
+    """撤回到某个历史版本：把它的内容**派生**成一个新版本。
+
+    为什么不就地改：就地改会让「撤回」这个动作本身不可撤销——用户撤错了就再也
+    回不去。派生式撤回保证任何一步都能反悔。
+    """
+    target = profile_repo.get_profile_by_id(db, version_id)
+    if target is None or target.user_id != user_id:
+        raise ValueError("70005")
+
+    current = profile_repo.get_latest_profile(db, user_id)
+    if current is not None and current.id == target.id:
+        # 已经是当前版本，幂等返回，不产生冗余版本
+        return {
+            "profile_id": target.id,
+            "version": target.version,
+            "origin": target.origin or "questionnaire",
+            "origin_note": target.origin_note,
+            "changed": {},
+            "pruned": 0,
+        }
+
+    entries = {
+        k: {"score": v["score"], "explanation": v["explanation"]}
+        for k, v in _profile_scores(db, target.id).items()
+    }
+    new_profile = _derive_version(
+        db,
+        user_id,
+        source_profile=current if current is not None else target,
+        entries=entries,
+        origin="restore",
+        origin_note=f"撤回自 v{target.version}",
+        source_viewpoint_id=target.source_viewpoint_id,
+        replace=True,
+    )
+    pruned = prune_versions(db, user_id)
+    db.commit()
+
+    return {
+        "profile_id": new_profile.id,
+        "version": new_profile.version,
+        "origin": new_profile.origin,
+        "origin_note": new_profile.origin_note,
+        "restored_from": target.version,
+        "changed": {},
+        "pruned": pruned,
+    }
+
+
+def save_manual_version(db: Session, user_id: int, note: Optional[str] = None) -> dict:
+    """把当前画像原样存成一个新版本（"增"的语义：给此刻打一个可回退的锚点）。"""
+    current = profile_repo.get_latest_profile(db, user_id)
+    if current is None:
+        raise ValueError("70001")
+
+    entries = {
+        k: {"score": v["score"], "explanation": v["explanation"]}
+        for k, v in _profile_scores(db, current.id).items()
+    }
+    new_profile = _derive_version(
+        db,
+        user_id,
+        source_profile=current,
+        entries=entries,
+        origin="manual",
+        origin_note=(note or "手动保存")[:200],
+    )
+    pruned = prune_versions(db, user_id)
+    db.commit()
+    return {
+        "profile_id": new_profile.id,
+        "version": new_profile.version,
+        "origin": new_profile.origin,
+        "origin_note": new_profile.origin_note,
+        "changed": {},
+        "pruned": pruned,
+    }
+
+
+def delete_version(db: Session, user_id: int, version_id: int) -> None:
+    """删除一个历史版本（"删"）。当前版本、被关系画像引用的版本不可删。"""
+    target = profile_repo.get_profile_by_id(db, version_id)
+    if target is None or target.user_id != user_id:
+        raise ValueError("70005")
+
+    current = profile_repo.get_latest_profile(db, user_id)
+    if current is not None and current.id == target.id:
+        raise ValueError("70006")  # 不能删当前版本
+    if profile_repo.count_couple_profile_refs(db, target.id) > 0:
+        raise ValueError("70007")  # 被关系画像引用
+    if profile_repo.count_profiles(db, user_id) <= 1:
+        raise ValueError("70006")
+
+    profile_repo.delete_profile(db, target.id)
+    db.commit()
+
+
+def prune_versions(db: Session, user_id: int) -> int:
+    """版本数超上限时回收**衍生版本**（观点补充 / 撤回 / 手动保存）。
+
+    ⚠️ 刻意不删 `origin='questionnaire'` 的版本：那是用户真实做过问卷的留痕，
+    系统偷偷删掉它，会让「我做过 3 次问卷」这类认知与数据对不上。所以上限只在
+    衍生版本上生效；如果问卷版本本身就超过 20 个，宁可多留也不误删。
+    同样跳过被 `couple_profile` 引用的版本，避免关系画像指向空 id。
+    """
+    history = profile_repo.get_profile_history(db, user_id)
+    if len(history) <= PROFILE_VERSION_KEEP:
+        return 0
+
+    overflow = len(history) - PROFILE_VERSION_KEEP
+    # history 按 version desc；从最旧的衍生版本开始回收
+    candidates = [
+        p for p in reversed(history)
+        if (p.origin or "questionnaire") != "questionnaire"
+    ]
+    removed = 0
+    for p in candidates:
+        if removed >= overflow:
+            break
+        if profile_repo.count_couple_profile_refs(db, p.id) > 0:
+            continue
+        profile_repo.delete_profile(db, p.id)
+        removed += 1
+    return removed
+
+
+def list_versions(db: Session, user_id: int) -> List[dict]:
+    """版本列表（新→旧）。带 origin 中文标签与维度分数量，便于前端直接渲染。"""
+    out = []
+    for p in profile_repo.get_profile_history(db, user_id):
+        out.append({
+            "id": p.id,
+            "version": p.version,
+            "profile_type": p.profile_type,
+            "confidence": p.confidence,
+            "summary": p.summary,
+            "origin": p.origin or "questionnaire",
+            "origin_label": PROFILE_ORIGIN_LABELS.get(p.origin or "questionnaire", "变更"),
+            "origin_note": p.origin_note,
+            "source_viewpoint_id": p.source_viewpoint_id,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        })
+    return out
+
+
+def version_detail(db: Session, user_id: int, version_id: int) -> dict:
+    """单个版本详情（含全部维度分）——前端「对比」用。"""
+    p = profile_repo.get_profile_by_id(db, version_id)
+    if p is None or p.user_id != user_id:
+        raise ValueError("70005")
+    scores = profile_repo.get_dimension_scores(db, p.id)
+    return {
+        "id": p.id,
+        "version": p.version,
+        "profile_type": p.profile_type,
+        "confidence": p.confidence,
+        "summary": p.summary,
+        "origin": p.origin or "questionnaire",
+        "origin_label": PROFILE_ORIGIN_LABELS.get(p.origin or "questionnaire", "变更"),
+        "origin_note": p.origin_note,
+        "source_viewpoint_id": p.source_viewpoint_id,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "dimensions": [
+            {
+                "dimension_key": s.dimension_key,
+                "label": DIMENSION_DEFINITIONS.get(s.dimension_key, {}).get(
+                    "label", s.dimension_key
+                ),
+                "score": s.score,
+                "explanation": s.explanation,
+            }
+            for s in scores
+        ],
+    }
+
+
+def diff_versions(db: Session, user_id: int, base_id: int, target_id: int) -> dict:
+    """两个版本的维度差异。只列分数变化的维度——文案差异对用户没有决策价值。"""
+    base = version_detail(db, user_id, base_id)
+    target = version_detail(db, user_id, target_id)
+
+    base_scores = {d["dimension_key"]: d for d in base["dimensions"]}
+    target_scores = {d["dimension_key"]: d for d in target["dimensions"]}
+
+    items = []
+    for key in set(base_scores) | set(target_scores):
+        b = base_scores.get(key)
+        t = target_scores.get(key)
+        b_score = b["score"] if b else None
+        t_score = t["score"] if t else None
+        if b_score == t_score:
+            continue
+        label = (t or b or {}).get("label", key)
+        items.append({
+            "dimension_key": key,
+            "label": label,
+            "base_score": b_score,
+            "target_score": t_score,
+            "delta": None if b_score is None or t_score is None else round(t_score - b_score, 1),
+        })
+    items.sort(key=lambda x: abs(x["delta"] or 0), reverse=True)
+
+    return {
+        "base": {"id": base["id"], "version": base["version"], "created_at": base["created_at"]},
+        "target": {"id": target["id"], "version": target["version"], "created_at": target["created_at"]},
+        "items": items,
+    }

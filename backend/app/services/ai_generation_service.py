@@ -213,6 +213,12 @@ def _save(**kwargs: Any) -> None:
             kwargs.get("target_id"),
         )
     finally:
+        # 显式归还连接。这个会话不属于任何请求（请求级 db 早已随响应销毁），
+        # 没有框架替它收尾；只依赖 GC 的话，连接要等下一次回收才回池。
+        # 每流式生成一次就走一次 `_save`，持续不归还等于把连接池慢慢漏干。
+        #
+        # 2026-09-27：这个漏点在 test_viewpoint_analysis 里暴露成了「进程退出卡死」
+        # ——测试基座的 DROP DATABASE 被两根未归还的连接堵住（见该文件注释）。
         db.close()
 
 

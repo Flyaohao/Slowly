@@ -17,7 +17,7 @@ from app.repositories import (
     relationship_review_repo,
     safety_repo,
 )
-from app.schemas.ai_output import RewriteOutput, ReviewOutput
+from app.schemas.ai_output import RewriteOutput, ReviewOutput, ViewpointAnalysisOutput
 from app.schemas.advisor_context import AdvisorContext
 from app.services.prompt_builder import (
     CHAT_MODE_CONFIG,
@@ -28,6 +28,7 @@ from app.services.prompt_builder import (
     build_profile_report_prompt,
     build_dual_summary_prompt,
     build_memory_card_prompt,
+    build_viewpoint_analysis_prompt,
     messages_to_text,
     resolve_chat_mode,
     resolve_system_prompt,
@@ -2267,4 +2268,92 @@ def prepare_relationship_review(
         "max_tokens": 4000,
         "review_id": review.id,
         "on_saved": _review_mirror(review.id, db.get_bind()),
+    }
+
+
+def prepare_viewpoint_analysis(db: Session, user_id: int, viewpoint_id: int) -> dict:
+    """「观点分析」的前处理（用户需求 #5）。
+
+    观点落在 `diary_entry`（个人维度），因此**不绑定情侣关系也能用**——
+    「观点是个人资产」这一定位要求它在单身模式下同样可用，所以 relation_id
+    允许为 None（`ai_generation.relation_id` 本身可空）。
+
+    产出的 `dimensions` 只是**建议**：真正写画像必须由用户在前端确认后调用
+    `POST /profiles/me/enrich`，走 `profile_service` 这条唯一出口。
+    """
+    # 以下都是函数内延迟导入：ai_generation_service 与本模块互相引用
+    # （它要用本模块的辅助函数），顶层 import 会成环；diary/profile_service
+    # 同理只需在真正调用时加载，避免启动期无谓依赖。
+    from app.repositories import couple_repo, diary_repo
+    from app.services import ai_generation_service
+    from app.services.profile_service import DIMENSION_DEFINITIONS
+
+    entry = diary_repo.get_by_id(db, viewpoint_id, user_id)
+    if entry is None:
+        raise ValueError("90011")
+
+    relation = couple_repo.get_active_relation_by_user(db, user_id)
+    relation_id = relation.id if relation else None
+
+    # 现有画像摘要：让模型知道「已知什么」，否则它会把早就记过的事当成新发现
+    # 再建议写一遍，用户看到的就是"军师每次都发现同一件事"。
+    digest_lines = []
+    profile = profile_repo.get_latest_profile(db, user_id)
+    if profile is not None:
+        scores = {
+            s.dimension_key: s.score
+            for s in profile_repo.get_dimension_scores(db, profile.id)
+        }
+        for key, score in sorted(
+            scores.items(), key=lambda kv: abs(kv[1] - 50), reverse=True
+        ):
+            label = DIMENSION_DEFINITIONS.get(key, {}).get("label", key)
+            digest_lines.append(f"- {label}：{score}")
+    profile_digest = "\n".join(digest_lines)
+
+    # 维度清单由 DIMENSION_DEFINITIONS 现场生成。它是「有哪些维度」的唯一真相源，
+    # 在这里再硬编码一份，日后新增维度必然漏改（而漏改的表现是模型永远选不到它）。
+    catalog_lines = []
+    for key, defn in DIMENSION_DEFINITIONS.items():
+        high_text = defn.get("bands", {}).get("high", (0, ""))[1]
+        catalog_lines.append(f"- {key}（{defn['label']}）：高 = {high_text}")
+    dimension_catalog = "\n".join(catalog_lines)
+
+    base_prompt = build_viewpoint_analysis_prompt(
+        profile_digest, entry.content, dimension_catalog
+    )
+    prompt = build_structured_stream_prompt(
+        base_prompt,
+        ViewpointAnalysisOutput,
+        content_instruction=(
+            "用自己的话说清这段观点说明了什么、为什么值得（或不值得）记进你对他的理解，"
+            "不要罗列字段名，也不要给建议分数"
+        ),
+        max_content_chars=500,
+    )
+
+    generation_id, cancel_event = ai_generation_service.begin(
+        db,
+        user_id=user_id,
+        relation_id=relation_id,
+        generation_kind="viewpoint_analysis",
+        scene_key="viewpoint_analysis",
+        target_type="diary_entry",
+        target_id=viewpoint_id,
+    )
+
+    return {
+        "generation_id": generation_id,
+        "cancel_event": cancel_event,
+        "generation_kind": "viewpoint_analysis",
+        "scene_key": "viewpoint_analysis",
+        "target_type": "diary_entry",
+        "target_id": viewpoint_id,
+        "user_id": user_id,
+        "relation_id": relation_id,
+        "prompt": prompt,
+        "output_model": ViewpointAnalysisOutput,
+        # 温度偏低：这是在给画像提供证据，不是在写文案。稳定性优先于文采。
+        "temperature": 0.4,
+        "max_tokens": 2000,
     }

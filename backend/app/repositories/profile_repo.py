@@ -16,6 +16,9 @@ def create_profile(
     confidence: float,
     summary: str,
     version: int,
+    origin: str = "questionnaire",
+    origin_note: Optional[str] = None,
+    source_viewpoint_id: Optional[int] = None,
 ) -> RelationshipProfile:
     profile = RelationshipProfile(
         user_id=user_id,
@@ -24,10 +27,48 @@ def create_profile(
         confidence=confidence,
         summary=summary,
         version=version,
+        origin=origin,
+        origin_note=origin_note,
+        source_viewpoint_id=source_viewpoint_id,
     )
     db.add(profile)
     db.flush()
     return profile
+
+
+def count_profiles(db: Session, user_id: int) -> int:
+    return (
+        db.query(RelationshipProfile)
+        .filter(RelationshipProfile.user_id == user_id)
+        .count()
+    )
+
+
+def count_couple_profile_refs(db: Session, profile_id: int) -> int:
+    """该画像版本被几个关系画像引用（删除版本前的安全检查）。"""
+    return (
+        db.query(CoupleProfile)
+        .filter(
+            (CoupleProfile.user_a_profile_id == profile_id)
+            | (CoupleProfile.user_b_profile_id == profile_id)
+        )
+        .count()
+    )
+
+
+def delete_profile(db: Session, profile_id: int) -> None:
+    """删除一个画像版本及其全部维度分。
+
+    先删维度分再删主体：`profile_dimension_score.profile_id` 是逻辑外键，
+    留着孤儿行会让维度分查询把不存在版本的分也算进去。
+    """
+    db.query(ProfileDimensionScore).filter(
+        ProfileDimensionScore.profile_id == profile_id
+    ).delete(synchronize_session=False)
+    db.query(RelationshipProfile).filter(
+        RelationshipProfile.id == profile_id
+    ).delete(synchronize_session=False)
+    db.flush()
 
 
 def add_dimension_scores(db: Session, profile_id: int, scores: List[dict]) -> None:

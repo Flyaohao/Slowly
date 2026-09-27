@@ -138,6 +138,12 @@ class MemoryCardRequest(BaseModel):
     target_id: int = Field(..., description="条目 id")
 
 
+class ViewpointAnalysisRequest(BaseModel):
+    """观点分析请求：要分析哪条观点（日记条目）。"""
+
+    viewpoint_id: int = Field(..., description="观点 id（diary_entry.id）")
+
+
 class LetterAnalysisOut(BaseModel):
     summary: Optional[str] = None
     key_concerns: Optional[List[str]] = None
