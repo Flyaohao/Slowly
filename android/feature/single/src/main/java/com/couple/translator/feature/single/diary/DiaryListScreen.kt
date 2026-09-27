@@ -91,15 +91,17 @@ fun DiaryListScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    // 保存后回到列表看不到刚写的观点：导航栈会复用同一个 ViewModel
-    // （popBackStack 不重建它），而 init 里那次 loadDiaries 早已跑完。
-    // 监听 ON_RESUME 补一次静默刷新，跳过首次（首次由 init 负责）。
+    // 保存后回到列表看不到刚写的观点：导航栈复用同一个 ViewModel（popBackStack
+    // 不重建它），而 init 里那次 loadDiaries 早已跑完。监听 ON_RESUME 补一次静默刷新。
+    // ?? 不能用 remember 标志位跳过「首次」：从写作页返回时本 composable 会被
+    // 重建（NavHost 会 dispose 离屏页面），remember 状态不保留，标志位必然失效——
+    // 真机上已复现（保存后列表不出现新记录，手动下拉才有）。多刷一次无害，
+    // 漏刷一次用户就看不到刚写的观点，所以每次 ON_RESUME 都刷。
     val lifecycleOwner = LocalLifecycleOwner.current
-    var resumedOnce by remember { mutableStateOf(false) }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                if (resumedOnce) viewModel.refresh() else resumedOnce = true
+                viewModel.refresh()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
