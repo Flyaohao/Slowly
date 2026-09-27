@@ -10,9 +10,12 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from app.models.ai import AiChatSession, AiChatMessage
 from app.models.ai_task import (
+    STATE_RUNNING,
+    STATE_SUCCEEDED,
     TASK_REGENERATE,
     TASK_REWRITE,
     TASK_SUMMARY,
+    AiTask,
 )
 from app.repositories import ai_repo, ai_task_repo, couple_repo, profile_repo
 from app.services.safety_service import check_input_safety_detail, get_safety_response
@@ -35,13 +38,31 @@ logger = logging.getLogger(__name__)
 #: `rewrite_failed` / `summary_failed` 是整改 B4.1 新增的**可区分失败态**：
 #: 此前生成失败会静默回落到 confirming，客户端看到的是「AI 正在生成」一直转；
 #: 现在失败有独立状态 + 失败码，客户端能给出「重试」而不是假装还在跑。
+#:
+#: `safety_blocked` 是整改 B4.3 P0-2 新增的**独立安全终态**：高风险阻断不再
+#: 冒充 `completed`——两者在客户端要做的事完全不同（前者只回看安全提示、
+#: 不给任何推进动作；后者可以继续沟通/结束/回看总结）。用同一个状态名表示
+#: 两个语义，客户端只能靠猜，统计口径也会把安全终止算成「谈成了」。
 MEDIATION_STATUSES = [
     "inviting", "accepted", "inputting", "rewriting", "rewrite_failed",
-    "confirming", "summarizing", "summary_failed", "completed",
+    "confirming", "summarizing", "summary_failed", "completed", "safety_blocked",
 ]
+
+#: 终态：不再有任何推进动作（可回看）。`safety_blocked` 与 `completed` 同级，
+#: 但**语义不同**——它不是一次完成的沟通，是主动终止。
+TERMINAL_MEDIATION_STATUSES = frozenset({"completed", "safety_blocked"})
+
+#: `next_step("end")` 允许的当前状态集合（B4.3 P0-3）。
+#: 只有「还在进行中」的会话可以被中途结束；终态走幂等分支（见 `_end_mediation`）。
+END_ALLOWED_STATUSES = frozenset({
+    "inviting", "accepted", "inputting", "rewriting", "rewrite_failed",
+    "confirming", "summarizing", "summary_failed",
+})
 
 #: 契约 §2.3-7：首页 active_mediation 的真实状态集（状态机从不产生 in_progress）。
 #: 失败态也算「还在进行中」——用户要能回到那一场去重试，而不是它从首页消失。
+#: **`safety_blocked` 不在其中**：安全终止不是「进行中」，它已释放活跃槽位，
+#: 也不该在首页催用户回去。
 ACTIVE_MEDIATION_STATUSES = [
     "inviting", "accepted", "inputting", "confirming",
     "rewriting", "rewrite_failed", "summarizing", "summary_failed",
@@ -56,6 +77,11 @@ ASYNC_GENERATION_STATUSES = {
 
 #: 需要用户介入（点重试）才能继续的终态失败
 TERMINAL_FAILURE_STATUSES = frozenset({"rewrite_failed", "summary_failed"})
+
+#: 推进到这些状态时**释放活跃调解槽位**——调解已经走到头（正常收口或安全
+#: 阻断），同一发起者可以开始下一场。只要漏掉一个，用户就会卡在「不能发起
+#: 新的调解」而首页又显示这一场已经结束。
+TERMINAL_RELEASE_STATUSES = frozenset({"completed", "safety_blocked"})
 
 #: 注意：`confirming` **不是**「等生成」态。它是**人**停在这里的等待态——
 #: 只有人做了新动作（补输入 / 点确认）才会离开它，没有任何在跑的任务会把它
@@ -88,11 +114,28 @@ def _raise_if_degraded(ai_response: dict, scene_key: str) -> None:
             raise LlmError("调解生成降级（%s）：%s" % (scene_key, marker))
 
 
-#: 合法风险等级（与 `app/schemas/ai_output.RiskLevel`、`safety_service.RISK_LEVEL_ORDER`
-#: 逐字一致）。模型的结构化输出**不是可信输入**：大小写、空格、自造值都会出现。
+#: 合法风险等级——即 `app/services/safety_service.RISK_LEVEL_ORDER` 的**有序**
+#: 危险度标尺（与 `ai_output.RiskLevel` 的前五个取值逐字一致）。
+#: 模型的结构化输出**不是可信输入**：大小写、空格、自造值都会出现。
+#:
+#: 注意这里**不含** `ai_output.RiskLevel.UNKNOWN`：那是「无从判定」的标记，
+#: 不是危险度档位（见下），所以它不可能出现在这张标尺上。
 _KNOWN_RISK_LEVELS = (
     "normal", "heated_conflict", "manipulation_risk", "abuse_risk", "self_harm_risk",
 )
+
+#: 未知风险的内部标记（B4.3 P0-4）。
+#:
+#: 模型返回 null / 空串 / 大小写混杂 / 自造值时，此前一律降级成 `normal`——
+#: 这是 **fail open**：一个本该被安全链路拦住的语境，因为模型少填了一个字段
+#: 就拿到了「正常」通行证。调解产物是「替双方把话说软」，宁可少产一份，
+#: 也不能在一份无法判定的语境上生产。
+#:
+#: 它**不进 `RISK_LEVEL_ORDER`**：那是一个有序的危险度标尺，而「未知」不是
+#: 一个危险度档位，是「无从判定」。它作为**客户端可见的取值**存在于
+#: `ai_output.RiskLevel.UNKNOWN`（客户端据此阻断双人动作），在服务端则额外
+#: 承担「内部阻断标记」的角色——落库时记成 `unknown` 供审计对账。
+RISK_LEVEL_UNKNOWN = "unknown"
 
 #: 高风险等级：这些等级下**不得**产出双人调解结果（P0-6「高风险禁止双人调解」）。
 #:
@@ -100,19 +143,30 @@ _KNOWN_RISK_LEVELS = (
 #: 暴力/胁迫（abuse）或自伤风险（self_harm），把它改写成一份体面的稿子等于替施害
 #: 一方粉饰，甚至会成为当事人继续留在有害关系里的理由。正确处置是**停止调解、
 #: 给出安全资源**。`heated_conflict` 不在其中——双方情绪激动正是调解要处理的场景。
+#:
+#: B4.3 P0-4：`unknown`（无法判定的值）一并列入。**fail closed**——不确定就不产。
 BLOCKING_RISK_LEVELS = frozenset({
-    "manipulation_risk", "abuse_risk", "self_harm_risk",
+    "manipulation_risk", "abuse_risk", "self_harm_risk", RISK_LEVEL_UNKNOWN,
 })
 
 
 def normalize_risk_level(raw) -> str:
-    """把模型给的 `risk_level` 收敛到白名单；未知值按 `normal` 处理。
+    """把模型给的 `risk_level` 收敛到白名单；**无法识别的值一律按 `unknown`**。
 
     归一化本身是安全链路的一环：门控按等级判定，若模型返回 `"High"` 这类
     不在白名单的值，未归一化会让判定静默落空（等于安全链路失效）。
+
+    B4.3 P0-4 的裁决与旧实现**相反**：旧实现把未知值降级成 `normal`（放行），
+    现在一律 `unknown`（阻断）。依据是「不得依赖 Prompt 保证模型永远返回合法值」：
+    模型给 `null` / `""` / `"very_high"` 时，我们**不知道**风险有多高，
+    而调解产物的代价是单向的（错误地产出一份「软化的说法」可能被当作
+    继续留在有害关系里的理由），所以只能选择不产。
+
+    大小写与前后空格一律容忍：`" Abuse_Risk "` → `abuse_risk`。
     """
     text = str(raw if raw is not None else "").strip().lower()
-    return text if text in _KNOWN_RISK_LEVELS else "normal"
+    return text if text in _KNOWN_RISK_LEVELS else RISK_LEVEL_UNKNOWN
+
 
 
 def _normalize_generation_payload(payload: dict, *, summary: bool) -> dict:
@@ -210,10 +264,20 @@ def _active_slot(relation_id: int, user_id: int) -> str:
 
 
 def _find_active_mediation(
-    db: Session, relation_id: int, user_id: int
+    db: Session, relation_id: int, user_id: int, *, for_update: bool = False
 ) -> Optional[AiChatSession]:
-    """同一情侣关系中**同一发起者**现有的活跃调解（无则 None）。"""
-    return (
+    """同一情侣关系中**同一发起者**现有的活跃调解（无则 None）。
+
+    `for_update=True` 走**加锁读**（`SELECT ... FOR UPDATE`），专供唯一键冲突
+    之后的回读：MySQL 默认 REPEATABLE-READ 下本事务的一致性读快照在第一次读
+    之后就固定了，竞争方刚提交的那一行普通 `SELECT` **看不见**——实测返回
+    `None`，把一次正常的幂等竞争变成 500（B4.3 P0-5）。
+
+    冲突回读还必须**逐字段复核**（见 [start_mediation] 的 `_matches_active`）：
+    槽位唯一键只保证「这个 (relation, inviter) 只有一条活跃」，不保证回读到
+    的那一行真的就是我们要的那一场。
+    """
+    q = (
         db.query(AiChatSession)
         .filter(
             AiChatSession.relation_id == relation_id,
@@ -223,7 +287,27 @@ def _find_active_mediation(
         )
         .order_by(AiChatSession.created_at.desc())
         .populate_existing()
-        .first()
+    )
+    if for_update:
+        q = q.with_for_update()
+    return q.first()
+
+
+def _matches_active(
+    session: Optional[AiChatSession], relation_id: int, user_id: int, slot: str
+) -> bool:
+    """回读到的会话是否**确实**是本次请求该返回的那一场。
+
+    四个字段逐一复核（relation_id / user_id / session_type / 活跃槽位），
+    任一不符就当作没读到——宁可报错，也不能把别人的调解会话当成自己的
+    返回给调用方（那是越权回看）。
+    """
+    return (
+        session is not None
+        and session.relation_id == relation_id
+        and session.user_id == user_id
+        and session.session_type == "mediation"
+        and session.mediation_active_slot == slot
     )
 
 
@@ -246,10 +330,28 @@ def start_mediation(db: Session, user_id: int, relation_id: int) -> dict:
     数据库层并发兜底：不是「先 SELECT 再 INSERT」，而是把活跃槽位
     `mediation_active_slot` 写进唯一约束——两个并发 start 只有一个能插入成功，
     另一个命中 IntegrityError 后回读现有会话。
+
+    ## 整改 B4.3 P0-5：SAVEPOINT 必须在 `db.add()` **之前**建立
+
+    旧写法 `db.add(session)` 然后 `with db.begin_nested(): db.flush()` 在
+    MySQL 上是**坏的**：`begin_nested()` 在「当前还没有事务」时会先开一个
+    普通事务，那一刻 SQLAlchemy 把所有 pending 对象 flush 掉——INSERT 落在
+    SAVEPOINT **之外**，冲突时整个 Session 被标记待回滚，`begin_nested()`
+    返回后 `flush()` 抛 `PendingRollbackError`，`except IntegrityError`
+    接不住。并发 start 时输的一方直接 500，且这条连接此后不可用。
+
+    实测（MySQL 9.0.1 / REPEATABLE-READ，
+    `tests/test_mediation_mysql_concurrency.py`）：旧写法 3 项断言失败，
+    新写法两个并发 start 返回**同一个** session_id、库里只有一条活跃会话。
+
+    冲突回读同样必须加锁读：REPEATABLE-READ 的快照读看不见竞争方刚提交的
+    那一行（实测普通 SELECT 返回 None → 旧代码走到 `raise`）。
     """
     relation = couple_repo.get_relation_by_id(db, relation_id)
     if not relation:
         raise ValueError("50001")
+
+    slot = _active_slot(relation_id, user_id)
 
     existing = _find_active_mediation(db, relation_id, user_id)
     if existing is not None:
@@ -265,16 +367,18 @@ def start_mediation(db: Session, user_id: int, relation_id: int) -> dict:
         session_type="mediation",
         partner_user_id=partner_id,
         mediation_status="inviting",
-        mediation_active_slot=_active_slot(relation_id, user_id),
+        mediation_active_slot=slot,
     )
-    db.add(session)
     try:
+        # SAVEPOINT 先立，INSERT 才在它里面 —— 顺序不能反（见 docstring）。
         with db.begin_nested():
+            db.add(session)
             db.flush()
     except IntegrityError:
-        # 并发兜底：另一请求已插入同槽位 → 只回滚本次 INSERT，回读并返回现有会话
-        existing = _find_active_mediation(db, relation_id, user_id)
-        if existing is None:
+        # 并发兜底：另一请求已插入同槽位 → 只回滚本次 INSERT，回读并返回现有会话。
+        # 回读用加锁读，并逐字段复核（不能把别人的会话当自己的返回）。
+        existing = _find_active_mediation(db, relation_id, user_id, for_update=True)
+        if not _matches_active(existing, relation_id, user_id, slot):
             raise
         return _start_payload(existing, user_id)
     db.commit()
@@ -958,56 +1062,129 @@ def _last_input(messages: List[AiChatMessage], uid: Optional[int]) -> str:
 
 
 def next_step(db: Session, session_id: int, user_id: int, action: str) -> dict:
+    """结果页的下一步动作（整改 B4.3 P0-3：**严格状态机**）。
+
+    ## 为什么必须是条件 UPDATE
+
+    旧实现里 `continue` 的 UPDATE 条件是 `WHERE id = ?`——不检查任何状态。
+    于是 `rewriting`（AI 正在生成）可以被一条 continue 打回 `inputting`：
+    在途任务的产出变成永远无人接收的孤儿，而 revision 没变，任务回来时
+    还认为自己新鲜。这是把状态机当成了「随便设」的字段。
+
+    现在每个动作都有**明确的允许状态集合**，转换一律走条件 UPDATE 并检查
+    `rowcount`，不命中就返回明确业务错误。
+
+    ## 状态矩阵
+
+    | 动作 | 允许的当前状态 | 结果 |
+    |------|---------------|------|
+    | continue | 仅 `completed`（正常谈完） | → `inputting`，重新占用活跃槽位 |
+    | continue | `safety_blocked` / 在途态 / 失败态 | 拒绝 `50003` |
+    | end | 活跃态（inviting/accepted/inputting/rewriting/rewrite_failed/confirming/summarizing/summary_failed） | → `completed`，释放槽位，推进一次版本 |
+    | end | 终态（`completed` / `safety_blocked`） | 幂等返回，**不推进版本** |
+    | pause | —— | 已删除，一律 `50005` |
+
+    权限：只有会话双方（发起方或参与方）可以操作，非成员由 [_get_session] 拦在
+    `50002`。**双方权限相同**——调解是两个人共同的事，没有「只有发起方能结束」
+    这种设定。
+
+    `end` 推进版本是有意为之：在途任务的写回与失败收口都按 revision 比对，
+    版本一推进它们就全部失效——「点了退出，正在跑的改写失败后又把会话翻回
+    rewrite_failed」这条路被堵死（见 `t_end_terminates_inflight_task`）。
+    """
     session = _get_session(db, session_id, user_id)
+
+    if action == "pause":
+        # B4.3 P1-6：`pause` 是**假功能**（后端此前 `pass` 后返回成功，客户端
+        # 因此保留了一枚点了什么都不发生的按钮）。本轮产品裁决是**删除**它，
+        # 而不是新增 paused 状态。收到 pause 必须明确拒绝，不能假装成功。
+        raise ValueError("50005")
+
+    if action == "continue":
+        # 只有「正常谈完」的 completed 能重新打开。`safety_blocked` 是安全终止，
+        # 不是一次可以接着谈的沟通——它必须保持终态。
+        return _continue_mediation(db, session, session_id)
+
     if action == "end":
-        # 终止（中途退出）：清空活跃槽位 + 推进版本，一次条件 UPDATE 收口。
-        # 推进版本让**在途任务**的写回与失败收口全部失效（它们按 revision
-        # 比对），杜绝「点了退出，正在跑的改写失败后又把会话翻回 rewrite_failed」。
-        db.execute(
+        return _end_mediation(db, session, session_id)
+
+    raise ValueError("50005")
+
+
+def _continue_mediation(db: Session, session: AiChatSession, session_id: int) -> dict:
+    """`completed → inputting`：条件 UPDATE + 重新占用活跃槽位。"""
+    if session.mediation_status != "completed":
+        raise ValueError("50003")
+
+    # 必须**重新占用活跃槽位**：completed 时槽位已被释放，不重新占用就断了
+    # 「同一发起者最多一场活跃调解」这条不变量——用户可以一边接着谈这一场，
+    # 一边再发起一场新的，两场并行生成、两次总结。槽位被别人占着（并发下
+    # 另一场刚好开起来）时唯一约束会拒掉，此时按状态冲突返回 50003。
+    try:
+        result = db.execute(
             update(AiChatSession)
-            .where(AiChatSession.id == session_id)
+            .where(
+                AiChatSession.id == session_id,
+                # 条件里钉住 observed 状态：并发下另一个请求已把它改成别的值
+                # （比如另一端刚点了 end）时，本请求不得把它再拉回 inputting。
+                AiChatSession.mediation_status == "completed",
+            )
             .values(
-                mediation_status="completed",
-                mediation_active_slot=None,
-                mediation_revision=AiChatSession.mediation_revision + 1,
+                mediation_status="inputting",
+                mediation_active_slot=_active_slot(session.relation_id, session.user_id),
             )
         )
         db.commit()
-        session = _reload(db, session_id)
-    elif action == "pause":
-        pass
-    elif action == "continue":
-        # 「继续沟通」：把这一场重新打开（结果页的下一步动作）。
-        #
-        # 必须**重新占用活跃槽位**：completed 时槽位已被释放，不重新占用就断了
-        # 「同一发起者最多一场活跃调解」这条不变量——用户可以一边接着谈这一场，
-        # 一边再发起一场新的，两场并行生成、两次总结。槽位被别人占着（并发下
-        # 另一场刚好开起来）时唯一约束会拒掉，此时按状态冲突返回 50003。
-        try:
-            result = db.execute(
-                update(AiChatSession)
-                .where(AiChatSession.id == session_id)
-                .values(
-                    mediation_status="inputting",
-                    mediation_active_slot=_active_slot(
-                        session.relation_id, session.user_id
-                    ),
-                )
-            )
-            db.commit()
-        except IntegrityError:
-            db.rollback()
-            logger.warning(
-                "继续沟通被拒：已存在另一场活跃调解 session=%s", session_id
-            )
-            raise ValueError("50003")
-        if result.rowcount != 1:
-            raise ValueError("50003")
-        session = _reload(db, session_id)
-    else:
-        raise ValueError("50005")
+    except IntegrityError:
+        db.rollback()
+        logger.warning(
+            "继续沟通被拒：已存在另一场活跃调解 session=%s", session_id
+        )
+        raise ValueError("50003")
+    if result.rowcount != 1:
+        db.rollback()
+        raise ValueError("50003")
+    session = _reload(db, session_id)
     _broadcast_status(session)
     return {"session_id": session_id, "mediation_status": session.mediation_status}
+
+
+def _end_mediation(db: Session, session: AiChatSession, session_id: int) -> dict:
+    """`end`：只在明确的状态集合里发生；终态重复 end 幂等且不推进版本。"""
+    if session.mediation_status in TERMINAL_MEDIATION_STATUSES:
+        # 已终态：幂等返回，**不推进 revision**。旧实现无条件 +1，重复点
+        # 「结束调解」会把版本一路推高——每次都在作废当前在途产出，还会让
+        # 客户端轮询看到 revision 一直在变。
+        return {"session_id": session_id, "mediation_status": session.mediation_status}
+
+    if session.mediation_status not in END_ALLOWED_STATUSES:
+        raise ValueError("50003")
+
+    result = db.execute(
+        update(AiChatSession)
+        .where(
+            AiChatSession.id == session_id,
+            # 明确允许集合，而不是「无条件改任意状态」
+            AiChatSession.mediation_status.in_(tuple(END_ALLOWED_STATUSES)),
+        )
+        .values(
+            mediation_status="completed",
+            mediation_active_slot=None,
+            mediation_revision=AiChatSession.mediation_revision + 1,
+        )
+    )
+    db.commit()
+    if result.rowcount != 1:
+        # 竞态：并发下另一个请求刚把它推到终态（或另一端的动作改了状态）。
+        db.rollback()
+        current = _reload(db, session_id)
+        if current is not None and current.mediation_status in TERMINAL_MEDIATION_STATUSES:
+            return {"session_id": session_id, "mediation_status": current.mediation_status}
+        raise ValueError("50003")
+    session = _reload(db, session_id)
+    _broadcast_status(session)
+    return {"session_id": session_id, "mediation_status": session.mediation_status}
+
 
 
 def _build_prompt_context(db: Session, session: AiChatSession) -> Tuple[str, str, str]:
@@ -1194,37 +1371,44 @@ def run_summary_task(db: Session, task) -> None:
 def _commit_generation_result(
     db: Session, task, payload: dict, new_status: str
 ) -> None:
-    """把生成结果写回会话：**「推进状态」与「落结果消息」在同一次 commit 里**。
+    """把生成结果写回会话：**所有权校验 + 状态推进 + 落结果消息 + 任务收口
+    在同一个事务里**（整改 B4.3 P0-1）。
 
-    为什么要原子（整改 B4.1-3 的收尾）：
+    ## 为什么「先提交业务结果，再 mark_succeeded」是错的
 
-    - 先落消息再推状态：两步之间进程被杀 → 消息在、状态还停在 rewriting，
-      租约到期后任务重跑 → 又落一条消息。用户看到两份改写、两份总结。
-    - 先推状态再落消息：中间被杀 → 状态已 confirming 却没有任何改写，
-      而重跑时的 CAS 不再命中 `rewriting`（状态已变），产出被当成过期丢弃，
-      会话就永久停在「确认页 + 没有稿子」。
+    B4.2 的结构是：会话状态 CAS → 插 assistant 消息 → `db.commit()` →
+    `mark_succeeded()`。收口是**最后**一步，而 `_claim_generation` 只看会话
+    状态、不看任务行的 `state` / `locked_by`。于是这条交错是真实存在的：
 
-    合并成一次提交后，这两种半成品都不存在：要么状态和消息一起生效，
-    要么一起回滚，任务留在 running（租约到期重跑）。
+        A 领取 → A 租约过期 → B 回收并领取 → A 的 LLM 先返回
+        → A 的会话 CAS 命中（会话还停在 rewriting）→ A 写消息并 commit
+        → A 才发现 mark_succeeded 失败
+
+    第 5 步已经发生：**过期执行者的稿子展示给了用户**，B 的结果随后被丢弃。
+    写回权必须绑定任务所有权，且绑定必须发生在**写任何东西之前**。
+
+    ## 现在的事务边界
+
+    ```
+    BEGIN
+      UPDATE ai_chat_session  -- CAS：状态在等这个结果 + revision == task.revision
+                              --       + EXISTS(任务行仍 running 且 locked_by == 本执行者)
+      UPDATE ai_task          -- finalize_owned：同一组所有权条件，钉住这一行
+      INSERT ai_chat_message  -- 结果消息
+    COMMIT
+    ```
+
+    任一 UPDATE `rowcount != 1` → 整笔 `rollback()`，消息数、会话状态、
+    revision、任务状态全部不变。**中间没有任何 `db.commit()`**。广播与安全
+    审计只在提交成功之后执行。
 
     写回前三道闸：
 
     1. **归一化**：`risk_level` 与各字段类型先收敛（见 [_normalize_generation_payload]），
        安全判定只能建立在归一化后的值上；
     2. **版本**：`mediation_revision` 已被推进 → 产出属于旧版本，丢弃；
-    3. **安全**：`risk_level` 命中 [BLOCKING_RISK_LEVELS] → 走 [_commit_safety_block]，
-       **不落调解结果**；
-    4. **状态 CAS**：见 [_claim_generation]——只有仍在**等这个结果**的状态
-       才能被推进，且 rowcount==1 才落消息。两个执行者（租约过期后的重复
-       执行）同时回来时，只有一个能推进成功。
-
-    **「等这个结果」只能由既有的等生成态或失败态本身来判定**，所以本函数
-    不预设结果的状态（`new_status` 只用于首次推进），而是看 CAS 到底从哪个
-    状态推上来的：
-
-    - 从 `rewriting` / `summarizing`（首次生成或退避重试）→ `new_status`；
-    - 从 `rewrite_failed` / `summary_failed`（用户点了重试、状态已被
-      `retry_generation` 复位）→ 重新落结果并**回到 `new_status`**。
+    3. **安全**：`risk_level` 命中阻断集合 → 走 [_commit_safety_block]，
+       **不落调解结果**（与正常结果共用同一套所有权规则）。
     """
     # 归一化必须在**任何判定之前**：后面所有安全门控都按 `risk_level` 判定，
     # 模型给的大小写/自造值必须先收敛，否则门控会静默落空。
@@ -1236,7 +1420,7 @@ def _commit_generation_result(
             task.id, task.session_id, task.revision,
         )
         db.rollback()
-        ai_task_repo.mark_superseded(db, task)
+        _discard_stale_result(db, task)
         return
 
     # P0-6：高风险语境下**不产出**调解结果（详见 [BLOCKING_RISK_LEVELS]）。
@@ -1244,31 +1428,82 @@ def _commit_generation_result(
         _commit_safety_block(db, task, payload["risk_level"])
         return
 
-    claimed_from = _claim_generation(db, task.session_id, new_status)
-    if not claimed_from:
-        # 会话已被别的执行者/用户动作推进：本执行的产出无处可写
-        logger.info(
-            "生成状态已被他人推进，丢弃产出 task=%s session=%s",
-            task.id, task.session_id,
-        )
-        db.rollback()
-        ai_task_repo.mark_superseded(db, task)
-        return
-
-    ai_repo.create_message(
-        db, task.session_id, "assistant",
-        json.dumps(payload, ensure_ascii=False),
+    _write_result_transaction(
+        db, task, ASYNC_GENERATION_STATUSES, new_status,
+        content=json.dumps(payload, ensure_ascii=False),
         structured_output=payload,
-        # 风险等级必须落库：客户端据此渲染安全提示卡；不落库等于把模型的
-        # 风险判定丢掉（此前 mediation 的 assistant 消息恒为 NULL）。
         risk_level=payload["risk_level"],
     )
-    db.commit()
-    # 收口任务行。放在业务提交**之后**：万一它没写成（任务行已被回收/被别人
-    # 接管），业务结果也已经落地，不会出现「结果在、任务还被重跑」。
-    # 失败路径的归属判据同理，见 `ai_task_repo._finalize`。
-    ai_task_repo.mark_succeeded(db, task)
+
+
+def _write_result_transaction(
+    db: Session,
+    task,
+    claim_from,
+    new_status: str,
+    *,
+    content: str,
+    structured_output: dict,
+    risk_level: Optional[str],
+    extra_session_values: Optional[dict] = None,
+) -> bool:
+    """结果写回的**唯一**事务边界（B4.3 P0-1）。
+
+    返回 True 表示「会话 CAS + 消息 + 任务收口」一起提交成功。返回 False
+    表示本执行者**一个字都没写**（所有权或状态已被别人拿走），此时事务已
+    回滚、产出按作废处理。异常原样外抛，调用方（worker）按失败重排处理。
+    """
+    try:
+        # 1) 会话 CAS：既要求「仍在等这个结果」，也要求「任务行仍归本执行者」。
+        #    所有权判定与状态推进压在**同一条 SQL** 里——分成两次读会在两个
+        #    语句之间留下窗口（MySQL REPEATABLE READ 下普通 SELECT 是快照读，
+        #    看不见并发已提交的接管）。
+        if not _claim_generation(
+            db, task, claim_from, new_status, extra_values=extra_session_values
+        ):
+            db.rollback()
+            _discard_stale_result(db, task)
+            return False
+
+        # 2) 任务收口：同一组所有权条件，钉住 ai_task 这一行（真正取行锁的语句）。
+        #    这一步失败说明任务已被回收/被别的 worker 接管 —— 业务状态必须
+        #    跟着回滚，否则就是「结果落了、任务还被重跑」。
+        if not ai_task_repo.finalize_owned(
+            db, task.id, task.locked_by, STATE_SUCCEEDED,
+            expected_revision=int(task.revision or 0),
+        ):
+            db.rollback()
+            _discard_stale_result(db, task)
+            return False
+
+        # 3) 结果消息（与上面两步同一事务，中间无 commit）
+        ai_repo.create_message(
+            db, task.session_id, "assistant", content,
+            structured_output=structured_output,
+            # 风险等级必须落库：客户端据此渲染安全提示卡；不落库等于把模型的
+            # 风险判定丢掉（此前 mediation 的 assistant 消息恒为 NULL）。
+            risk_level=risk_level,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    # 广播只在事务**提交成功之后**：状态已落库，在线双方才会看到与库一致的新状态。
     broadcast_status_by_id(db, task.session_id, new_status)
+    return True
+
+
+def _discard_stale_result(db: Session, task) -> None:
+    """产出无处可写时按作废收口。
+
+    任务行仍归本执行者（会话版本被推进，任务却没人接管）时才真的会写成
+    `superseded`；已被回收/被别人领走的行不满足 `_finalize` 的归属条件，
+    本调用是空操作——旧执行者绝不能去改别人正在跑的任务行。
+    """
+    try:
+        ai_task_repo.mark_superseded(db, task)
+    except Exception:  # noqa: BLE001 —— 作废收口失败不影响主链路
+        logger.warning("任务作废收口失败 task=%s", getattr(task, "id", None), exc_info=True)
 
 
 def _commit_safety_block(db: Session, task, risk_level: str) -> None:
@@ -1279,85 +1514,109 @@ def _commit_safety_block(db: Session, task, risk_level: str) -> None:
     许可。这里选择**终止这次调解**：
 
     - 只落一条 assistant 消息，正文即安全资源，结构化输出只带风险等级；
-    - 会话置 ``completed``（终态、可回看、释放活跃槽位，日后仍可重新发起）；
+    - 会话置终态、释放活跃槽位、清空失败标记；
     - **不写** ``mediation_failure_code``——它不是失败，是主动阻断，客户端
       不该为此显示「重试」；
     - 记一条安全审计事件（与输入侧同一个出口）。
-    """
-    if not _task_still_fresh(db, task.session_id, task.revision):
-        db.rollback()
-        ai_task_repo.mark_superseded(db, task)
-        return
-    # 用 CAS 收口到 completed：与正常结果路径共用同一套「只允许一个执行者推进」
-    # 的保护，顺手释放活跃槽位、清空失败标记。
-    if not _claim_generation(db, task.session_id, "completed"):
-        db.rollback()
-        ai_task_repo.mark_superseded(db, task)
-        return
 
+    B4.3 P0-1：**与正常结果共用同一套所有权规则**——走同一个
+    `_write_result_transaction`，过期执行者同样写不进去一个字。
+    """
     message = get_safety_response(risk_level) or "你们的对话触发了安全提示，请先照顾好自己。"
-    ai_repo.create_message(
-        db, task.session_id, "assistant", message,
+    written = _write_result_transaction(
+        db, task, ASYNC_GENERATION_STATUSES, "safety_blocked",
+        content=message,
         structured_output={"risk_level": risk_level, "safety_response": message},
         risk_level=risk_level,
     )
-    db.commit()
-    ai_task_repo.mark_succeeded(db, task)
+    if not written:
+        logger.info(
+            "安全阻断产出无处可写（任务已不归本执行者）task=%s session=%s",
+            task.id, task.session_id,
+        )
+        return
+
+    # ---- 以下全部在事务提交成功之后 ----
     try:
         safety_repo.log_event(
             task.requested_by_user_id, "mediation", "output", risk_level, []
         )
     except Exception:  # noqa: BLE001 —— 审计失败绝不影响主链路
-        logger.warning("调解安全事件落库失败 session=%s", task.session_id, exc_info=True)
+        # 审计失败可以不回滚主链路，但必须留下**可定位**的日志：会话/任务/等级
+        # 三个 id 足够运维对账，且**不含任何用户私密原文**（隐私红线）。
+        logger.warning(
+            "调解安全事件落库失败 session=%s task=%s risk=%s",
+            task.session_id, task.id, risk_level, exc_info=True,
+        )
     logger.warning(
-        "调解因高风险被阻断 session=%s task=%s risk=%s",
+        "调解因高风险被安全终止 session=%s task=%s risk=%s",
         task.session_id, task.id, risk_level,
     )
-    broadcast_status_by_id(db, task.session_id, "completed")
+    broadcast_status_by_id(db, task.session_id, "safety_blocked")
 
 
-def _claim_generation(db: Session, session_id: int, new_status: str) -> Optional[str]:
-    """生成结果的状态推进（**不提交**，交给调用方与消息一起 commit）。
+def _claim_generation(
+    db: Session,
+    task,
+    claim_from,
+    new_status: str,
+    *,
+    extra_values: Optional[dict] = None,
+) -> bool:
+    """生成结果的状态推进（**不提交**，交给调用方与消息、任务收口一起 commit）。
 
-    返回**被推进前的状态**（观察不到可推进状态、或已被他人抢先就返回 None）。
+    返回是否**由本次调用完成**了推进（`rowcount == 1`）。
 
-    为什么要把「先读到的那个状态」再写进 WHERE 条件：这是「同一版本的产出只写回
-    一次」的落点。租约过期后同一个任务可能被第二个 worker 重复执行，两个执行者
-    都会走到这里；把观察到的状态钉进条件，第二个执行者的 UPDATE 必然
-    `rowcount == 0`（状态已被第一个改成新值），于是它的产出被丢弃——
-    **过期执行者不得写业务结果**（P0-2）。
+    条件有三组，缺一不可：
 
-    允许被推进的状态只有「正在等这个结果」的那几个（`ASYNC_GENERATION_STATUSES`）：
-    等生成态（rewriting / summarizing）与失败态（rewrite_failed / summary_failed，
-    用户点过重试后任务重跑）。**刻意不含 `confirming`**：若把确认页也算进去，
-    第二个执行者就能在「会话已在确认页、已有稿」时再写一份，正是要杜绝的重复产出。
+    1. **会话仍在等这个结果**：`mediation_status IN claim_from`。`claim_from`
+       由调用方按业务语义给定（首次生成/退避重试 = 等生成态与失败态）。
+       **刻意不含 `confirming`**：若把确认页也算进去，第二个执行者就能在
+       「会话已在确认页、已有稿」时再写一份，正是要杜绝的重复产出。
+    2. **版本**：`mediation_revision == task.revision`。版本被推进过的产出
+       属于旧版本，不得写回。
+    3. **任务所有权**（B4.3 P0-1）：同一会话下存在一行满足
+       `id == task.id AND state == running AND locked_by == 本执行者 AND
+       revision == task.revision` 的任务。这一条把「写结果的权利」与「持有
+       任务行」绑在一起：租约过期被回收后 `locked_by` 已被清空或被别人改写，
+       旧执行者即使会话状态还命中，也**推不动任何东西**。
+
+    把三组条件压在**同一条 UPDATE** 里是必要的：拆成「先 SELECT 校验、再
+    UPDATE」会在两步之间留下窗口，而这个窗口正是 B4.2 漏掉的危险交错。
     """
-    claimable = tuple(ASYNC_GENERATION_STATUSES)
-    observed = db.execute(
-        select(AiChatSession.mediation_status).where(AiChatSession.id == session_id)
-    ).scalar_one_or_none()
-    if observed not in claimable:
-        return None
     values = {
         "mediation_status": new_status,
         "mediation_failure_code": None,
         "mediation_last_error": None,
         "mediation_failed_at": None,
     }
-    if new_status == "completed":
+    if new_status in TERMINAL_RELEASE_STATUSES:
         # 终态：释放活跃槽位，允许同一发起者开始下一场调解
         values["mediation_active_slot"] = None
+    if extra_values:
+        values.update(extra_values)
+
+    owned = (
+        select(AiTask.id)
+        .where(
+            AiTask.id == task.id,
+            AiTask.state == STATE_RUNNING,
+            AiTask.locked_by == task.locked_by,
+            AiTask.revision == int(task.revision or 0),
+        )
+        .exists()
+    )
     row = db.execute(
         update(AiChatSession)
         .where(
-            AiChatSession.id == session_id,
-            AiChatSession.mediation_status == observed,
+            AiChatSession.id == task.session_id,
+            AiChatSession.mediation_status.in_(tuple(claim_from)),
+            AiChatSession.mediation_revision == int(task.revision or 0),
+            owned,
         )
         .values(**values)
     )
-    if row.rowcount != 1:
-        return None
-    return observed
+    return row.rowcount == 1
 
 
 def broadcast_status_by_id(db: Session, session_id: int, status: str) -> None:

@@ -39,6 +39,9 @@ SYSTEM_PROMPTS = {
 - next_step: 下一步建议
 - risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk
 - theory_refs: 本建议参考的心理学理论名称数组（如：Gottman 冲突四骑士、依恋理论、非暴力沟通），没有引用则留空数组
+- intent: 本次回答的意图，从以下取值中选**一个**：expression_rewrite / partner_translate / private_advisor / emotion_support / cold_war / relationship_review / unknown。用户只是在倾诉情绪、不需要任何双方动作时填 emotion_support；无法归类时填 unknown（unknown 代表"不确定"，客户端会因此不提供任何双人动作）
+- suggest_dual_perspective: 是否明确建议"邀请伴侣补充双视角"。只有双方说法明显不一致、各自写下版本确实有价值时才 true；单纯安慰或解释对方一句话一律 false
+- review_worthy: 这次对话是否值得存档为一次关系复盘。出现可复用的模式、明确的触发点或下次可用的表达时才 true；只是一句安慰、或用户没有在讲具体事件时一律 false
 - suggest_mediation: 本次对话是否属于**需要双方坐下来谈**的矛盾（正在争执、冷战、反复为同一件事吵、一句话没说好就要吵起来）。只有确实是双方之间的矛盾才 true；单人情绪倾诉、与伴侣无关的困扰一律 false。这是一个给用户看的建议动作，不代替任何实际操作""",
 
     "partner_translate": """你是一位专业的沟通军师，用户想理解伴侣说的一段话。
@@ -72,6 +75,9 @@ SYSTEM_PROMPTS = {
 - next_step: 下一步建议
 - risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk
 - theory_refs: 本建议参考的心理学理论名称数组（如：Gottman 冲突四骑士、依恋理论、非暴力沟通），没有引用则留空数组
+- intent: 本次回答的意图，从以下取值中选**一个**：expression_rewrite / partner_translate / private_advisor / emotion_support / cold_war / relationship_review / unknown。用户只是在倾诉情绪、不需要任何双方动作时填 emotion_support；无法归类时填 unknown（unknown 代表"不确定"，客户端会因此不提供任何双人动作）
+- suggest_dual_perspective: 是否明确建议"邀请伴侣补充双视角"。只有双方说法明显不一致、各自写下版本确实有价值时才 true；单纯安慰或解释对方一句话一律 false
+- review_worthy: 这次对话是否值得存档为一次关系复盘。出现可复用的模式、明确的触发点或下次可用的表达时才 true；只是一句安慰、或用户没有在讲具体事件时一律 false
 - suggest_mediation: 本次对话是否属于**需要双方坐下来谈**的矛盾（正在争执、冷战、反复为同一件事吵、一句话没说好就要吵起来）。只有确实是双方之间的矛盾才 true；单人情绪倾诉、与伴侣无关的困扰一律 false。这是一个给用户看的建议动作，不代替任何实际操作""",
 
     "expression_rewrite": """你是一位专业的表达改写助手，用户想改善自己的表达方式。
@@ -97,6 +103,8 @@ SYSTEM_PROMPTS = {
 请以 JSON 格式回复，包含以下字段：
 - summary: 一句话摘要
 - rewrites: 改写版本数组，每个包含 style（风格）和 content（内容）
+- intent: 本次回答的意图，从以下取值中选**一个**：expression_rewrite / partner_translate / private_advisor / emotion_support / cold_war / relationship_review / unknown。表达改写场景通常填 expression_rewrite；用户只是在倾诉情绪时填 emotion_support（客户端会因此不给写信、双视角与复盘动作）
+- review_worthy: 这次对话是否值得存档为一次关系复盘。出现可复用的模式、明确的触发点或下次可用的表达时才 true；只是顺手改一句话时一律 false
 - risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk""",
 
     "cold_war": """你是一位专业的冷战调解师，用户正处于冷战状态。你的任务是帮助用户走出冷战，修复关系。
@@ -128,6 +136,8 @@ SYSTEM_PROMPTS = {
 - approach_reason: 建议原因
 - opening_lines: 低压力开场白数组（3 个，可直接使用）
 - avoid_reminders: 需要避免的行为数组
+- intent: 本次回答的意图，固定填 cold_war（冷战破冰）
+- suggest_mediation: 这次冷战是否已经发展到**需要双方坐下来谈**，而不是靠一句破冰就能缓过来。只是暂时不想说话、需要一点空间时一律 false
 - risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk""",
 
     "mediation": """你是一位专业的关系调解师，用户需要帮助调解关系中的矛盾。
@@ -273,6 +283,8 @@ SYSTEM_PROMPTS = {
 - escalation_phrases: 把冲突推高的话或做法（数组，2-3 条）
 - deescalation_phrases: 当时能降温的话术（数组，2-3 条）
 - next_time_scripts: 下次遇到同类苗头可提前说的话（数组，2-3 条）
+- intent: 本次回答的意图，固定填 relationship_review（关系复盘）
+- review_worthy: 这次对话是否值得存档为一次关系复盘。本次就是一次复盘，通常 true；若用户只是随口一提、没有具体事件则 false
 - risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk""",
 
     "profile_report": """你是一位专业的心理咨询师，请根据以下用户的依恋画像维度数据，生成一份个性化的分析报告。

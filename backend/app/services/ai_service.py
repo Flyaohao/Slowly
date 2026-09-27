@@ -1131,6 +1131,8 @@ def rewrite_expression(
 请以JSON格式输出，包含以下字段：
 - summary: 改写总结（一句话说明主要调整）
 - rewrites: 数组，包含5个对象，每个对象有 style（风格名称）和 content（改写内容）
+- intent: 本次回答的意图，固定填 expression_rewrite（帮我改写表达）
+- review_worthy: 这次改写是否值得存档为一次关系复盘（出现可复用的模式或明确的触发点）；只是顺手改一句话时填 false
 - risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk
 """
 
@@ -1847,6 +1849,8 @@ def prepare_rewrite_expression(
 请以JSON格式输出，包含以下字段：
 - summary: 改写总结（一句话说明主要调整）
 - rewrites: 数组，包含5个对象，每个对象有 style（风格名称）和 content（改写内容）
+- intent: 本次回答的意图，固定填 expression_rewrite（帮我改写表达）
+- review_worthy: 这次改写是否值得存档为一次关系复盘（出现可复用的模式或明确的触发点）；只是顺手改一句话时填 false
 - risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk
 """
     prompt = build_structured_stream_prompt(

@@ -28,10 +28,24 @@ except ImportError:  # pragma: no cover
 
 
 class RiskLevel(str, Enum):
-    """五级风险等级。
+    """风险等级。
 
-    取值必须与 `app/services/safety_service.py` 的 RISK_LEVEL_ORDER 完全一致，
-    不可随意增删，否则安全链路会失配。
+    前五个取值必须与 `app/services/safety_service.py` 的 RISK_LEVEL_ORDER
+    完全一致，不可随意增删，否则安全链路会失配。
+
+    `unknown` 是**第六个、也是唯一不参与危险度排序**的取值（整改 B4.3 P0-4）。
+    它代表「无从判定」，不是「某一档危险」：
+
+    - 模型返回 `null` / 空串 / 大小写混杂 / 自造值时，服务端一律归到 `unknown`，
+      并且**禁止**产出双人调解产物（`mediation_service.BLOCKING_RISK_LEVELS`）。
+      旧实现把这类值降级成 `normal` 是 fail open——一次字段缺失就能换来
+      「正常」通行证。
+    - 客户端把 `unknown` 当作「无法解析」处理：不渲染本地警示卡，但**阻断**
+      所有双人动作（`AiRiskLevel.fromWire` + `mediationBlockedByRisk`）。
+
+    把 `unknown` 放进枚举而不是留成 Python 侧的内部字符串，是为了让
+    `RiskLevel` 与客户端 `AiRiskLevel` 的取值集合**逐值对齐**——
+    契约测试 `test_action_routing_contract.py` 会比对两侧的每一个字面量。
     """
 
     NORMAL = "normal"
@@ -39,6 +53,7 @@ class RiskLevel(str, Enum):
     MANIPULATION_RISK = "manipulation_risk"
     ABUSE_RISK = "abuse_risk"
     SELF_HARM_RISK = "self_harm_risk"
+    UNKNOWN = "unknown"
 
 
 class RewriteItem(BaseModel):
@@ -48,7 +63,73 @@ class RewriteItem(BaseModel):
     content: str = Field(..., description="该风格下的改写内容，直接可复制发送")
 
 
-class TranslateOutput(BaseModel):
+class ActionIntent(str, Enum):
+    """行动行的**意图**（整改 B4.3 P1-7）。
+
+    为什么必须由模型显式给出、而不是客户端按 `scene_key` 推断：同一个
+    `scene_key` 下意图可以不同。`private_advisor` 既可能在做**冲突分析**
+    （该给「发起双人调解」），也可能只是**情绪倾诉**（只该给「继续对话」）。
+    按 scene_key 一刀切会把这两种完全不同的处置混成一件事。
+
+    客户端拿到的是一张**确定性路由表**（`AiChatViewModel.orderedActionsFor`），
+    表的输入就是这个字段——**禁止**从正文里做关键词猜测：正文是模型自由生成的，
+    拿它当路由依据等于把「该不该把两个人关进同一场会话」交给一次字符串匹配。
+
+    `unknown` 是 fail closed 的落点：模型没给、给了非法值、或响应结构缺失时，
+    客户端只保留「复制原回答」这一条最无害的出路。
+    """
+
+    EXPRESSION_REWRITE = "expression_rewrite"
+    PARTNER_TRANSLATE = "partner_translate"
+    PRIVATE_ADVISOR = "private_advisor"
+    EMOTION_SUPPORT = "emotion_support"
+    COLD_WAR = "cold_war"
+    RELATIONSHIP_REVIEW = "relationship_review"
+    UNKNOWN = "unknown"
+
+
+class ActionRoutingFields(BaseModel):
+    """行动行路由的三个**结构化**输入（整改 B4.3 P1-7）。
+
+    单独抽成一个基类而不是逐个模型复制：行动行对**每个**聊天场景都要裁决，
+    漏一个场景就等于那个场景永远只能给「复制」。字段全带默认值，
+    旧构造逐字节兼容。
+
+    **禁止**客户端从正文里做关键词猜测来决定给哪些动作：正文是模型自由生成的
+    文本，拿它当路由依据等于把「该不该把两个人关进同一场会话」交给一次字符串
+    匹配。所以这三个判断必须由模型显式产出、经 Pydantic 校验后下发。
+    """
+
+    intent: ActionIntent = Field(
+        ActionIntent.UNKNOWN,
+        description=(
+            "本次回答的意图，决定客户端给出哪些行动："
+            "expression_rewrite=帮我改写表达；partner_translate=解释对方的话；"
+            "private_advisor=对双方矛盾做分析（可能建议调解）；"
+            "emotion_support=用户只是在倾诉情绪（**不要**给调解/复盘）；"
+            "cold_war=冷战破冰；relationship_review=关系复盘；"
+            "无法归类时填 unknown。"
+        ),
+    )
+    suggest_dual_perspective: bool = Field(
+        False,
+        description=(
+            "是否明确建议「邀请伴侣补充双视角」。只有这件事确实需要双方各自写下"
+            "版本才有价值时才 true（如双方说法明显不一致）；单纯安慰、解释对方一句话"
+            "一律 false——把伴侣拉进一次不必要的双人作业是打扰。"
+        ),
+    )
+    review_worthy: bool = Field(
+        False,
+        description=(
+            "这次对话是否**值得存档为一次关系复盘**：出现了可复用的模式、"
+            "明确的触发点或下次可用的表达时才 true。只是一句安慰、"
+            "或用户没有在讲具体事件时一律 false。"
+        ),
+    )
+
+
+class TranslateOutput(ActionRoutingFields):
     """对方翻译 / 私人军师 / 关系回顾 场景的结构化输出"""
 
     scene: str = Field("对方翻译", description="场景判定结论")
@@ -93,15 +174,21 @@ class AdvisorOutput(TranslateOutput):
     )
 
 
-class RewriteOutput(BaseModel):
-    """表达改写：一次给出多个风格的版本"""
+class RewriteOutput(ActionRoutingFields):
+    """表达改写：一次给出多个风格的版本
+
+    整改 B4.3 P1-7：继承 [ActionRoutingFields]。改写场景的行动行是
+    「复制 + 分享 + 写信（收进更多）」，**不默认**给双视角和复盘——
+    只有模型明确判定 `review_worthy` 时才多一个「记录为复盘」。
+    这些判断必须来自结构化字段，客户端不得从改写正文里猜。
+    """
 
     summary: str = Field(..., description="一句话结论")
     rewrites: List[RewriteItem] = Field(..., description="改写版本列表，建议 3-5 个不同风格")
     risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
 
 
-class ColdWarOutput(BaseModel):
+class ColdWarOutput(ActionRoutingFields):
     """冷战开解"""
 
     goal_analysis: str = Field(..., description="双方各自的真实诉求分析")
@@ -113,6 +200,16 @@ class ColdWarOutput(BaseModel):
     opening_lines: List[str] = Field(..., description="3 条可直接使用的破冰开场白")
     avoid_reminders: List[str] = Field(..., description="不建议触碰的雷区")
     risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
+    # 整改 B4.3 P1-7：冷战的行动行是「优先复制破冰表达；安全且**明确建议**时才
+    # 提供调解」。所以冷战场景也必须有这个开关——此前它只挂在 AdvisorOutput 上，
+    # 冷战的行动行因此永远给不出调解入口（能力在，入口不在）。
+    suggest_mediation: bool = Field(
+        False,
+        description=(
+            "这次冷战是否已经发展到需要双方坐下来谈（而不是靠一句破冰就能缓过来）。"
+            "只是暂时不想说话、需要一点空间时一律 false。"
+        ),
+    )
 
 
 class LetterUnderstandOutput(BaseModel):
@@ -278,7 +375,7 @@ class QuestionnaireAnalysisOutput(BaseModel):
         return flatten_text(value)
 
 
-class ReviewOutput(BaseModel):
+class ReviewOutput(ActionRoutingFields):
     """关系复盘：针对一次争吵、和好或重要事件做结构化回顾。
 
     字段对应关系（功能设计 六.9 的六项输出）：

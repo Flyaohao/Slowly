@@ -56,6 +56,28 @@ def get_by_idempotency_key(db: Session, key: str) -> Optional[AiTask]:
     )
 
 
+def get_by_idempotency_key_locked(db: Session, key: str) -> Optional[AiTask]:
+    """幂等键回读的**加锁读**（B4.3 P0-5）。
+
+    唯一键冲突之后必须用它回读，不能用普通 `SELECT`：MySQL 默认
+    REPEATABLE-READ 下本事务的一致性读快照在第一次读之后就固定了，
+    竞争方**刚刚提交**的那一行在快照里不存在——实测普通 SELECT 返回
+    `None`，于是调用方走到 `raise`，把一次正常的幂等竞争变成 500。
+    `FOR UPDATE` 是当前读，看得到已提交的最新行（并顺带锁住它，
+    避免回读之后又被删改）。
+
+    SQLite 不支持 `FOR UPDATE`（会报语法错误），用 `with_for_update()`
+    生成时会被方言忽略——因此测试基座同样可用。
+    """
+    return (
+        db.query(AiTask)
+        .filter(AiTask.idempotency_key == key)
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+
+
 def get_task_by_id(db: Session, task_id: int) -> Optional[AiTask]:
     return (
         db.query(AiTask)
@@ -81,8 +103,31 @@ def create_task(
     IntegrityError。这里用 SAVEPOINT（`begin_nested`）把 INSERT 的失败
     **只回滚到本次插入**，不动调用方外层事务里已经完成的「状态 CAS +
     revision 自增」——这正是「IntegrityError 只回滚当前原子事务，不破坏
-    已经存在的正确任务」的落点。回读既有行后返回，调用方拿到的永远是
-    同一个任务（「双方同时提交只创建一个改写任务」的存储层保证）。
+    已经存在的正确任务」的落点。
+
+    ## 整改 B4.3 P0-5：SAVEPOINT 必须在 `db.add()` **之前**建立
+
+    旧写法是 `db.add(task)` 然后 `with db.begin_nested(): db.flush()`。在
+    MySQL 上这是错的，而且**不是理论错误**：`db.add()` 会把对象放进
+    `session.new`，而 `session.begin_nested()` 在「当前还没有事务」时会
+    先开启一个**普通事务**——那一刻 SQLAlchemy 会把所有 pending 对象
+    flush 掉。于是那条 INSERT 落在 **SAVEPOINT 之外**，冲突时 InnoDB 报
+    1062，SQLAlchemy 把**整个 Session** 标记为待回滚；随后 `begin_nested()`
+    返回、`flush()` 在已失效的事务里再跑一次，抛出的就是
+    `PendingRollbackError`，`except IntegrityError` **根本接不住**。
+
+    实测（MySQL 9.0.1 / REPEATABLE-READ，见
+    `tests/test_mediation_mysql_concurrency.py`）：旧写法下冲突方拿到
+    `PendingRollbackError`，这条连接再也查不了、提交不了；新写法下冲突方
+    正常拿到既有行、外层 CAS 完好、连接可继续使用。
+
+    ## 另一处：回读必须加锁
+
+    冲突回读不能用普通 `SELECT`：MySQL 默认 REPEATABLE-READ 下，本事务的
+    一致性读快照在**第一次读之后**就固定了，此后别人提交的行看不见——
+    实测普通 `SELECT` 返回 `None`（于是旧代码走到 `raise`），
+    `SELECT ... FOR UPDATE` 才看得见。所以回读走
+    [`get_by_idempotency_key_locked`]。
 
     幂等插入完成后 `task.id` 已由 flush 填充（autoincrement），供调用方
     回写 `rewrite_task_id` / `summary_task_id`。
@@ -103,13 +148,15 @@ def create_task(
         max_attempts=max_attempts,
         payload=payload,
     )
-    db.add(task)
     try:
+        # SAVEPOINT 先立，INSERT 才在它里面 —— 顺序不能反（见 docstring）。
         with db.begin_nested():
+            db.add(task)
             db.flush()
     except IntegrityError:
-        # 只回滚本次 INSERT 的 SAVEPOINT；外层事务（状态 CAS、revision 自增）不受影响
-        existing = get_by_idempotency_key(db, key)
+        # 只回滚本次 INSERT 的 SAVEPOINT；外层事务（状态 CAS、revision 自增）不受影响。
+        # 回读必须是**加锁读**：REPEATABLE-READ 的快照读看不见竞争方刚提交的那一行。
+        existing = get_by_idempotency_key_locked(db, key)
         if existing is None:
             raise
         return existing
@@ -354,12 +401,56 @@ def heartbeat(
     db.commit()
     return bool(result.rowcount)
 
+def finalize_owned(
+    db: Session,
+    task_id: int,
+    locked_by: Optional[str],
+    state: str,
+    *,
+    expected_revision: Optional[int] = None,
+    error: Optional[str] = None,
+) -> bool:
+    """**不提交**的终态收口：只写「仍归本执行者所有」的那一行。
+
+    这是 B4.3 P0-1 的核心原语——结果写入权必须绑定任务所有权。条件里同时
+    钉住四件事，缺一不可：
+
+    - `id == task_id`
+    - `state == running`（已收口的行不再被改写）
+    - `locked_by == 本执行者`（被回收后清空、被别人领走后写成对方 → 不命中）
+    - `revision == expected_revision`（会话版本被推进过的旧产出不得收口）
+
+    返回 `rowcount == 1`。**刻意不 commit**：调用方要把它和「会话状态 CAS +
+    assistant 消息插入」放进同一个事务，任何一环失败整体回滚，绝不出现
+    「结果落了、任务没收口」或「任务收口了、结果没落」的半成品。
+
+    与 [`_finalize`] 的区别：那个自带 commit、用于失败/作废收口这类独立动作；
+    这个只服务于「业务结果写回」那条必须原子的事务。
+    """
+    conditions = [AiTask.id == task_id, AiTask.state == STATE_RUNNING]
+    if locked_by is None:
+        conditions.append(AiTask.locked_by.is_(None))
+    else:
+        conditions.append(AiTask.locked_by == locked_by)
+    if expected_revision is not None:
+        conditions.append(AiTask.revision == int(expected_revision))
+    values = {
+        "state": state,
+        "finished_at": datetime.utcnow(),
+        "locked_by": None,
+        "locked_until": None,
+    }
+    if error is not None:
+        values["last_error"] = error
+    result = db.execute(update(AiTask).where(*conditions).values(**values))
+    return bool(result.rowcount)
+
+
 def mark_succeeded(
     db: Session,
     task: AiTask,
     *,
     expected_revision: Optional[int] = None,
-    commit: bool = True,
 ) -> bool:
     """标记成功。返回 False 表示**没有真正收口**，调用方不得认为结果已生效。
 
@@ -371,18 +462,17 @@ def mark_succeeded(
     - 任务行已经不属于本次执行（租约过期后被回收、甚至已被别的 worker 重新
       领走）：本执行者的产出同样是过期的，什么都不写。
 
-    `commit=False` 供「会话 CAS + assistant 消息 + 任务 succeeded」同一事务的
-    生成结果写回路径使用（见 mediation_service._commit_generation_result）。
+    **自带 commit**。结果写回那条必须原子的事务路径不得调用本函数，请用
+    [`finalize_owned`]（B4.3 P0-1：禁止「先提交业务结果，再 mark_succeeded」）。
     """
     if expected_revision is not None and int(task.revision or 0) != int(expected_revision):
         _finalize(
             db, task.id, STATE_SUPERSEDED,
             error="结果已过期，被更新版本取代",
             locked_by=task.locked_by,
-            commit=commit,
         )
         return False
-    if not _finalize(db, task.id, STATE_SUCCEEDED, locked_by=task.locked_by, commit=commit):
+    if not _finalize(db, task.id, STATE_SUCCEEDED, locked_by=task.locked_by):
         return False
     return True
 

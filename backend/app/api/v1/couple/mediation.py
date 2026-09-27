@@ -184,8 +184,14 @@ def next_step(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """结果页的下一步动作（B4.3 P0-3：严格状态机）。
+
+    合法动作只有 `end` / `continue` 两个。`pause` 在整改 B4.3 被**删除**——
+    后端此前 `pass` 后返回成功、客户端因此留着一枚点了什么都不发生的按钮，
+    这是假功能。收到 `pause` 一律按无效操作拒绝（40001），绝不假装成功。
+    """
     action = body.get("action", "")
-    if action not in ("end", "pause", "continue"):
+    if action not in ("end", "continue"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": 40001, "message": "无效的操作", "data": None},
@@ -197,6 +203,8 @@ def next_step(
         error_map = {
             "50001": (404, "调解会话不存在"),
             "50002": (403, "无权参与此调解"),
+            "50003": (400, "当前状态不允许此操作"),
+            "50005": (400, "无效的操作"),
         }
         sc, msg = error_map.get(code, (500, "服务异常"))
         raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
