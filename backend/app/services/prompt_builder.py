@@ -390,6 +390,10 @@ SYSTEM_PROMPTS = {
 5. **basis**：依据，引用观点原文里的句子，1-3 条。必须是原文里真实出现的片段。
 6. **suggest_enrich**：是否建议写进画像。
 7. **dimensions**：若要写进画像，建议调整哪些维度、往哪个方向。
+8. **memory_type**：这段观点**值不值得长期记住**，属于哪一类——只能是
+   `偏好` / `关系事实` / `沟通雷区` / `核心诉求` 之一；不值得记或拿不准时留空字符串。
+   判断口径与画像不同：能进画像的是"这个人是什么样"，能进记忆的是"以后对话该记得的事"。
+   当天情绪、转述别人的看法、对 AI 的提问，都不值得记。
 
 ## 判断规则（重要）
 - 只有**表述稳定、指向明确**的观点才建议写入。当天情绪化的一句抱怨不算。
@@ -399,8 +403,10 @@ SYSTEM_PROMPTS = {
   `dimensions` 留空。
 - **不要给出任何分数**。你只回答方向与强度，具体移动多少由系统决定。
 - 只分析**这位用户自己**的表达，不要替他的伴侣下结论。
+- `memory_type` 是**建议**，用户可以自己决定要不要采纳；拿不准就留空，
+  不要为了填满字段而硬选一个。
 
-请以 JSON 格式回复，包含字段：summary / values / stance / confidence / basis / suggest_enrich / dimensions""",
+请以 JSON 格式回复，包含字段：summary / values / stance / confidence / basis / suggest_enrich / dimensions / memory_type""",
 }
 
 

@@ -755,22 +755,33 @@ def enrich_from_viewpoint(
     summary: str,
     directions: Dict[str, dict],
     confidence: float,
+    force: bool = False,
 ) -> dict:
     """把一条观点补充进画像（派生新版本）。`directions` 描述**方向与强度**。
 
     入参里**没有分数**——这是刻意的。AI 只回答「这条观点说明用户在 X 上更强还是
     更弱、强多少」，具体移动多少分由 `compute_enriched_score` 决定。
 
+    `force=True` 表示用户明确选择了「就算把握不足也要计入」：AI 的置信度只是建议，
+    最终决定权在用户手里。但**必须由用户显式触发**（前端传 force），
+    客户端不能默认替他做主——否则这道门槛等于不存在。
+
     抛 ValueError（业务错误码）的情况：
       70001 还没有画像    70002 维度列表为空/全部非法
       70003 置信度过低    70004 目标维度没有任何有效变化（已到上限）
+      70008 这条观点已经计入过（幂等）
     """
-    if confidence < ENRICH_MIN_CONFIDENCE:
+    if not force and confidence < ENRICH_MIN_CONFIDENCE:
         raise ValueError("70003")
 
     profile = profile_repo.get_latest_profile(db, user_id)
     if profile is None:
         raise ValueError("70001")
+
+    # 幂等：当前版本正是这条观点派生的 → 不再派生第二个。
+    # 没有这道闸，用户重复点一下就会多出一个只差文案的版本，历史列表立刻变脏。
+    if getattr(profile, "source_viewpoint_id", None) == viewpoint_id:
+        raise ValueError("70008")
 
     valid_dims = [d for d in dimensions if d in DIMENSION_DEFINITIONS]
     if not valid_dims:
@@ -828,6 +839,9 @@ def enrich_from_viewpoint(
     return {
         "profile_id": new_profile.id,
         "version": new_profile.version,
+        # 补充前的那个版本 id：前端「不计入」要撤回时，撤回的目标就是它。
+        # 让客户端自己去翻历史列表猜「上一版是谁」既脆弱又容易撤错。
+        "previous_profile_id": profile.id,
         "origin": new_profile.origin,
         "origin_note": new_profile.origin_note,
         "changed": changed,

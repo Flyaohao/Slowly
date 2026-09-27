@@ -500,6 +500,13 @@ class ViewpointAnalysisOutput(BaseModel):
     dimensions: List[ViewpointDimensionSuggestion] = Field(
         default_factory=list, description="建议调整的维度（仅在 suggest_enrich 为真时有意义）"
     )
+    memory_type: Optional[str] = Field(
+        None,
+        description=(
+            "如果这条观点值得长期记住，建议归入的记忆类型："
+            "偏好 / 关系事实 / 沟通雷区 / 核心诉求；不值得记或拿不准时留空"
+        ),
+    )
 
 
 #: 场景 → 输出模型。未登记的 scene_key 统一回退到 TranslateOutput。

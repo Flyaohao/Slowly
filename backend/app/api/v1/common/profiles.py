@@ -22,6 +22,7 @@ _PROFILE_ERRORS = {
     "70005": (404, "版本不存在"),
     "70006": (400, "当前版本不能删除"),
     "70007": (400, "该版本正被关系画像使用，不能删除"),
+    "70008": (400, "这条观点已经计入画像了，不用再补充一次"),
 }
 
 
@@ -291,6 +292,7 @@ def enrich_my_profile(
                 k: v.model_dump() for k, v in (req.directions or {}).items()
             },
             confidence=req.confidence,
+            force=req.force,
         )
         return ApiResponse(data=result)
     except ValueError as e:

@@ -366,6 +366,55 @@ def delete_memory(db: Session, memory_id: int, user_id: int) -> None:
         logger.warning("[MEMORY] 同步删向量失败 id=%s: %s", memory_id, exc)
 
 
+def get_memories_by_source(
+    db: Session, user_id: int, source: str, source_id: int
+) -> List[dict]:
+    """某个业务实体（如一条观点）产生的记忆。
+
+    用途单一但关键：详情页「计入军师记忆」开关的**初始状态**必须由服务端现状
+    决定，而不是客户端凭上次操作记在内存里——否则重进页面就会显示成未计入，
+    用户一点又写一条重复记忆。
+    """
+    rows = (
+        db.query(AiMemory)
+        .filter(
+            AiMemory.user_id == user_id,
+            AiMemory.source == source,
+            AiMemory.source_id == source_id,
+        )
+        .order_by(AiMemory.id.asc())
+        .all()
+    )
+    return [_to_dict(m) for m in rows]
+
+
+def delete_memories_by_source(
+    db: Session, user_id: int, source: str, source_id: int
+) -> int:
+    """撤除某个业务实体产生的全部记忆，返回删除条数。
+
+    逐条走 `delete_memory`——它能同时同步删除向量库里的派生数据。绕过它直接
+    `db.delete` 会留下"数据库已删、向量还在"的幽灵记忆，之后仍然会被召回。
+    """
+    rows = (
+        db.query(AiMemory)
+        .filter(
+            AiMemory.user_id == user_id,
+            AiMemory.source == source,
+            AiMemory.source_id == source_id,
+        )
+        .all()
+    )
+    deleted = 0
+    for memory in rows:
+        try:
+            delete_memory(db, memory.id, user_id)
+            deleted += 1
+        except ValueError:
+            continue
+    return deleted
+
+
 def _to_dict(memory: AiMemory) -> dict:
     return {
         "id": memory.id,

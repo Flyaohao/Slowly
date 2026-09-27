@@ -21,6 +21,14 @@ class EnrichProfileRequest(BaseModel):
     summary: str = Field("", description="观点摘要，写入 explanation 作为依据")
     directions: Dict[str, EnrichDimensionSpec] = Field(default_factory=dict)
     confidence: float = Field(0.0, ge=0.0, le=1.0, description="AI 分析的置信度")
+    force: bool = Field(
+        False,
+        description=(
+            "用户明确选择计入画像时置真，允许覆盖「置信度不足」这道门槛。"
+            "AI 的判断只是建议——最终决定权在用户手里，但他必须显式表达这个意愿，"
+            "不能由客户端默认代劳。"
+        ),
+    )
 
 
 class ManualVersionRequest(BaseModel):
