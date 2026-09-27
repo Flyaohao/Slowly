@@ -1,11 +1,14 @@
 # Slowly慢慢说 · Couple AI Translator
 
 > 把伴侣说的一句话，用 AI「翻译」成他真正想表达的意思，并告诉你该怎么回。
+> 吵到谈不拢时，它把双方和 AI 军师请进**同一间房间**——共同调解室，把一场争执谈成一份调解书。
 
 一个完整的双端产品：Android 客户端（Kotlin + Compose）+ Python 后端（FastAPI），
 AI 链路全部接入真实大模型，已容器化部署在线运行。
 核心是一套**有记忆、可解释、可治理**的 AI 军师系统——它记得你们的关系，
 每个判断能说清「依据是什么」，每条记忆用户都能查看、限制范围或删除。
+军师最重的落地场景是**共同调解室**：矛盾发生时，双方与军师三方同房实时调解，
+谈拢后生成调解书留档——单人对话与双人共同在场，跑在同一套记忆与治理底座上。
 
 | | 实测值 |
 |---|---|
@@ -37,6 +40,10 @@ AI 链路全部接入真实大模型，已容器化部署在线运行。
 
 ## 界面速览
 
+| 共同调解室：吵架后开一间房，双方与军师三方同聊 | 房间内 @军师：流式回复，结束后双方投票生成调解书 |
+|---|---|
+| <img src="docs/screenshots/07-mediation-room-list.png" width="280"/> | <img src="docs/screenshots/08-mediation-room-advisor.png" width="280"/> |
+
 | 军师对话：结构化建议 + 可展开的判断依据 | 记忆与隐私：AI 记住的一切可查、可控、可删 |
 |---|---|
 | <img src="docs/screenshots/01-advisor-evidence.jpg" width="280"/> | <img src="docs/screenshots/05-memory-privacy.jpg" width="280"/> |
@@ -49,16 +56,13 @@ AI 链路全部接入真实大模型，已容器化部署在线运行。
 |---|---|
 | <img src="docs/screenshots/02-relation-hub.jpg" width="280"/> | <img src="docs/screenshots/06-letter-ai-assist.jpg" width="280"/> |
 
-| 共同调解室：吵架后开一间房，双方与军师三方同聊 | 房间内 @军师：流式回复，结束后双方投票生成调解书 |
-|---|---|
-| <img src="docs/screenshots/07-mediation-room-list.png" width="280"/> | <img src="docs/screenshots/08-mediation-room-advisor.png" width="280"/> |
-
 ---
 
 ## 它是什么
 
 恋爱里的沟通问题，大多不是「不爱」，而是**说出来的话和想表达的意思对不上**。
-这个 App 做两件事：把对方那句话翻译成他真实的需求，再告诉你此刻回什么话不致于把火拱起来。
+这个 App 做三件事：把对方那句话翻译成他真实的需求，再告诉你此刻回什么话不致于把火拱起来；
+而当火真的拱起来了，**共同调解室**接手——把双方和军师请进同一间房间，把吵架本身谈成一次留档的和解。
 
 两种模式，绑定情侣后无缝切换：
 
@@ -85,7 +89,7 @@ flowchart TB
     subgraph Android["Android 客户端 · Kotlin + Compose"]
         direction LR
         SingleUI["单身模式<br/>日记 · 问卷 · 自我练习"]
-        CoupleUI["情侣模式<br/>军师 · 信箱 · 画像 · 纪念馆"]
+        CoupleUI["情侣模式<br/>军师 · 共同调解室 · 信箱 · 画像"]
     end
 
     subgraph Backend["FastAPI 后端"]
