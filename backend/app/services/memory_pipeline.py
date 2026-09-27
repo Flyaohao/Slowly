@@ -309,6 +309,19 @@ def run_distill(
         _finish(db, task, "completed_skipped")
         return
 
+    # 军师记忆沉淀总开关（执行阶段复查，P0 修补）：入队只看入队时的开关，
+    # 用户可能在任务排队/退避期间关掉开关——这里必须再拦一次，否则关了
+    # 开关双写链路仍在调模型、落断言。标 completed_skipped 丢弃（不回队）。
+    from app.services.memory_service import memory_distill_enabled
+
+    if not memory_distill_enabled(db, task.relation_id):
+        _finish(db, task, "completed_skipped")
+        logger.info(
+            "[MEM-PIPE] 军师记忆沉淀已关闭，跳过已入队任务 task=%s relation=%s",
+            task.id, task.relation_id,
+        )
+        return
+
     ctx = _load_chat_context(db, task)
     if ctx is None or ctx["user_msg"] is None:
         _finish(

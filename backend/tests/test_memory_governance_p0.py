@@ -337,6 +337,81 @@ def mps_purge_retention():
 
 
 # ---------------------------------------------------------------------- #
+# P0 修补②：带 v3 派生行（evidence/edge/user_state）的记忆删除不 500
+# ---------------------------------------------------------------------- #
+def case_v3_delete_cascade(db, uid, rid):
+    print("\n[P0②] v3 记忆删除：同一事务级联清理 evidence/edge/user_state")
+    from app.models.ai import (
+        AiMemory, MemoryAssertionEdge, MemoryAssertionEvidence,
+        MemoryAssertionUserState,
+    )
+    from app.services import memory_service as ms
+
+    created_ids = []
+    baseline_mem = db.query(AiMemory).count()
+    try:
+        parent = AiMemory(
+            user_id=uid, relation_id=rid, memory_type="偏好",
+            memory_text="删除级联专项-父断言", visibility="private",
+            occurred_at=datetime.now(), created_at=datetime.now(),
+        )
+        target = AiMemory(
+            user_id=uid, relation_id=rid, memory_type="偏好",
+            memory_text="删除级联专项-待删断言", visibility="private",
+            occurred_at=datetime.now(), created_at=datetime.now(),
+        )
+        db.add_all([parent, target])
+        db.commit()
+        created_ids.extend([parent.id, target.id])
+        parent_id, target_id = parent.id, target.id
+
+        # v3 派生行：evidence + 双向端点 edge + user_state（模拟线上双写产物）
+        db.add(MemoryAssertionEvidence(
+            assertion_id=target_id, source_type="probe", source_id=target_id,
+            source_revision_id=1, offset_codepoint=0, length_codepoint=1,
+            content_hash="1" * 64,
+        ))
+        db.add(MemoryAssertionEdge(
+            relation_id=rid, parent_assertion_id=parent_id,
+            child_assertion_id=target_id, relation_type="supersedes",
+        ))
+        db.add(MemoryAssertionUserState(
+            assertion_id=target_id, user_id=uid, hidden=False, muted=False,
+            starred=False,
+        ))
+        db.commit()
+
+        # 修补前这里 IntegrityError 1451（evidence 外键挡删除）→ 接口 500
+        ms.delete_memory(db, target_id, uid)
+        db.expire_all()
+        check("带 evidence 的 v3 记忆删除成功",
+              db.get(AiMemory, target_id) is None)
+        check("evidence 已级联删除",
+              db.query(MemoryAssertionEvidence)
+              .filter_by(assertion_id=target_id).count() == 0)
+        check("edge（双向端点）已级联删除",
+              db.query(MemoryAssertionEdge)
+              .filter((MemoryAssertionEdge.parent_assertion_id == target_id)
+                      | (MemoryAssertionEdge.child_assertion_id == target_id))
+              .count() == 0)
+        check("user_state 已级联删除",
+              db.query(MemoryAssertionUserState)
+              .filter_by(assertion_id=target_id).count() == 0)
+        check("被 edge 引用的父断言不受影响",
+              db.get(AiMemory, parent_id) is not None)
+    finally:
+        for mid in created_ids:
+            row = db.get(AiMemory, mid)
+            if row:
+                db.delete(row)
+        db.commit()
+        after = db.query(AiMemory).count()
+        check("删除级联用例基线收尾相等", baseline_mem == after,
+              f"{baseline_mem} != {after}")
+        print(f"  基线行数={baseline_mem} 收尾行数={after}")
+
+
+# ---------------------------------------------------------------------- #
 def main() -> int:
     print("=" * 72)
     print("记忆治理 P0 专项：补偿向量化 / no_thinking / 沉淀总开关 / 解绑清理")
@@ -359,6 +434,7 @@ def main() -> int:
             return finish()
         case_backlog_sweep(db, rel.id)
         case_distill_switch(db, rel.user_a_id, rel.id)
+        case_v3_delete_cascade(db, rel.user_a_id, rel.id)
         case_unbind_purge(db, rel.user_a_id, rel.id)
     finally:
         db.close()

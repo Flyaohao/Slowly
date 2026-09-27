@@ -352,6 +352,25 @@ def delete_memory(db: Session, memory_id: int, user_id: int) -> None:
     memory = db.query(AiMemory).filter(AiMemory.id == memory_id).first()
     if not memory or memory.user_id != user_id:
         raise ValueError("50002")
+    # v3 双写后，断言可能被 evidence / edge（双向端点）/ user_state 外键引用，
+    # 直接 db.delete 会 IntegrityError 1451 → 接口 500。派生行无独立存在意义，
+    # 在**同一事务**内先级联清掉再删断言（失败则整体回滚，不留半删状态）。
+    from app.models.ai import (
+        MemoryAssertionEdge,
+        MemoryAssertionEvidence,
+        MemoryAssertionUserState,
+    )
+
+    db.query(MemoryAssertionEvidence).filter(
+        MemoryAssertionEvidence.assertion_id == memory_id
+    ).delete(synchronize_session=False)
+    db.query(MemoryAssertionEdge).filter(
+        (MemoryAssertionEdge.parent_assertion_id == memory_id)
+        | (MemoryAssertionEdge.child_assertion_id == memory_id)
+    ).delete(synchronize_session=False)
+    db.query(MemoryAssertionUserState).filter(
+        MemoryAssertionUserState.assertion_id == memory_id
+    ).delete(synchronize_session=False)
     db.delete(memory)
     db.commit()
     # 缺陷三：DB 是权威、向量是派生——commit 成功后同步删向量。

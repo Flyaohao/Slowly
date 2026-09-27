@@ -14,6 +14,7 @@
   [8] relation 非 active → completed_skipped（claim 前置守卫）
   [9] INDEX_WORKER=1 → T4 落 pending_upsert、任务转 indexing
   [10] 核心字段不全（memory_text 空）且 attempts 耗尽 → failed(FIELDS_INCOMPLETE)
+  [11] 入队后关军师记忆沉淀开关 → 执行阶段复查 completed_skipped 且不调模型
 
 数据隔离：finally 按 id 删行（证据 → 记忆 → 任务 → 消息 → 会话 → 场景 →
 测试关系），任务/记忆/证据基线计数首尾相等。
@@ -469,6 +470,35 @@ def main() -> int:
         ok("error_code=FIELDS_INCOMPLETE",
            task6.last_error_code == "FIELDS_INCOMPLETE",
            str(task6.last_error_code))
+
+        # ---- [11] 军师记忆沉淀开关：执行阶段复查 ----
+        print("\n[11] 入队后关沉淀开关 → completed_skipped 且不调模型")
+        toggle_msg = AiChatMessage(
+            session_id=sess.id, role="assistant", content="回复开关复查",
+        )
+        db.add(toggle_msg)
+        db.flush()
+        _MSG_IDS.append(toggle_msg.id)
+        db.commit()
+        task7 = _mk_task(db, rel.id, toggle_msg.id, requested_by=uid)
+        orig_enabled = bool(rel.memory_distill_enabled)
+        try:
+            rel.memory_distill_enabled = False
+            db.commit()
+            c7 = memory_pipeline.claim_next_task(db, "test-w1")
+            ok("领到任务7", c7 is not None and c7.id == task7.id,
+               str(c7 and c7.id))
+            llm_switch = FakeLLM(llm_ok.result)
+            if c7 is not None:
+                memory_pipeline.run_distill(db, c7, llm_client=llm_switch)
+            _refresh(db, task7)
+            ok("开关关闭（执行阶段）→ completed_skipped",
+               task7.state == "completed_skipped", task7.state)
+            ok("开关关闭 → 未发起模型调用", llm_switch.calls == 0,
+               str(llm_switch.calls))
+        finally:
+            rel.memory_distill_enabled = orig_enabled
+            db.commit()
 
     finally:
         _cleanup(db)
