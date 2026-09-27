@@ -26,6 +26,7 @@ import javax.inject.Singleton
 object NetworkModule {
 
     // 默认 BASE_URL，可以通过 AppStartup 或配置覆盖
+    // 2026-09-27 收口：真机联调期间的局域网地址已回改线上，避免装出去的包连不上后端。
     const val DEFAULT_BASE_URL = "http://182.92.194.78:8000/"
 
     @Provides
