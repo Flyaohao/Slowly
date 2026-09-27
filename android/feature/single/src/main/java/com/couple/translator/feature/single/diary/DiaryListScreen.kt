@@ -74,6 +74,10 @@ fun DiaryListScreen(
     onNavigateToDetail: (Long) -> Unit,
     onNavigateToCompose: () -> Unit,
     identity: TopBarIdentity = TopBarIdentity(),
+    /** 页面叫什么：单身侧是「日记」，情侣抽屉里是「观点」。同一份数据、两个入口。 */
+    title: String = "日记",
+    /** 非空表示这是一个二级页（从抽屉进入），顶栏显示返回而不是抽屉图标。 */
+    onNavigateBack: (() -> Unit)? = null,
     viewModel: DiaryListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -107,33 +111,34 @@ fun DiaryListScreen(
                             )
                         },
                     )
+                } else if (onNavigateBack != null) {
+                    // 从情侣抽屉进来时这是二级页：给返回按钮，而不是一个点不动的抽屉图标
+                    AppBackTopBar(
+                        onBack = onNavigateBack,
+                        title = title,
+                        applyStatusBarInset = false,
+                    )
                 } else {
                     AppTopBar(
                         onOpenDrawer = onOpenDrawer,
                         isCoupleMode = false,
                         identity = identity,
-                        // [W4.5 收缩] 批量管理入口隐藏（日记不再发展笔记软件能力，隐藏 ≠ 删除）
-                        // trailing = {
-                        //     AppTopBarAction(
-                        //         icon = Icons.Outlined.Delete,
-                        //         contentDescription = "批量删除",
-                        //         onClick = { viewModel.toggleSelectionMode() },
-                        //         tint = AppTextSecondary,
-                        //     )
-                        // },
                     )
                 }
 
-                AppPageHeader(
-                    title = "日记",
-                    // [W4.5 收缩] 入口语义收成「给军师的私密记录」
-                    subtitle = when {
-                        uiState.isSelectionMode -> "长按可多选，删除不可恢复。"
-                        uiState.diaries.isEmpty() -> "给军师的私密记录，只有你和它能看到。"
-                        else -> "已经写下 ${uiState.diaries.size} 条私密记录。"
-                    },
-                    modifier = Modifier.padding(top = AppSpacing.sm),
-                )
+                // 二级页的顶栏已经写了标题，不再叠一个大标题
+                if (onNavigateBack == null) {
+                    AppPageHeader(
+                        title = title,
+                        // [W4.5 收缩] 入口语义收成「给军师的私密记录」
+                        subtitle = when {
+                            uiState.isSelectionMode -> "长按可多选，删除不可恢复。"
+                            uiState.diaries.isEmpty() -> "给军师的私密记录，只有你和它能看到。"
+                            else -> "已经写下 ${uiState.diaries.size} 条私密记录。"
+                        },
+                        modifier = Modifier.padding(top = AppSpacing.sm),
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(AppSpacing.lg))
 
@@ -150,11 +155,11 @@ fun DiaryListScreen(
 
                     uiState.diaries.isEmpty() -> AppEmptyState(
                         icon = Icons.Outlined.Book,
-                        title = "还没有日记",
+                        title = "还没有$title",
                         subtitle = "记录你的生活和心情。",
                         action = {
                             AppPrimaryButton(
-                                text = "写第一篇日记",
+                                text = "写第一篇$title",
                                 icon = Icons.Outlined.Edit,
                                 onClick = onNavigateToCompose,
                                 modifier = Modifier.padding(horizontal = AppSpacing.screenH),
@@ -203,7 +208,7 @@ fun DiaryListScreen(
         // 主操作固定在底部：和首页/信箱的"全宽黑按钮"是同一个动作语义
         if (!uiState.isSelectionMode) {
             AppPrimaryButton(
-                text = "写日记",
+                text = "写$title",
                 icon = Icons.Outlined.Edit,
                 onClick = onNavigateToCompose,
                 modifier = Modifier

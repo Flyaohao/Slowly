@@ -121,6 +121,38 @@ object AiDto {
         @Json(name = "target_id") val targetId: Long,
     )
 
+    /** 观点分析请求：要分析哪条观点（日记条目）。 */
+    @JsonClass(generateAdapter = true)
+    data class ViewpointAnalysisRequest(
+        @Json(name = "viewpoint_id") val viewpointId: Long,
+    )
+
+    /**
+     * 观点分析结果（客户端投影）。
+     *
+     * 字段与后端 `schemas/ai_output.ViewpointAnalysisOutput` 对齐，但**不经 Moshi**：
+     * 它来自流式协议的 `structured` 字段（一个通用 `Map<String, Any?>`），
+     * 由 ViewModel 手工取值组装——与信件解读、复盘结果的处理方式一致。
+     *
+     * `dimensions` 里**没有分数**：AI 只回答方向与强度，具体移动多少由服务端算。
+     */
+    data class ViewpointAnalysis(
+        val summary: String = "",
+        val values: List<String> = emptyList(),
+        val stance: String = "",
+        val confidence: Float = 0f,
+        val basis: List<String> = emptyList(),
+        val suggestEnrich: Boolean = false,
+        val dimensions: List<SuggestedDimension> = emptyList(),
+    )
+
+    data class SuggestedDimension(
+        val dimensionKey: String,
+        /** up = 这一项更强 / down = 更弱。 */
+        val direction: String,
+        val strength: String = "mild",
+    )
+
     /**
      * 关系复盘的结构化结果。
      *

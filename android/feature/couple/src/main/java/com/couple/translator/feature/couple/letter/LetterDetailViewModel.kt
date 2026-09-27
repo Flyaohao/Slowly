@@ -42,10 +42,27 @@ data class LetterDetailUiState(
     /** 最近一次生成的状态：done / interrupted。中断的半成品同样会保留展示。 */
     val understandingStatus: String = "",
     val error: String = "",
+
+    // ---- AI 回信建议 ----
+    // 这套接口一直存在（POST /ai/generate-reply），此前全仓没有任何 UI 调用它。
+    val isReplyLoading: Boolean = false,
+    val reply: ReplySuggestion? = null,
+    val replyError: String = "",
+    val showReply: Boolean = false,
 ) {
     /** 解读结果是否已经拿到了结构化字段（决定渲染要点卡片还是纯正文）。 */
     val hasStructured: Boolean get() = understanding != null
 }
+
+/** AI 回信建议：几个可以直接用的版本 + 一句「别这么说」。 */
+data class ReplySuggestion(
+    val summary: String = "",
+    val variants: List<ReplyVariantUi> = emptyList(),
+    val doNotSay: String = "",
+    val riskLevel: String = "normal",
+)
+
+data class ReplyVariantUi(val style: String, val content: String)
 
 sealed class LetterDetailUiEvent {
     data class ShowError(val message: String) : LetterDetailUiEvent()
@@ -271,6 +288,58 @@ class LetterDetailViewModel @Inject constructor(
 
     fun dismissUnderstanding() {
         _uiState.update { it.copy(showUnderstanding = false) }
+    }
+
+    /**
+     * AI 建议怎么回。
+     *
+     * 与「AI 帮我理解」是两件事：那个读懂**来信**，这个产出**拟回复**。
+     * 所以状态也完全独立（isReply* 而非复用 isStreaming），同时进行时不会互相覆盖。
+     *
+     * 走同步接口而不是流式：回信建议的产物是「几个可选版本」的列表，
+     * 用户要的是挑一条来用，不是看着它一个字一个字长出来。
+     */
+    fun generateReply() {
+        val letter = _uiState.value.letter ?: return
+        if (_uiState.value.isReplyLoading) return
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(isReplyLoading = true, replyError = "", showReply = true)
+            }
+            letterRepository.generateReply(letter.id).fold(
+                onSuccess = { response ->
+                    val result = response?.reply
+                    _uiState.update {
+                        it.copy(
+                            isReplyLoading = false,
+                            reply = result?.let { r ->
+                                ReplySuggestion(
+                                    summary = r.summary.orEmpty(),
+                                    variants = r.replies.map { v ->
+                                        ReplyVariantUi(style = v.style, content = v.content)
+                                    },
+                                    doNotSay = r.doNotSay.orEmpty(),
+                                    riskLevel = r.riskLevel.orEmpty(),
+                                )
+                            },
+                            // 有回信但结构化字段缺失时给一句可执行的提示，
+                            // 而不是留一片空白让用户以为按钮坏了
+                            replyError = if (result == null) "这次没能给出建议，可以再试一次" else "",
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(isReplyLoading = false, replyError = e.message ?: "生成失败")
+                    }
+                },
+            )
+        }
+    }
+
+    fun dismissReply() {
+        _uiState.update { it.copy(showReply = false) }
     }
 
     fun deleteLetter() {

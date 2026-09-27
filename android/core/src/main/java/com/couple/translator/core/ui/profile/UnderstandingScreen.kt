@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Quiz
+import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -219,6 +220,16 @@ fun UnderstandingScreen(
                     leadingIcon = Icons.Outlined.History,
                     showChevron = true,
                     onClick = { onNavigateToRoute(Screen.QuestionnaireHistory.route) },
+                )
+                // 用户需求 #5：观点能自动补充画像，所以画像必须能回到过去——
+                // 没有后悔药就不能开这个写入的口子。
+                AppListItemDivider()
+                AppListItem(
+                    title = "画像历史版本",
+                    subtitle = "看每一次变化，也能撤回到某一个版本",
+                    leadingIcon = Icons.Outlined.Restore,
+                    showChevron = true,
+                    onClick = { onNavigateToRoute(Screen.ProfileVersions.route) },
                 )
             }
 

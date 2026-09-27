@@ -46,7 +46,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.data.model.ProfileDimensionLabels
 import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppPrimaryButton
 import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.SkeletonDetailPage
 import com.couple.translator.core.ui.components.pressFeedback
@@ -233,6 +236,14 @@ fun DiaryDetailScreen(
                             // 内容 — 使用 Markwon 渲染 Markdown
                             MarkdownContent(content = diary.content)
 
+                            // 让军师读一读 → 建议是否写进画像 → 用户确认后才落库
+                            ViewpointAnalysisSection(
+                                uiState = uiState,
+                                onAnalyze = { viewModel.analyzeViewpoint() },
+                                onEnrich = { viewModel.enrichProfile() },
+                                onDismissResult = { viewModel.dismissEnrichResult() },
+                            )
+
                             Spacer(modifier = Modifier.height(40.dp))
                         }
                     }
@@ -263,6 +274,185 @@ fun DiaryDetailScreen(
                 }
             },
         )
+    }
+}
+
+// ==================== 让军师读一读 ====================
+
+/**
+ * 观点分析区：把这条观点交给军师读，得到「它说明了什么」+「要不要写进画像」，
+ * 用户确认后才由服务端按幅度规则写进画像。
+ *
+ * 为什么按钮要点第二次：**分析与写入是两件事**。分析只产出建议；自动写入等于让
+ * 一次模型生成直接改画像，而画像是这个产品最不该被一次生成左右的东西。
+ */
+@Composable
+private fun ViewpointAnalysisSection(
+    uiState: DiaryDetailUiState,
+    onAnalyze: () -> Unit,
+    onEnrich: () -> Unit,
+    onDismissResult: () -> Unit,
+) {
+    val analysis = uiState.analysis
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Spacer(modifier = Modifier.height(28.dp))
+
+        if (analysis == null && !uiState.isAnalyzing) {
+            AppCard {
+                Text(
+                    text = "让军师读一读",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = AppTextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "它会读懂这段看法，判断能不能成为「它对你的理解」的一部分。" +
+                        "写入前先给建议，你同意才生效；之后可以在人格画像里撤回。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextSecondary,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                AppPrimaryButton(text = "让军师读一读", onClick = onAnalyze)
+            }
+        }
+
+        if (uiState.isAnalyzing) {
+            AppCard {
+                Text(
+                    text = "军师正在读…",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = AppTextPrimary,
+                )
+                if (uiState.analysisThinking.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = uiState.analysisThinking,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextTertiary,
+                        maxLines = 6,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (uiState.analysisContent.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = uiState.analysisContent,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTextPrimary,
+                    )
+                }
+            }
+        }
+
+        if (analysis != null) {
+            AppCard {
+                Text(
+                    text = "军师读到的",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AppAccent,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = analysis.summary.ifBlank { uiState.analysisContent },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTextPrimary,
+                )
+
+                if (analysis.values.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "你在意的是：" + analysis.values.joinToString("、"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextSecondary,
+                    )
+                }
+
+                if (analysis.basis.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "依据来自你写的：" + analysis.basis.joinToString("；"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextTertiary,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (analysis.suggestEnrich && analysis.dimensions.isNotEmpty()) {
+                    Text(
+                        text = "建议补充到画像",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = AppAccent,
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    analysis.dimensions.forEach { d ->
+                        Text(
+                            text = "· ${ProfileDimensionLabels.of(d.dimensionKey)}" +
+                                if (d.direction == "up") " ↑" else " ↓",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AppTextPrimary,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "把握 ${(analysis.confidence * 100).toInt()}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextTertiary,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    AppPrimaryButton(
+                        text = if (uiState.isEnriching) "正在补充…" else "补充到画像",
+                        onClick = { if (!uiState.isEnriching) onEnrich() },
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "补充会新建一个画像版本，不覆盖当前版本；不满意可以撤回。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextTertiary,
+                    )
+                } else {
+                    // 模型判"还不值得写"时的正常结果，不是错误——说清为什么，
+                    // 否则用户会以为分析失败
+                    Text(
+                        text = "这段还不足以写进画像：它更像当下的感受，而不是稳定的看法。" +
+                            "等你更确定时再写一次，军师会重新读。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextSecondary,
+                    )
+                }
+            }
+        }
+
+        uiState.analysisError?.let { msg ->
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = msg,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppErrorRed,
+            )
+        }
+
+        uiState.enrichResult?.let { msg ->
+            Spacer(modifier = Modifier.height(10.dp))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = AppSurface,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = msg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextPrimary,
+                    )
+                    TextButton(onClick = onDismissResult) {
+                        Text("知道了", color = AppAccent)
+                    }
+                }
+            }
+        }
     }
 }
 

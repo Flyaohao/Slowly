@@ -33,15 +33,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.common.copyToClipboard
+import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppTopBarAction
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.SkeletonDetailPage
 import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppTextPrimary
@@ -243,6 +246,24 @@ fun LetterDetailScreen(
                         color = AppAccent,
                     )
                 }
+                Spacer(modifier = Modifier.width(8.dp))
+                // 读懂来信之后自然要多一步：这封该怎么回。接口一直有，此前没有入口。
+                TextButton(onClick = { viewModel.generateReply() }) {
+                    Text(
+                        text = if (uiState.isReplyLoading) "正在想…" else "AI 建议怎么回",
+                        color = AppAccent,
+                    )
+                }
+            }
+
+            if (uiState.showReply) {
+                Spacer(modifier = Modifier.height(16.dp))
+                ReplySuggestionCard(
+                    suggestion = uiState.reply,
+                    isLoading = uiState.isReplyLoading,
+                    error = uiState.replyError,
+                    onDismiss = { viewModel.dismissReply() },
+                )
             }
 
             if (uiState.showUnderstanding) {
@@ -261,6 +282,115 @@ fun LetterDetailScreen(
             }
 
             Spacer(modifier = Modifier.height(48.dp))
+        }
+    }
+}
+
+/**
+ * AI 回信建议卡：几个可以直接发出的版本 + 一句「别这么说」。
+ *
+ * 每个版本都能单独复制——用户要的是挑一条发出去，不是读一篇回信方法论。
+ * 风险等级非 normal 时只提示「先看 AI 理解」，不在卡片里复述风险内容：
+ * 同一件事说两遍，第二遍只会稀释第一遍的分量。
+ */
+@Composable
+private fun ReplySuggestionCard(
+    suggestion: ReplySuggestion?,
+    isLoading: Boolean,
+    error: String,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+
+    AppCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "怎么回这封信",
+                style = MaterialTheme.typography.titleSmall,
+                color = AppTextPrimary,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onDismiss) {
+                Text("收起", color = AppAccent)
+            }
+        }
+
+        when {
+            isLoading -> {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "正在想…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTextTertiary,
+                )
+            }
+
+            suggestion == null -> {
+                if (error.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppErrorRed,
+                    )
+                }
+            }
+
+            else -> {
+                if (suggestion.summary.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = suggestion.summary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTextPrimary,
+                    )
+                }
+
+                suggestion.variants.forEach { variant ->
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = variant.style,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = AppAccent,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = variant.content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTextPrimary,
+                    )
+                    TextButton(onClick = { context.copyToClipboard(variant.content) }) {
+                        Text("复制这条", color = AppAccent)
+                    }
+                }
+
+                if (suggestion.doNotSay.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "这次别说",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = AppErrorRed,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = suggestion.doNotSay,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextSecondary,
+                    )
+                }
+
+                if (suggestion.riskLevel.isNotBlank() && suggestion.riskLevel != "normal") {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "这封信里有需要当心的地方，回之前先看一眼上面「AI 帮我理解」的提示。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppErrorRed,
+                    )
+                }
+            }
         }
     }
 }

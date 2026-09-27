@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.EventNote
+import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.LocationOn
@@ -145,6 +146,13 @@ fun DrawerContent(
                 onClick = { onNavigateToRoute(Screen.AdvisorSettings.route) },
             )
             // 2026-09-27 用户裁决：抽屉补齐关系内容入口。
+            // 观点 = 日记（同一份数据、同一批页面）。用户主动写下的看法比 AI 推断更可信，
+            // 所以它既是内容入口，也是画像里「价值取向」那一维的证据来源。
+            DrawerNavItem(
+                icon = Icons.Outlined.Lightbulb,
+                label = "观点",
+                onClick = { onNavigateToRoute(Screen.DiaryList.route) },
+            )
             DrawerNavItem(
                 icon = Icons.Outlined.MailOutline,
                 label = "深度表达",

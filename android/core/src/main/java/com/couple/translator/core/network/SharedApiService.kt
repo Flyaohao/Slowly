@@ -157,6 +157,51 @@ interface SharedApiService {
     @GET("api/v1/profiles/me/ai-report")
     suspend fun getAiReport(): ApiResponse<ProfileDto.AiReportResponse>
 
+    // ---- 观点分析（用户需求 #5）----
+    /**
+     * 观点分析流式接口（SSE）。产出「这段观点说明了什么 + 要不要写进画像」。
+     *
+     * 端点挂在 couple 前缀下，但只要求登录：观点是**个人资产**，
+     * 后端 relation_id 显式允许为空，单身模式同样可用。
+     */
+    @Streaming
+    @POST("api/v1/couple/ai/viewpoint-analysis/stream")
+    suspend fun viewpointAnalysisStream(
+        @Body body: AiDto.ViewpointAnalysisRequest,
+    ): Response<ResponseBody>
+
+    // ---- 画像版本与丰富（用户需求 #5）----
+    /** 用一条观点补充画像：服务端派生新版本，**必须由用户确认后再调**。 */
+    @POST("api/v1/profiles/me/enrich")
+    suspend fun enrichProfile(
+        @Body body: ProfileDto.EnrichRequest,
+    ): ApiResponse<ProfileDto.EnrichResponse>
+
+    @GET("api/v1/profiles/versions")
+    suspend fun getProfileVersions(): ApiResponse<List<ProfileDto.ProfileVersionResponse>>
+
+    @GET("api/v1/profiles/versions/{id}")
+    suspend fun getProfileVersion(
+        @Path("id") versionId: Long,
+    ): ApiResponse<ProfileDto.ProfileVersionDetailResponse>
+
+    /** 与 `base` 对比；base=0 表示以当前最新版本为基准。 */
+    @GET("api/v1/profiles/versions/{id}/diff")
+    suspend fun diffProfileVersion(
+        @Path("id") versionId: Long,
+        @Query("base") base: Long = 0L,
+    ): ApiResponse<ProfileDto.VersionDiffResponse>
+
+    @POST("api/v1/profiles/versions/{id}/restore")
+    suspend fun restoreProfileVersion(
+        @Path("id") versionId: Long,
+    ): ApiResponse<ProfileDto.EnrichResponse>
+
+    @DELETE("api/v1/profiles/versions/{id}")
+    suspend fun deleteProfileVersion(
+        @Path("id") versionId: Long,
+    ): ApiResponse<Unit>
+
     // Advisor settings（契约 §3.3，common 前缀，单双模式通用）
     @GET("api/v1/advisor/settings")
     suspend fun getAdvisorSettings(): ApiResponse<AdvisorDto.AdvisorSettings>

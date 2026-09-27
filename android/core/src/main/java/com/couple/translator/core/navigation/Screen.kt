@@ -55,6 +55,8 @@ enum class Screen(val route: String) {
 
     // 收敛期新增页（W4.3 画像三合一 / W4.4 军师设置；仅新增，既有路由字符串不动）
     Understanding("understanding"),
+    /** 画像历史版本：看 / 比 / 撤回（用户需求 #5）。 */
+    ProfileVersions("profile_versions"),
     AdvisorSettings("advisor_settings"),
 
     // 整改 §8.3：AI 建议采用后回填结果的待反馈页（首页 feedback_outcome 任务卡入口）

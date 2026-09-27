@@ -68,6 +68,7 @@ import com.couple.translator.feature.couple.museum.MuseumScreen
 import com.couple.translator.core.ui.profile.CoupleProfileScreen
 import com.couple.translator.core.ui.profile.ProfileResultScreen
 import com.couple.translator.core.ui.profile.ProfileScreen
+import com.couple.translator.core.ui.profile.ProfileVersionsScreen
 import com.couple.translator.core.ui.profile.UnderstandingScreen
 import com.couple.translator.core.ui.questionnaire.QuestionnaireHistoryScreen
 import com.couple.translator.core.ui.questionnaire.QuestionnaireIntroScreen
@@ -333,6 +334,13 @@ fun NavGraph(
             UnderstandingScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToRoute = { route -> navController.navigate(route) },
+            )
+        }
+
+        // 画像历史版本（用户需求 #5）：观点能补充画像，所以画像必须能回到过去
+        composable(Screen.ProfileVersions.route) {
+            ProfileVersionsScreen(
+                onNavigateBack = { navController.popBackStack() },
             )
         }
 
@@ -847,7 +855,8 @@ fun NavGraph(
             )
         }
 
-        // Diary (单身模式专属)
+        // 观点（= 日记，同一份数据）。单身侧底栏叫「日记」，情侣抽屉里叫「观点」；
+        // 这个根路由就是抽屉那条入口，所以按二级页处理（返回而非抽屉图标）。
         composable(Screen.DiaryList.route) {
             DiaryListScreen(
                 onOpenDrawer = {},
@@ -857,6 +866,8 @@ fun NavGraph(
                 onNavigateToCompose = {
                     navController.navigate(Screen.ComposeDiary.route)
                 },
+                title = "观点",
+                onNavigateBack = { navController.popBackStack() },
             )
         }
 
