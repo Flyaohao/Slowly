@@ -80,12 +80,24 @@ private val safetyWarnings = mapOf(
 /** P-A §2.2：wire 风险等级 → 本地文案（用于正文去重比对；null=无卡片）。 */
 fun safetyCannedMessage(level: AiRiskLevel): String? = safetyWarnings[level]?.message
 
+/**
+ * 这个风险等级**有没有**对应的本地卡片。
+ *
+ * 整改 B4.3 P0-4：`UNKNOWN` 与 `HEATED_CONFLICT` 之外的档位都没有文案，
+ * 所以**不渲染卡片**——但「没有卡片」与「可以放行」是两件事，见
+ * `AiChatViewModel.mediationBlockedByRisk`：UNKNOWN 不渲染卡片，**仍然阻断**
+ * 双人动作。把这两件事混在一起正是旧实现 fail open 的病根。
+ */
+fun hasSafetyCard(level: AiRiskLevel?): Boolean = level != null && safetyWarnings.containsKey(level)
+
 @Composable
 fun SafetyWarningCard(
     riskLevel: AiRiskLevel,
     onAction: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    // UNKNOWN 没有本地文案可渲染——它不是「某一档危险」，是「不知道有多危险」。
+    // 这里直接不渲染；阻断动作的责任在 mediationBlockedByRisk，不在这张卡片。
     val warning = safetyWarnings[riskLevel] ?: return
     val isDark = AppIsDark
     // 深色模式不能沿用浅色警示底（会在黑底上炸出一块白），改为同色系的深底 + 提亮图标色
@@ -102,6 +114,10 @@ fun SafetyWarningCard(
         AiRiskLevel.SELF_HARM_RISK ->
             if (isDark) Color(0xFF4A1A1C) to Color(0xFFFF8A80)
             else Color(0xFFFFCDD2) to Color(0xFFB71C1C)
+        // 走不到：上面 `safetyWarnings[riskLevel] ?: return` 已经挡掉没有文案的档位。
+        // 显式写出来而不是加 `else`，是为了让「以后新增一个档位」时编译器
+        // 在这里报错——新档位必须有文案，否则它会静默地什么都不显示。
+        AiRiskLevel.UNKNOWN -> Color.Transparent to AppErrorRed
     }
     // 深色下按钮底是提亮色，文字改用深底同色；浅色保持原有取色不变
     val buttonContentColor =

@@ -121,6 +121,13 @@ fun MediationHistoryScreen(
                         title = item.title ?: "双人调解",
                         subtitle = listOfNotNull(
                             item.myRole?.let { if (it == "inviter") "你发起的" else "对方发起的" },
+                            // 整改 B4.3 P0-2：状态标签由 [MediationFlow.historyStatusLabel]
+                            // 统一裁决，**不在这一行里写 when**。
+                            // 为什么必须集中：安全终止（safety_blocked）绝不能显示成
+                            // 「已完成」——那等于告诉用户「你们把这件事谈开了」，而事实
+                            // 是 AI 拒绝了这次调解。标签规则一旦分散到各个列表里，
+                            // 总有一个列表会漏掉这个区分。
+                            MediationFlow.historyStatusLabel(item.mediationStatus),
                             item.updatedAt?.take(10) ?: item.createdAt?.take(10),
                         ).joinToString(" · "),
                         leadingIcon = Icons.Outlined.History,

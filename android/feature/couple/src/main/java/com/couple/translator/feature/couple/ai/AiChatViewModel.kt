@@ -70,6 +70,87 @@ object FeatureGate {
 }
 
 /**
+ * 一条回答的**意图**（后端 `ActionIntent`；整改 B4.3 P1-7）。
+ *
+ * 为什么必须是一个独立字段而不是「按 sceneKey 推断」：同一个 sceneKey 下意图
+ * 可以不同。`private_advisor` 既可能在做**冲突分析**（该给「发起双人调解」），
+ * 也可能只是**情绪倾诉**（该只让用户继续说下去）。按 sceneKey 一刀切会把这两种
+ * 完全相反的处置混成一件事——那正是整改前行动行的病根：动作只由「有哪些字段非空」
+ * 决定，于是任何一次带 suggested_reply 的回答都会长出一排复制/分享/写信/双视角。
+ *
+ * `UNKNOWN` 是 fail closed 的落点：模型没给、给了非法值、或结构缺失时只保留
+ * 「复制原回答」这一条最无害的出路。
+ */
+enum class AiIntent {
+    EXPRESSION_REWRITE,
+    PARTNER_TRANSLATE,
+    PRIVATE_ADVISOR,
+    EMOTION_SUPPORT,
+    COLD_WAR,
+    RELATIONSHIP_REVIEW,
+    UNKNOWN;
+
+    companion object {
+        /**
+         * 后端 `ActionIntent` 枚举里**会**出现在 wire 上的全部字面量。
+         *
+         * 被 `AiIntentContractTest` 直接断言：后端一旦新增意图取值，两侧集合
+         * 就对不上，测试立刻失败——而不是等某个新意图在客户端静默回落到兜底。
+         */
+        val WIRE_VALUES = listOf(
+            "expression_rewrite",
+            "partner_translate",
+            "private_advisor",
+            "emotion_support",
+            "cold_war",
+            "relationship_review",
+            "unknown",
+        )
+
+        /**
+         * wire 值 → 意图。除大小写/首尾空格外**不做任何模糊匹配**：
+         * 认错方向的代价不对称（把一次倾诉认成冲突 → 给用户一个会把伴侣
+         * 拉进同一场会话的按钮）。
+         */
+        fun fromWire(raw: String?): AiIntent = when (raw?.trim()?.lowercase()) {
+            "expression_rewrite" -> EXPRESSION_REWRITE
+            "partner_translate" -> PARTNER_TRANSLATE
+            "private_advisor" -> PRIVATE_ADVISOR
+            "emotion_support" -> EMOTION_SUPPORT
+            "cold_war" -> COLD_WAR
+            "relationship_review" -> RELATIONSHIP_REVIEW
+            // 后端 P0-4 起会把「无法归类」显式下发成 `unknown`。它与
+            // 「客户端自己认不出来」落到同一个枚举值，处置也相同（只留复制）。
+            // 单列出来而不是并进 `else`，是为了让契约测试能比对两端字面量：
+            // 一个显式契约值和一个解析失败，在 wire 上是两件事。
+            "unknown" -> UNKNOWN
+            else -> UNKNOWN
+        }
+    }
+}
+
+/**
+ * 场景 → 意图的**兜底映射**（整改 B4.3 P1-7）。
+ *
+ * 只在模型没给 `intent` 时使用。它不是「猜」：`sceneKey` 是用户自己选的、
+ * 或服务端会话上记着的**结构化**字段，不是从正文里做关键词匹配——
+ * 拿正文当路由依据才是被禁止的那件事。
+ *
+ * 兜底存在的理由：意图由模型产出，模型少填一次字段不该让整行动作凭空消失
+ * （那是静默的能力回退）。兜底值取该场景最常见的意图，且**不引入任何
+ * 该场景原本没有的动作**——即：兜底后的行为与整改前逐字节一致，
+ * 模型的意图只可能让它更准，不可能让它更危险。
+ */
+fun intentOfScene(sceneKey: String): AiIntent = when (sceneKey) {
+    "expression_rewrite" -> AiIntent.EXPRESSION_REWRITE
+    "partner_translate" -> AiIntent.PARTNER_TRANSLATE
+    "cold_war" -> AiIntent.COLD_WAR
+    "relationship_review" -> AiIntent.RELATIONSHIP_REVIEW
+    "private_advisor" -> AiIntent.PRIVATE_ADVISOR
+    else -> AiIntent.UNKNOWN
+}
+
+/**
  * 一条回复的行动行分组（整改 B4.1-P1）。
  *
  * 为什么必须分组：`actionsFor` 此前是**无条件堆叠**——只要有可复制内容，
@@ -109,17 +190,15 @@ fun copyableReplyOf(structured: AiDto.StructuredOutput?, content: String): Strin
 }
 
 /**
- * 场景/语境 → 行动行（§8.2「按场景给上下文动作，非永久全按钮」+ B4.1-P1 收敛）。
+ * 场景/语境 → 行动行（§8.2「按场景给上下文动作，非永久全按钮」+ B4.1-P1 收敛
+ * + B4.3 P1-7 按意图路由）。
  *
- * 排序即优先级，前 [ActionLimits.PRIMARY_MAX] 个是主动作：
+ * 路由表在 [orderedActionsFor]（它是唯一裁决点，可单测）。这里只做两件事：
  *
- * 1. **发起双人调解**：只在两个条件同时成立时出现——军师判定这是双方矛盾
- *    （`suggestMediation`，由后端 `AdvisorOutput.suggest_mediation` 下发）
- *    **且**门控已开。冲突语境下「把两个人都拉进来说」比「换句话再说一遍」更治本，
- *    所以它排第一。它只做**导航**：真正的会话由后端在用户点过说明页的
- *    「开始调解」之后创建，模型不替用户发邀请。
- * 2. **复制这段表达**：有可复制内容（建议回复 / 破冰话术 / 改写）才给。
- * 3. 分享、整理成一封信、邀请双视角、记录为复盘——按可用实体收敛后进「更多」。
+ * 1. 把「门控」和「意图」两个已裁决的输入喂进去——门控只在这一处求值，
+ *    模型说「你们在吵」不够，产品开关没开就不许出现；
+ * 2. 把有序全集切成 [AiActionPlan]：前 [ActionLimits.PRIMARY_MAX] 个是主动作，
+ *    其余折进「更多」。
  *
  * 反馈**不在本函数里**：它由 [AiFeedbackRow] 作为次级控件渲染（见 [AiActionPlan]）。
  */
@@ -134,11 +213,30 @@ fun actionPlanFor(
         // 门控只在这一处裁决：模型说「你们在吵」不够，产品开关没开就不许出现。
         suggestMediation = FeatureGate.MEDIATION && structured?.suggestMediation == true,
         riskLevel = riskLevel,
+        intent = resolveIntent(sceneKey, structured),
     )
     return AiActionPlan(
         primary = ordered.take(ActionLimits.PRIMARY_MAX),
         more = ordered.drop(ActionLimits.PRIMARY_MAX),
     )
+}
+
+/**
+ * 取本次回答的意图（整改 B4.3 P1-7）。
+ *
+ * 优先用模型显式给出的 `intent`；模型没给 / 给了无法识别的值时，退到
+ * [intentOfScene] 按场景兜底。**两层都不是从正文里做关键词猜测**——
+ * 正文是模型自由生成的文本，拿它当路由依据等于把「该不该把两个人关进
+ * 同一场会话」交给一次字符串匹配。
+ *
+ * 兜底的存在理由：意图由模型产出，模型少填一次字段不该让整行动作凭空消失
+ * （那是静默的能力回退）。兜底值取该场景最常见的意图，且**不引入该场景原本
+ * 没有的动作**——所以「模型没给」的最坏结果是行为与整改前一致，
+ * 模型给了才可能更准。
+ */
+fun resolveIntent(sceneKey: String, structured: AiDto.StructuredOutput?): AiIntent {
+    val wire = AiIntent.fromWire(structured?.intent)
+    return if (wire != AiIntent.UNKNOWN) wire else intentOfScene(sceneKey)
 }
 
 /**
@@ -149,44 +247,114 @@ fun actionPlanFor(
  * 发现流程走不通——那是一段残缺流程。控制/暴力/自伤语境下正确的事是把人
  * 引向安全资源，而不是把双方再关进一间屋子。
  *
- * `heated_conflict` 刻意**不在**其中：双方情绪激动正是调解要处理的场景。
- * null（normal / 未知）也不挡——不能因为解析不出等级就把正常用户的路堵死。
+ * **fail closed（整改 B4.3 P0-4）**：只有两件事可以放行——
+ * - `null`：后端**明确说了** `normal`（见 [AiRiskLevel.fromWire]）；
+ * - `HEATED_CONFLICT`：双方情绪激动正是调解要处理的场景（仍会渲染降温提示）。
+ *
+ * 其余一律挡：三个高危档位自不必说，[AiRiskLevel.UNKNOWN] 也要挡——
+ * 「解析不出等级」不是「没有风险」。旧实现把 UNKNOWN 当放行，等于后端某天
+ * 新增一个更危险的档位、或响应字段被改名时，客户端会把高风险当正常放行，
+ * 还一声不响。
  */
 fun mediationBlockedByRisk(riskLevel: AiRiskLevel?): Boolean = when (riskLevel) {
-    AiRiskLevel.MANIPULATION_RISK, AiRiskLevel.ABUSE_RISK, AiRiskLevel.SELF_HARM_RISK -> true
-    else -> false
+    null, AiRiskLevel.HEATED_CONFLICT -> false
+    AiRiskLevel.MANIPULATION_RISK,
+    AiRiskLevel.ABUSE_RISK,
+    AiRiskLevel.SELF_HARM_RISK,
+    AiRiskLevel.UNKNOWN,
+    -> true
 }
 
 /**
- * 候选动作的**有序全集**（按优先级），不含门控裁决。
+ * 候选动作的**有序全集**（整改 B4.3 P1-7：按意图的确定性路由表）。
  *
- * 单独把这层抽出来是为了让「排序规则」可被直接测试：如果排序逻辑只藏在
+ * 单独把这层抽出来是为了让「路由表」可被直接测试：如果它只藏在
  * [actionPlanFor] 里，那么「调解排第一」这条规则在门控关闭时**永远测不到**
  * ——测试只能退化成「门控关着时它不存在」，等于没测。把已裁决的
  * `suggestMediation` 作为参数传进来，测试就能在不改产品开关的前提下
- * 断言真实的排序行为。
+ * 断言真实的路由行为。
+ *
+ * ## 为什么是「按意图」而不是「按有哪些字段非空」
+ *
+ * 整改前的规则是：只要有可复制内容就给复制/分享/写信/双视角，只要有结论就给
+ * 复盘。于是**任何**一次带 `suggested_reply` 的回答都会长出一整排动作，
+ * 不管用户其实是在倾诉、在问「TA 这句话什么意思」、还是真的在吵。
+ * 用户面对一堵墙，真正该点的那个被淹在最下面。
+ *
+ * 现在每个意图有一张**确定性的**表，见下面 `when` 的每个分支。风险门控
+ * （[mediationBlockedByRisk]）**优先于所有意图路由**：`wantsMediation` /
+ * `wantsDual` 在任何分支里都先与 `canPullPartnerIn` 求与。
  */
 fun orderedActionsFor(
     sceneKey: String,
     structured: AiDto.StructuredOutput?,
     suggestMediation: Boolean,
     riskLevel: AiRiskLevel? = null,
+    intent: AiIntent = intentOfScene(sceneKey),
 ): List<AiAction> {
     val hasReply = copyableReplyOf(structured, "") != null
     // 有实质结论才谈得上「记录为复盘」：整屏空字段点一下只会得到一张空复盘
     val hasConclusion =
         !structured?.summary.isNullOrBlank() || !structured?.nextStep.isNullOrBlank()
-    // 高风险下「把人拉进同一场会话」的动作一律不给（见 [mediationBlockedByRisk]）。
+    // 风险门控优先：高风险下「把人拉进同一场会话」的动作一律不给。
     // 复制/分享/写信不挡：那是让当事人**自己**把话说好，与风险处置不冲突。
     val canPullPartnerIn = !mediationBlockedByRisk(riskLevel)
+    val wantsMediation = suggestMediation && canPullPartnerIn
+    // 双视角必须是模型**明确建议**的：把伴侣拉进一次不必要的双人作业是打扰，
+    // 而「缺省给」意味着任何一次解析失败都会打扰到对方。
+    val wantsDual = structured?.suggestDualPerspective == true && canPullPartnerIn
+    // 复盘同理：只有模型判定「有可复用的模式/触发点」才给存档入口。
+    val wantsReview = structured?.reviewWorthy == true
 
-    return buildList {
-        if (suggestMediation && canPullPartnerIn) add(AiAction.START_MEDIATION)
-        if (hasReply) add(AiAction.COPY_REPLY)
-        if (hasReply) add(AiAction.SHARE_REPLY)
-        if (hasReply) add(AiAction.MAKE_LETTER)
-        if (hasReply && canPullPartnerIn) add(AiAction.INVITE_DUAL)
-        if (sceneKey != "relationship_review" && hasConclusion) add(AiAction.SAVE_REVIEW)
+    return when (intent) {
+        // 帮我表达：复制 / 分享是主动作；写信折进「更多」——它是同一段表达的
+        // 另一种载体，不是眼下更该做的一件事。不默认给双视角。
+        AiIntent.EXPRESSION_REWRITE -> buildList {
+            if (hasReply) {
+                add(AiAction.COPY_REPLY)
+                add(AiAction.SHARE_REPLY)
+                add(AiAction.MAKE_LETTER)
+            }
+            if (wantsReview) add(AiAction.SAVE_REVIEW)
+        }
+
+        // 听懂 TA：只有「复制建议回复」这一件事。双视角仅在模型明确建议时给。
+        AiIntent.PARTNER_TRANSLATE -> buildList {
+            if (hasReply) add(AiAction.COPY_REPLY)
+            if (wantsDual) add(AiAction.INVITE_DUAL)
+        }
+
+        // 冲突分析：调解排第一（「把两个人都拉进来说」比「换句话再说一遍」更治本），
+        // 其次复制，有明确复盘价值时才给存档。
+        AiIntent.PRIVATE_ADVISOR -> buildList {
+            if (wantsMediation) add(AiAction.START_MEDIATION)
+            if (hasReply) add(AiAction.COPY_REPLY)
+            if (wantsReview) add(AiAction.SAVE_REVIEW)
+        }
+
+        // 情绪倾诉：**一个动作都不给**。用户此刻要的是被听见，不是被安排。
+        // 空计划 = 页面不渲染行动行（见 `AiActionRow` 的空判断），
+        // 剩下的唯一出路就是继续把话说完——这正是这一档该有的样子。
+        AiIntent.EMOTION_SUPPORT -> emptyList()
+
+        // 冷战：优先复制破冰表达（那才是用户点开这个场景要的东西），
+        // 只有在**安全且模型明确建议**时才把调解放到它后面。
+        AiIntent.COLD_WAR -> buildList {
+            if (hasReply) add(AiAction.COPY_REPLY)
+            if (wantsMediation) add(AiAction.START_MEDIATION)
+        }
+
+        // 关系复盘：看/存复盘。**不显示写信与双视角**——复盘页自己有完整入口，
+        // 而「邀请伴侣补充双视角」在一次复盘里是把私密反思变成双人作业。
+        AiIntent.RELATIONSHIP_REVIEW -> buildList {
+            if (wantsReview || hasConclusion) add(AiAction.SAVE_REVIEW)
+            if (hasReply) add(AiAction.COPY_REPLY)
+        }
+
+        // 无法归类（fail closed）：最多复制原回答。不猜、不给双人动作。
+        AiIntent.UNKNOWN -> buildList {
+            if (hasReply) add(AiAction.COPY_REPLY)
+        }
     }
 }
 

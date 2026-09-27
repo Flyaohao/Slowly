@@ -342,6 +342,29 @@ object AiDto {
          * 只有测试手工构造得出来，等于把「入口缺失」盖住了。
          */
         @Json(name = "suggest_mediation") val suggestMediation: Boolean = false,
+        // ---- 整改 B4.3 P1-7：行动行路由的三个**结构化**输入 ----
+        //
+        // 为什么必须由模型给、而不是客户端按 sceneKey 猜：同一个 sceneKey 下
+        // 意图可以不同——`private_advisor` 既可能在做冲突分析（该给调解），
+        // 也可能只是情绪倾诉（只该给「继续对话」）。按 sceneKey 一刀切会把
+        // 这两种完全不同的处置混成一件事。
+        //
+        // 也**禁止**从正文里做关键词猜测：正文是模型自由生成的，拿它当路由
+        // 依据等于把「该不该把两个人关进同一场会话」交给一次字符串匹配。
+        /**
+         * 本次回答的意图（后端 `ActionIntent`）。null / 非法值一律按 unknown
+         * 处理 → 只保留「复制原回答」这一条最无害的出路（fail closed）。
+         */
+        @Json(name = "intent") val intent: String? = null,
+        /**
+         * 是否**明确建议**邀请伴侣补充双视角。
+         *
+         * 默认 false 且必须显式为 true 才给这个动作：把伴侣拉进一次不必要的
+         * 双人作业是打扰，而「缺省给」意味着任何一次解析失败都会打扰到对方。
+         */
+        @Json(name = "suggest_dual_perspective") val suggestDualPerspective: Boolean = false,
+        /** 这次对话是否**值得存档为一次关系复盘**（有可复用的模式/触发点才 true）。 */
+        @Json(name = "review_worthy") val reviewWorthy: Boolean = false,
         /**
          * 原始结构化 Map（不参与序列化）：行动行需要读后端某场景独有的键
          * （opening_lines / rewrites / event_id …），逐个补字段会漏；由

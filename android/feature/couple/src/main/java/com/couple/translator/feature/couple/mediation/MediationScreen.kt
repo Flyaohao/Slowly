@@ -42,6 +42,7 @@ import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppWarm
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
@@ -574,6 +575,52 @@ private fun WaitingPausedCard(
     }
 }
 
+/**
+ * 整改 B4.3 P0-2：**安全终止**卡片。
+ *
+ * 这一屏不是「调解结果」，是「这次调解被主动叫停」。所以它必须和
+ * [GenerationFailureCard]（技术失败）、[WaitingPausedCard]（还没好）在视觉上
+ * 是三张不同的卡：没有转圈、没有重试、没有「下一步」。
+ *
+ * 用暖色而不是错误红：高风险语境下的叫停是一次**保护动作**，不是系统故障，
+ * 把它渲染成红色报错会让用户以为是自己操作坏了，而不是「你们需要先照顾好自己」。
+ *
+ * @param message 服务端下发的安全资源文案；null 表示服务端没给（此时只显示
+ *   标题与固定引导语，**不编造**一段假的「安全提示」冒充服务端内容）。
+ */
+@Composable
+private fun SafetyTerminalCard(message: String?) {
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(AppRadius.md),
+        contentPadding = PaddingValues(20.dp),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "这次调解已安全终止",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = AppWarm,
+            )
+            if (!message.isNullOrBlank()) {
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Text(
+                text = "这次对话没有生成调解总结，双方写下的内容也不会作为调解结论展示。" +
+                    "如果你们正处在很难受的时刻，先照顾好自己，比把这件事谈完更重要。",
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTextSecondary,
+            )
+        }
+    }
+}
+
 @Composable
 fun MediationConfirmScreen(
     sessionId: Long,
@@ -869,6 +916,14 @@ fun MediationResultScreen(
                 )
             }
 
+            // 整改 B4.3 P0-2：安全终止是**独立终态**。只渲染安全提示，
+            // 不显示任何总结、不给任何推进动作、也不给「重试生成」——
+            // 这一场本来就不该有调解产物，把它讲成「没有留下总结」等于
+            // 把一次主动的安全干预说成技术故障。
+            if (uiState.safetyBlocked) {
+                SafetyTerminalCard(message = uiState.safetyMessage)
+            }
+
             if (uiState.isEmpty) {
                 AppEmptyState(
                     icon = Icons.Outlined.Forum,
@@ -918,11 +973,12 @@ fun MediationResultScreen(
                     enabled = !uiState.isLoading,
                 )
 
-                AppSecondaryButton(
-                    text = "暂停一下",
-                    onClick = { viewModel.chooseNextAction("pause") },
-                    enabled = !uiState.isLoading,
-                )
+                // 整改 B4.3 P1-6：这里此前有一枚「暂停一下」→ `pause`。
+                // 后端收到 pause 走的是 `pass` 后返回成功，**什么都没发生**——
+                // 用户点了一枚不会改变任何状态的按钮。产品裁决是**删除**这个
+                // 假功能（而不是新增一个 paused 状态）：后端现在明确拒绝
+                // pause（40001 无效操作），客户端也不该再把它渲染出来。
+                // 留一枚注定被服务端拒掉的按钮，比没有按钮更糟。
 
                 AppSecondaryButton(
                     text = "结束调解",

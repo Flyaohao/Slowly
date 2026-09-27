@@ -49,6 +49,13 @@ object MediationDto {
         @Json(name = "differences") val differences: List<String> = emptyList(),
         @Json(name = "next_actions") val nextActions: List<String> = emptyList(),
         @Json(name = "risk_level") val riskLevel: String? = null,
+        /**
+         * 整改 B4.3 P0-2：高风险阻断时服务端落下的安全资源正文。
+         *
+         * 它是**安全提示**而不是调解产物——有它就意味着这次调解被主动终止，
+         * 界面必须只渲染这段文案，不显示任何总结与推进动作。
+         */
+        @Json(name = "safety_response") val safetyResponse: String? = null,
     )
 
     @JsonClass(generateAdapter = true)
