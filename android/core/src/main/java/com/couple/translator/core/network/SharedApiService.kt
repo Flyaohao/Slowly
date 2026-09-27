@@ -221,6 +221,16 @@ interface SharedApiService {
         @Path("id") diaryId: Long,
     ): ApiResponse<Unit>
 
+    // 军师记忆沉淀总开关（关系级；关闭后服务端直接阻断三类蒸馏入口，连模型调用都不发）
+    // 未绑定关系返回业务码 30005，由上层当作「分组隐藏」的正常态处理，不算故障。
+    @GET("api/v1/couple/ai/memory/distill-switch")
+    suspend fun getDistillSwitch(): ApiResponse<ProfileDto.DistillSwitchResponse>
+
+    @PUT("api/v1/couple/ai/memory/distill-switch")
+    suspend fun updateDistillSwitch(
+        @Body body: ProfileDto.DistillSwitchUpdateRequest,
+    ): ApiResponse<ProfileDto.DistillSwitchResponse>
+
     // Advisor settings（契约 §3.3，common 前缀，单双模式通用）
     @GET("api/v1/advisor/settings")
     suspend fun getAdvisorSettings(): ApiResponse<AdvisorDto.AdvisorSettings>

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -82,10 +83,15 @@ fun SettingsScreen(
     notificationPref: NotificationPrefUiState = NotificationPrefUiState(),
     onEmailNotifyChange: (Boolean) -> Unit = {},
     onNotificationPrefErrorShown: () -> Unit = {},
+    distillSwitch: DistillSwitchUiState = DistillSwitchUiState(),
+    onDistillToggle: (Boolean) -> Unit = {},
+    onDistillErrorShown: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     var showAbout by remember { mutableStateOf(false) }
+    // 开→关 的二次确认弹窗（决策点①：双人资产单方关闭影响对方，防误触）
+    var showDistillConfirm by remember { mutableStateOf(false) }
 
     // 版本号直接问系统要，不在界面上硬编码——写死的版本号迟早会和
     // build.gradle 里的 versionName 对不上，那是最容易露怯的一处细节。
@@ -116,6 +122,15 @@ fun SettingsScreen(
         if (notificationPref.error.isNotBlank()) {
             snackbarHostState.showSnackbar(notificationPref.error)
             onNotificationPrefErrorShown()
+        }
+    }
+
+    // 军师记忆沉淀开关的写入失败提示：开关不做乐观更新，界面停回原值，
+    // 不提示的话用户同样会以为"点了没反应"。
+    LaunchedEffect(distillSwitch.distillError) {
+        if (distillSwitch.distillError.isNotBlank()) {
+            snackbarHostState.showSnackbar(distillSwitch.distillError)
+            onDistillErrorShown()
         }
     }
 
@@ -155,6 +170,45 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+
+            // 军师设置 —— 仅情侣模式且已绑定关系（决策点④：30005 整组隐藏）。
+            // 单身模式不提供军师是产品红线，isCoupleMode 条件与通知分组保持一致。
+            if (isCoupleMode && distillSwitch.distillAvailable) {
+                SectionTitle(text = "军师")
+                AppCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(0.dp),
+                ) {
+                    SwitchItem(
+                        icon = Icons.Outlined.Psychology,
+                        title = "军师记忆沉淀",
+                        subtitle = if (distillSwitch.distillEnabled) {
+                            "军师会自动从你们的对话里沉淀长期记忆"
+                        } else {
+                            "已停止沉淀，已有记忆保留但不再新增"
+                        },
+                        checked = distillSwitch.distillEnabled,
+                        enabled = !distillSwitch.distillLoading,
+                        onCheckedChange = { want ->
+                            if (want) {
+                                onDistillToggle(true)
+                            } else {
+                                showDistillConfirm = true
+                            }
+                        },
+                    )
+                }
+
+                Text(
+                    text = "关闭后只是停止自动沉淀：观点里手动选择「计入军师记忆」的内容仍会记录；" +
+                        "已有记忆仍参与军师回答，可在军师记忆列表中单独删除。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextTertiary,
+                    modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp),
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
 
             // 外观设置 —— 情侣 / 单身模式都会显示（主题跟使用模式无关）
             SectionTitle(text = "外观")
@@ -267,6 +321,28 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    if (showDistillConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDistillConfirm = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDistillConfirm = false
+                    onDistillToggle(false)
+                }) { Text("关闭") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDistillConfirm = false }) { Text("再想想") }
+            },
+            title = { Text("关闭军师记忆沉淀？") },
+            text = {
+                Text(
+                    "军师将不再从对话中学习新内容，你们两个人都会生效。" +
+                        "已有记忆不会被删除，随时可以重新打开。",
+                )
+            },
+        )
     }
 
     if (showAbout) {

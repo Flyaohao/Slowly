@@ -174,4 +174,20 @@ object ProfileDto {
     data class LinkMemoryRequest(
         @Json(name = "memory_type") val memoryType: String? = null,
     )
+
+    // ============ 军师记忆沉淀总开关（关系级，2026-09-27）============
+
+    /**
+     * 开关当前值。管的是 AI 自动沉淀（chat 蒸馏 / 会话摘要 / 事件蒸馏），
+     * 观点里手动「计入军师记忆」是显式单条操作，不走这个开关。
+     */
+    @JsonClass(generateAdapter = true)
+    data class DistillSwitchResponse(
+        @Json(name = "enabled") val enabled: Boolean = false,
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class DistillSwitchUpdateRequest(
+        @Json(name = "enabled") val enabled: Boolean,
+    )
 }

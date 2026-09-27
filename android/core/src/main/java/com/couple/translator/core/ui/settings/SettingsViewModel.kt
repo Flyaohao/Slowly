@@ -35,6 +35,22 @@ data class NotificationPrefUiState(
     val error: String = "",
 )
 
+/**
+ * 军师记忆沉淀总开关（关系级，情侣模式专属）。
+ *
+ * 字段名带 distill 前缀是为了与设计文档（决策点表）一一对应，便于对照评审。
+ */
+data class DistillSwitchUiState(
+    /** 开关当前值（服务端关系级配置，双人共享） */
+    val distillEnabled: Boolean = false,
+    /** 读取/写入请求进行中：Switch 置灰防连点 */
+    val distillLoading: Boolean = false,
+    /** false = 未绑定关系（30005）或读取失败：整个「军师」分组隐藏 */
+    val distillAvailable: Boolean = false,
+    /** 一次性的写入错误提示，展示后由界面消费掉 */
+    val distillError: String = "",
+)
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val userRepository: UserRepository,
@@ -43,8 +59,12 @@ class SettingsViewModel @Inject constructor(
     private val _state = MutableStateFlow(NotificationPrefUiState())
     val state: StateFlow<NotificationPrefUiState> = _state.asStateFlow()
 
+    private val _distillState = MutableStateFlow(DistillSwitchUiState())
+    val distillState: StateFlow<DistillSwitchUiState> = _distillState.asStateFlow()
+
     init {
         refresh()
+        refreshDistill()
     }
 
     fun refresh() {
@@ -98,5 +118,60 @@ class SettingsViewModel @Inject constructor(
 
     fun clearError() {
         _state.update { it.copy(error = "") }
+    }
+
+    fun refreshDistill() {
+        viewModelScope.launch {
+            _distillState.update { it.copy(distillLoading = true) }
+            when (val outcome = userRepository.getDistillSwitch()) {
+                is UserRepository.DistillSwitchOutcome.Ready -> _distillState.update {
+                    it.copy(
+                        distillLoading = false,
+                        distillAvailable = true,
+                        distillEnabled = outcome.enabled,
+                    )
+                }
+                // 未绑定关系：整组隐藏（决策点④），不发写入请求，也不弹错误
+                UserRepository.DistillSwitchOutcome.NoRelation -> _distillState.update {
+                    it.copy(distillLoading = false, distillAvailable = false)
+                }
+                is UserRepository.DistillSwitchOutcome.Failed -> _distillState.update {
+                    // 读失败保持分组隐藏，不弹 Snackbar——每次进页面都弹会变成骚扰
+                    it.copy(distillLoading = false, distillAvailable = false)
+                }
+            }
+        }
+    }
+
+    /**
+     * 切换军师记忆沉淀开关。不做乐观更新：请求成功前 Switch 停在原值并置灰，
+     * 失败原地不动 + Snackbar 提示（与邮件通知开关同一套模式）。
+     * 开→关 的二次确认弹窗由界面负责，这里只收最终结果。
+     */
+    fun toggleDistill(enabled: Boolean) {
+        viewModelScope.launch {
+            _distillState.update { it.copy(distillLoading = true) }
+            when (val outcome = userRepository.setDistillSwitch(enabled)) {
+                is UserRepository.DistillSwitchOutcome.Ready -> _distillState.update {
+                    it.copy(
+                        distillLoading = false,
+                        distillAvailable = true,
+                        distillEnabled = outcome.enabled,
+                    )
+                }
+                // 写的时候关系恰好被解绑：按 30005 处理，整组隐藏
+                UserRepository.DistillSwitchOutcome.NoRelation -> _distillState.update {
+                    it.copy(distillLoading = false, distillAvailable = false)
+                }
+                is UserRepository.DistillSwitchOutcome.Failed -> _distillState.update {
+                    // 开关停在原值（从未乐观改过），错误必须可见
+                    it.copy(distillLoading = false, distillError = outcome.message)
+                }
+            }
+        }
+    }
+
+    fun clearDistillError() {
+        _distillState.update { it.copy(distillError = "") }
     }
 }

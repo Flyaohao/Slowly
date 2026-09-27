@@ -917,6 +917,7 @@ fun NavGraph(
             // 通知偏好来自后端（用户级设置，换设备也要跟着走），所以走 ViewModel 而不是本地存储
             val settingsViewModel: SettingsViewModel = hiltViewModel()
             val notificationPref by settingsViewModel.state.collectAsState()
+            val distillSwitch by settingsViewModel.distillState.collectAsState()
             com.couple.translator.core.ui.settings.SettingsScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToProfile = {
@@ -937,6 +938,11 @@ fun NavGraph(
                     settingsViewModel.setEmailNotify(enabled)
                 },
                 onNotificationPrefErrorShown = { settingsViewModel.clearError() },
+                distillSwitch = distillSwitch,
+                onDistillToggle = { enabled ->
+                    settingsViewModel.toggleDistill(enabled)
+                },
+                onDistillErrorShown = { settingsViewModel.clearDistillError() },
             )
         }
     }
