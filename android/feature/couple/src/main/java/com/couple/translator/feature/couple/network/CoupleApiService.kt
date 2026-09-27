@@ -10,6 +10,7 @@ import com.couple.translator.feature.couple.data.model.MediationDto
 import com.couple.translator.feature.couple.data.model.MediationRoomDto
 import com.couple.translator.feature.couple.data.model.MemoryDto
 import com.couple.translator.feature.couple.data.model.MuseumDto
+import com.couple.translator.feature.couple.data.model.ObservationDto
 import com.couple.translator.feature.couple.data.model.RelationshipEventDto
 import com.couple.translator.feature.couple.data.model.WishlistDto
 import okhttp3.MultipartBody
@@ -442,6 +443,13 @@ interface CoupleApiService {
 
     @DELETE("api/v1/couple/relationship-events/{id}")
     suspend fun deleteRelationshipEvent(@Path("id") id: Long): ApiResponse<Unit>
+
+    // 军师观察卡（V1 聚合版：content=null 为冷启动；has_new 对比服务端已读位）
+    @GET("api/v1/couple/observation")
+    suspend fun getObservation(): ApiResponse<ObservationDto.ObservationResponse>
+
+    @POST("api/v1/couple/observation/ack")
+    suspend fun ackObservation(@Body body: ObservationDto.AckRequest): ApiResponse<Unit>
 
     // Anniversary
     @POST("api/v1/couple/anniversaries")

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Book
@@ -44,10 +45,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppSize
 import com.couple.translator.core.ui.theme.AppSpacing
@@ -62,12 +66,18 @@ import com.couple.translator.core.ui.theme.AppTextTertiary
  * 1. 未选中项也显示文字 —— 只给图标等于让用户猜，尤其"军师"这种非标准语义的 tab。
  * 2. 选中胶囊由一个独立的滑块承担，切换时用 spring 滑过去，而不是瞬间换色。
  * 3. 按下有 0.93 的缩放反馈（旧版 indication = null，按下毫无回应）。
+ *
+ * 2026-09-28 军师主动观察（F-5 拍板）：新增 [badges] 角标（红点 + 数量，
+ * 超 9 显示 9+）。计数口径由调用方决定（关系 tab = 新观察 + 待办合计）。
+ *
+ * @param badges tab → 角标数；缺省或 ≤0 不显示。
  */
 @Composable
 fun BottomTabBar(
     currentRoute: String?,
     tabs: List<BottomTab> = BottomTab.entries,
     labelOverrides: Map<BottomTab, String> = emptyMap(),
+    badges: Map<BottomTab, Int> = emptyMap(),
     onTabSelected: (BottomTab) -> Unit,
 ) {
     Box(
@@ -125,6 +135,7 @@ fun BottomTabBar(
                             tab = tab,
                             label = labelOverrides[tab] ?: tab.label,
                             isActive = tab.route == currentRoute,
+                            badgeCount = badges[tab] ?: 0,
                             onClick = { onTabSelected(tab) },
                             modifier = Modifier.weight(1f),
                         )
@@ -140,6 +151,7 @@ private fun TabItem(
     tab: BottomTab,
     label: String,
     isActive: Boolean,
+    badgeCount: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -186,12 +198,36 @@ private fun TabItem(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = contentColor,
-            modifier = Modifier.size(18.dp),
-        )
+        // 角标叠在图标右上角（F-5：红点 + 数量，超 9 显示 9+）。
+        // 用 Box 包住 Icon 做锚点，不额外占横向空间——Row 的居中排布不变。
+        Box {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = contentColor,
+                modifier = Modifier.size(18.dp),
+            )
+            if (badgeCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 5.dp, y = (-3).dp)
+                        .background(AppErrorRed, RoundedCornerShape(50))
+                        .padding(horizontal = 3.dp)
+                        .height(12.dp)
+                        .widthIn(min = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (badgeCount > 9) "9+" else badgeCount.toString(),
+                        color = Color.White,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 12.sp,
+                    )
+                }
+            }
+        }
         Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = label,

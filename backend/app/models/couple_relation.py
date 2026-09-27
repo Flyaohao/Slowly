@@ -44,4 +44,12 @@ class CoupleRelation(BigIntPKMixin, TimestampMixin, Base):
         Boolean, default=True, server_default="1", nullable=False
     )
 
+    # ---- 军师观察卡已读位（V1 聚合版，《军师主动观察》设计文档 §七/§十）----
+    #: 最近一次 ack 的观察内容签名（md5(正文)）。V1 观察由既有数据拼装、
+    #: 无生成物，「有新」= 当前签名 ≠ 已读签名；V2 换成 observation 表的
+    #: last_read_observation_id，字段语义随之升级，列可复用。
+    observation_read_key: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True
+    )
+
     space: Mapped["CoupleSpace"] = relationship(back_populates="relation", uselist=False)

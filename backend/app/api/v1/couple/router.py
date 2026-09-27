@@ -5,7 +5,7 @@ from app.api.v1.couple import (
     ai, letters, mediation, memory, ws,
     dual_perspectives, museum,
     anniversaries, wishlists, avatars, presence,
-    relationship_events, mediation_room,
+    relationship_events, mediation_room, observation,
 )
 
 router = APIRouter()
@@ -23,3 +23,4 @@ router.include_router(avatars.router)
 router.include_router(presence.router)
 router.include_router(relationship_events.router)
 router.include_router(mediation_room.router)
+router.include_router(observation.router)

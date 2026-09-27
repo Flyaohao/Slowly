@@ -3,6 +3,7 @@ package com.couple.translator.feature.couple
 import android.Manifest
 import android.net.Uri
 import android.os.Build
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.CubicBezierEasing
@@ -53,6 +54,7 @@ import com.couple.translator.feature.couple.home.NewHomeScreen
 import com.couple.translator.feature.couple.letter.NewMailboxScreen
 import com.couple.translator.feature.couple.navigation.DrawerContent
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
+import com.couple.translator.feature.couple.relation.ObservationViewModel
 import com.couple.translator.feature.couple.relation.RelationScreen
 import com.couple.translator.feature.couple.relation.TodoViewModel
 import com.couple.translator.feature.couple.network.toNotice
@@ -94,6 +96,15 @@ fun CoupleShell(
     // 壳层持有，抽屉开几次都共用同一份；ON_RESUME 刷新保证回到前台角标不滞后。
     val todoViewModel: TodoViewModel = hiltViewModel()
     val todoState by todoViewModel.uiState.collectAsState()
+
+    // 2026-09-28 军师主动观察（F-5 拍板：关系 tab 角标 = 新观察 + 待办合计）。
+    // Activity 作用域：与 RelationScreen 的观察卡共用同一实例（见
+    // ObservationViewModel 类注释），ack 后角标经 StateFlow 同步清零。
+    val observationViewModel: ObservationViewModel =
+        hiltViewModel(LocalContext.current as ComponentActivity)
+    val observationState by observationViewModel.uiState.collectAsState()
+    val relationBadgeCount = todoState.pendingCount +
+        if (observationState.isNewForBadge) 1 else 0
 
     // 实时通道：进入情侣模式建立 WS 连接，退出时断开；事件转 Snackbar + 系统通知栏
     val snackbarHostState = remember { SnackbarHostState() }
@@ -205,6 +216,11 @@ fun CoupleShell(
                     BottomTabBar(
                         currentRoute = currentRoute,
                         tabs = tabs,
+                        badges = if (relationBadgeCount > 0) {
+                            mapOf(BottomTab.Relation to relationBadgeCount)
+                        } else {
+                            emptyMap()
+                        },
                         onTabSelected = { tab ->
                             if (currentRoute != tab.route) {
                                 tabNavController.navigate(tab.route) {

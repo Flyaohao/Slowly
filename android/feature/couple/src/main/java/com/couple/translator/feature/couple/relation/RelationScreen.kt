@@ -1,13 +1,19 @@
 package com.couple.translator.feature.couple.relation
 
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Event
@@ -17,12 +23,19 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.ViewSidebar
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.ui.components.AppCard
@@ -35,8 +48,19 @@ import com.couple.translator.core.ui.components.AppTopBar
 import com.couple.translator.core.ui.components.SectionTitle
 import com.couple.translator.core.ui.components.TopBarIdentity
 import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentFaint
+import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppSpacing
+import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
+import java.time.Duration
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 /**
  * 关系 tab（契约 §3.5 MVP，S2 两 tab 壳的新主页之一）。
@@ -62,8 +86,14 @@ fun RelationScreen(
     onNavigateToRoute: (String) -> Unit,
     identity: TopBarIdentity = TopBarIdentity(),
     viewModel: RelationViewModel = hiltViewModel(),
+    // Activity 作用域：与 CoupleShell 的角标共用同一个 ObservationViewModel
+    // （见 ObservationViewModel 类注释——默认 hiltViewModel() 会按
+    // NavBackStackEntry 各建一份，ack 之后角标无法同步清零）。
+    observationViewModel: ObservationViewModel =
+        hiltViewModel(LocalContext.current as ComponentActivity),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val observationState by observationViewModel.uiState.collectAsState()
     val context = LocalContext.current
 
     // 整改 §8.4：返回本页必须重新拉取。
@@ -75,6 +105,11 @@ fun RelationScreen(
     // 首帧不会重复请求：init 里的 load() 已把 isLoading 置位，刷新分支会跳过。
     LaunchedEffect(Unit) {
         viewModel.load(isRefresh = true)
+    }
+
+    // 观察卡每次进页重拉：ack 之后 has_new=false，三态自然回落安静态。
+    LaunchedEffect(Unit) {
+        observationViewModel.load()
     }
 
     // 刷新失败（页面已有内容、不整页报错）只弹一次性提示，不动已渲染的数据。
@@ -100,6 +135,16 @@ fun RelationScreen(
                 title = uiState.loveDays?.let { "在一起 $it 天" } ?: "我们的关系",
                 subtitle = uiState.bindTime?.take(10)?.let { "绑定于 $it" },
             )
+
+            // ---------- 军师的观察（第一内容位，V1 聚合版） ----------
+            // 《军师主动观察》设计文档 §二：push 位——用户不开口，军师也告诉
+            // 你们「它最近看到了什么」。三态（§八）：高亮 / 安静 / 冷启动。
+            // loaded=false（首拉失败）时整块不渲染：不把「读不到」装成冷启动。
+            if (observationState.loaded) {
+                SectionTitle("军师的观察")
+                ObservationCard(state = observationState)
+                Spacer(modifier = Modifier.height(AppSpacing.block))
+            }
 
             if (uiState.loadError) {
                 // 整页失败：关键源（home + couples/me）都没回来，页面无从渲染——
@@ -230,5 +275,119 @@ private fun BackgroundSection(
                 onClick = { onNavigateToRoute(Screen.MediationHistory.route) },
             )
         }
+    }
+}
+
+// --------------------------------------------------------------------------- //
+// 军师的观察卡（V1 聚合版，《军师主动观察》设计文档 §八三态）
+// --------------------------------------------------------------------------- //
+
+/**
+ * 观察卡三态：高亮（有新）/ 安静（无新）/ 冷启动（无素材）。
+ *
+ * - 高亮 = 浅强调底 + 强调描边 + NEW 角标（isNewForCard 只在本次进页有效，
+ *   ack 后保留——见 [ObservationViewModel] 注释）；
+ * - 引用素材按 F-3 拍板只展示来源文字（「引用：调解书《xx》」），不跳转；
+ * - 正文 ≤120 字是服务端约束，这里整段渲染不截断；
+ * - 颜色全部走 App* getter（深色模式自动切换），无 Canvas/remember lambda。
+ */
+@Composable
+private fun ObservationCard(state: ObservationUiState) {
+    AppCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = AppSpacing.screenH),
+        containerColor = if (state.isNewForCard) AppAccentFaint else AppSurface,
+        borderColor = if (state.isNewForCard) AppAccentLight else AppBorderLight,
+    ) {
+        if (state.content == null) {
+            // 态③ 冷启动：没有任何可拼装素材（首观察前）
+            Text(
+                text = "🌱",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+                textAlign = TextAlign.Center,
+                fontSize = 20.sp,
+            )
+            Text(
+                text = "随着你们使用，军师会在这里\n记下它对这段关系的观察。",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp, bottom = 8.dp),
+                textAlign = TextAlign.Center,
+                fontSize = 12.sp,
+                lineHeight = 20.sp,
+                color = AppTextSecondary,
+            )
+        } else {
+            // 态① 高亮 / 态② 安静：同一结构，只有颜色与 NEW 角标不同
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "军师的观察",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (state.isNewForCard) AppAccent else AppTextSecondary,
+                )
+                state.observedAt?.let { observationRelativeTime(it) }?.let { timeText ->
+                    Text(
+                        text = " · $timeText",
+                        fontSize = 10.sp,
+                        color = AppTextTertiary,
+                    )
+                }
+                if (state.isNewForCard) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier.background(
+                            AppErrorRed,
+                            RoundedCornerShape(50),
+                        ),
+                    ) {
+                        Text(
+                            text = "NEW",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = state.content,
+                fontSize = 13.sp,
+                lineHeight = 22.sp,
+                color = AppTextPrimary,
+            )
+            state.citationTitle?.let { title ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "引用：调解书《$title》",
+                    fontSize = 10.sp,
+                    color = AppTextTertiary,
+                )
+            }
+        }
+    }
+}
+
+/** 服务端时间 → 相对时间（「2 小时前」「昨天 21:04」）。解析失败返回 null，不显示。 */
+internal fun observationRelativeTime(iso: String): String? {
+    val time = try {
+        LocalDateTime.parse(iso, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+    } catch (_: Exception) {
+        return null
+    }
+    val now = LocalDateTime.now()
+    val minutes = Duration.between(time, now).toMinutes()
+    return when {
+        minutes < 1 -> "刚刚"
+        minutes < 60 -> "$minutes 分钟前"
+        minutes < 24 * 60 -> "${minutes / 60} 小时前"
+        time.toLocalDate() == now.toLocalDate().minusDays(1) ->
+            "昨天 " + time.format(DateTimeFormatter.ofPattern("HH:mm"))
+        else -> time.format(DateTimeFormatter.ofPattern("M月d日"))
     }
 }
