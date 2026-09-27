@@ -144,6 +144,11 @@ object AiDto {
         @Json(name = "basis") val basis: List<String> = emptyList(),
         @Json(name = "suggest_enrich") val suggestEnrich: Boolean = false,
         @Json(name = "dimensions") val dimensions: List<SuggestedDimension> = emptyList(),
+        /**
+         * AI 建议把这条观点归入哪种记忆（偏好 / 关系事实 / 沟通雷区 / 核心诉求）。
+         * 空串表示它认为这段不值得长期记住——那是个正常结论，不是失败。
+         */
+        @Json(name = "memory_type") val memoryType: String = "",
     )
 
     data class SuggestedDimension(

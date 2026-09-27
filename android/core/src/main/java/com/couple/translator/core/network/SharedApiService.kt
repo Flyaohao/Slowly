@@ -202,6 +202,25 @@ interface SharedApiService {
         @Path("id") versionId: Long,
     ): ApiResponse<Unit>
 
+    // 观点 → 军师记忆 开关（2026-09-27）
+    // 开关的初始状态一律由服务端现状决定，客户端不凭上次操作记在内存里——
+    // 否则重进页面显示成「未计入」，用户一点就又写一条重复记忆。
+    @GET("api/v1/couple/ai/memory/viewpoint/{id}")
+    suspend fun getViewpointMemory(
+        @Path("id") diaryId: Long,
+    ): ApiResponse<List<ProfileDto.MemoryItemResponse>>
+
+    @POST("api/v1/couple/ai/memory/viewpoint/{id}")
+    suspend fun linkViewpointMemory(
+        @Path("id") diaryId: Long,
+        @Body body: ProfileDto.LinkMemoryRequest,
+    ): ApiResponse<List<ProfileDto.MemoryItemResponse>>
+
+    @DELETE("api/v1/couple/ai/memory/viewpoint/{id}")
+    suspend fun unlinkViewpointMemory(
+        @Path("id") diaryId: Long,
+    ): ApiResponse<Unit>
+
     // Advisor settings（契约 §3.3，common 前缀，单双模式通用）
     @GET("api/v1/advisor/settings")
     suspend fun getAdvisorSettings(): ApiResponse<AdvisorDto.AdvisorSettings>

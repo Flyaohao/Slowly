@@ -27,6 +27,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
@@ -65,6 +66,12 @@ import kotlinx.coroutines.launch
 
 // ==================== TOC 数据模型 ====================
 
+/**
+ * 与 ViewModel / 服务端 `ENRICH_MIN_CONFIDENCE` 对齐的提示阈值。
+ * 只影响文案（低于它就明说「把握偏低」），真正拦不拦仍在服务端。
+ */
+private const val ENRICH_HINT_CONFIDENCE = 0.6f
+
 /** 目录条目 */
 private data class TocEntry(
     val level: Int,       // 1 = #, 2 = ##, 3 = ###, etc.
@@ -95,6 +102,11 @@ fun DiaryDetailScreen(
     diaryId: Long,
     onNavigateBack: () -> Unit,
     onNavigateToEdit: (Long) -> Unit = {},
+    /**
+     * 是否处于情侣模式。「计入军师记忆」只在情侣模式出现——军师记忆以关系为单位
+     * （`ai_memory.relation_id` 是非空外键），单身本来就没有军师。
+     */
+    isCoupleMode: Boolean = false,
     viewModel: DiaryDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -195,31 +207,12 @@ fun DiaryDetailScreen(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // 时间和心情
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = diary.createdAt?.take(16) ?: "",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = AppTextTertiary,
-                                )
-                                if (diary.mood != null) {
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(50),
-                                        color = AppSurface,
-                                    ) {
-                                        Text(
-                                            text = diary.mood,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = AppTextSecondary,
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                                        )
-                                    }
-                                }
-                            }
+                            // 时间（2026-09-27：观点不再记录心情/天气，只留时间）
+                            Text(
+                                text = diary.createdAt?.take(16) ?: "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTextTertiary,
+                            )
 
                             // 显示更新时间（如果与创建时间不同）
                             if (diary.updatedAt != null && diary.updatedAt != diary.createdAt) {
@@ -236,12 +229,16 @@ fun DiaryDetailScreen(
                             // 内容 — 使用 Markwon 渲染 Markdown
                             MarkdownContent(content = diary.content)
 
-                            // 让军师读一读 → 建议是否写进画像 → 用户确认后才落库
+                            // 深度解读 → 两个开关（计入画像 / 计入记忆）
                             ViewpointAnalysisSection(
                                 uiState = uiState,
+                                isCoupleMode = isCoupleMode,
                                 onAnalyze = { viewModel.analyzeViewpoint() },
-                                onEnrich = { viewModel.enrichProfile() },
-                                onDismissResult = { viewModel.dismissEnrichResult() },
+                                onLinkProfile = { viewModel.linkProfile() },
+                                onUnlinkProfile = { viewModel.unlinkProfile() },
+                                onLinkMemory = { viewModel.linkMemory() },
+                                onUnlinkMemory = { viewModel.unlinkMemory() },
+                                onDismissResult = { viewModel.dismissToggleMessage() },
                             )
 
                             Spacer(modifier = Modifier.height(40.dp))
@@ -280,17 +277,21 @@ fun DiaryDetailScreen(
 // ==================== 让军师读一读 ====================
 
 /**
- * 观点分析区：把这条观点交给军师读，得到「它说明了什么」+「要不要写进画像」，
- * 用户确认后才由服务端按幅度规则写进画像。
+ * 深度解读区 + 两个开关（计入个人画像 / 计入军师记忆）。
  *
- * 为什么按钮要点第二次：**分析与写入是两件事**。分析只产出建议；自动写入等于让
- * 一次模型生成直接改画像，而画像是这个产品最不该被一次生成左右的东西。
+ * 为什么解读与落地要分两步：解读只产出**建议**（这段说明了什么 / 值不值得写进画像 /
+ * 值不值得长期记住），落地是用户自己的决定。让一次模型生成直接改画像或写记忆，
+ * 等于把这个产品最核心的两份资产交给一次生成。
  */
 @Composable
 private fun ViewpointAnalysisSection(
     uiState: DiaryDetailUiState,
+    isCoupleMode: Boolean,
     onAnalyze: () -> Unit,
-    onEnrich: () -> Unit,
+    onLinkProfile: () -> Unit,
+    onUnlinkProfile: () -> Unit,
+    onLinkMemory: () -> Unit,
+    onUnlinkMemory: () -> Unit,
     onDismissResult: () -> Unit,
 ) {
     val analysis = uiState.analysis
@@ -301,27 +302,27 @@ private fun ViewpointAnalysisSection(
         if (analysis == null && !uiState.isAnalyzing) {
             AppCard {
                 Text(
-                    text = "让军师读一读",
+                    text = "深度解读",
                     style = MaterialTheme.typography.titleSmall,
                     color = AppTextPrimary,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "它会读懂这段看法，判断能不能成为「它对你的理解」的一部分。" +
-                        "写入前先给建议，你同意才生效；之后可以在人格画像里撤回。",
+                    text = "军师会读懂这段看法：它说明了什么、能不能成为「它对你的理解」的一部分、" +
+                        "值不值得长期记住。要不要落地，由你决定。",
                     style = MaterialTheme.typography.bodySmall,
                     color = AppTextSecondary,
                 )
                 Spacer(modifier = Modifier.height(12.dp))
-                AppPrimaryButton(text = "让军师读一读", onClick = onAnalyze)
+                AppPrimaryButton(text = "让军师深度解读", onClick = onAnalyze)
             }
         }
 
         if (uiState.isAnalyzing) {
             AppCard {
                 Text(
-                    text = "军师正在读…",
+                    text = "军师正在深度解读…",
                     style = MaterialTheme.typography.titleSmall,
                     color = AppTextPrimary,
                 )
@@ -380,9 +381,9 @@ private fun ViewpointAnalysisSection(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                if (analysis.suggestEnrich && analysis.dimensions.isNotEmpty()) {
+                if (analysis.dimensions.isNotEmpty()) {
                     Text(
-                        text = "建议补充到画像",
+                        text = "建议写进画像的方向",
                         style = MaterialTheme.typography.labelMedium,
                         color = AppAccent,
                     )
@@ -396,32 +397,83 @@ private fun ViewpointAnalysisSection(
                         )
                     }
                     Spacer(modifier = Modifier.height(6.dp))
+                    // 把握偏低时把话说明白：这是**建议**，用户仍然可以坚持计入
                     Text(
-                        text = "把握 ${(analysis.confidence * 100).toInt()}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTextTertiary,
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    AppPrimaryButton(
-                        text = if (uiState.isEnriching) "正在补充…" else "补充到画像",
-                        onClick = { if (!uiState.isEnriching) onEnrich() },
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "补充会新建一个画像版本，不覆盖当前版本；不满意可以撤回。",
+                        text = if (analysis.confidence >= ENRICH_HINT_CONFIDENCE) {
+                            "军师的把握 ${(analysis.confidence * 100).toInt()}%"
+                        } else {
+                            "军师的把握只有 ${(analysis.confidence * 100).toInt()}%，偏低——" +
+                                "它建议先不写，要不要采纳由你决定"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = AppTextTertiary,
                     )
                 } else {
                     // 模型判"还不值得写"时的正常结果，不是错误——说清为什么，
-                    // 否则用户会以为分析失败
+                    // 否则用户会以为解读失败
                     Text(
-                        text = "这段还不足以写进画像：它更像当下的感受，而不是稳定的看法。" +
-                            "等你更确定时再写一次，军师会重新读。",
+                        text = "军师没有找到可以写进画像的维度：这段更像当下的感受，" +
+                            "而不是稳定的看法。等你更确定时再写一次，它会重新读。",
                         style = MaterialTheme.typography.bodySmall,
                         color = AppTextSecondary,
                     )
                 }
+
+                if (analysis.memoryType.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "值得长期记住 · 军师建议归入「${analysis.memoryType}」",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextSecondary,
+                    )
+                }
+            }
+        }
+
+        // ===== 两个开关：解读只给建议，落地由用户决定 =====
+        Spacer(modifier = Modifier.height(20.dp))
+        AppCard {
+            Text(
+                text = "这条观点怎么用",
+                style = MaterialTheme.typography.labelMedium,
+                color = AppAccent,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            ToggleRow(
+                title = "计入个人画像",
+                desc = if (uiState.profileLinked) {
+                    "已写进画像，并留下一版可回溯的记录。"
+                } else {
+                    "把军师这次的判断写进画像，随时可以再撤回。"
+                },
+                checked = uiState.profileLinked,
+                busy = uiState.isTogglingProfile,
+                onCheckedChange = { want -> if (want) onLinkProfile() else onUnlinkProfile() },
+            )
+
+            if (isCoupleMode) {
+                Spacer(modifier = Modifier.height(16.dp))
+                ToggleRow(
+                    title = "计入军师记忆",
+                    desc = if (uiState.memoryLinked) {
+                        "军师已经记住了，仅你可见，可在「记忆」页删除。"
+                    } else {
+                        "让军师以后在对话里记得这件事（仅你可见）。"
+                    },
+                    checked = uiState.memoryLinked,
+                    busy = uiState.isTogglingMemory,
+                    onCheckedChange = { want -> if (want) onLinkMemory() else onUnlinkMemory() },
+                )
+            } else {
+                // 单身模式没有军师记忆（记忆以关系为单位），这里说清边界而不是
+                // 给一个点了会报错的开关
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "绑定情侣关系后军师才有长期记忆；个人画像不受影响。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextTertiary,
+                )
             }
         }
 
@@ -434,7 +486,7 @@ private fun ViewpointAnalysisSection(
             )
         }
 
-        uiState.enrichResult?.let { msg ->
+        uiState.toggleMessage?.let { msg ->
             Spacer(modifier = Modifier.height(10.dp))
             Surface(
                 shape = RoundedCornerShape(12.dp),
@@ -453,6 +505,41 @@ private fun ViewpointAnalysisSection(
                 }
             }
         }
+    }
+}
+
+/** 一行开关：标题 + 说明 + Switch。忙碌时禁用，避免连点产生重复写入。 */
+@Composable
+private fun ToggleRow(
+    title: String,
+    desc: String,
+    checked: Boolean,
+    busy: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = AppTextPrimary,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = desc,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTextTertiary,
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Switch(
+            checked = checked,
+            enabled = !busy,
+            onCheckedChange = onCheckedChange,
+        )
     }
 }
 

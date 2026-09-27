@@ -120,6 +120,14 @@ object ProfileDto {
         @Json(name = "summary") val summary: String,
         @Json(name = "directions") val directions: Map<String, EnrichDirection>,
         @Json(name = "confidence") val confidence: Float,
+        /**
+         * 用户明确选择「就算军师把握不足也计入」时置真。
+         *
+         * 置信度门槛是**建议性的**：AI 判断只是建议，最终决定权在用户手里。
+         * 但必须由用户的那一次点击带出来，客户端不能默认替他做主——否则
+         * 这道门槛会悄悄失效。
+         */
+        @Json(name = "force") val force: Boolean = false,
     )
 
     @JsonClass(generateAdapter = true)
@@ -132,10 +140,38 @@ object ProfileDto {
     data class EnrichResponse(
         @Json(name = "profile_id") val profileId: Long = 0,
         @Json(name = "version") val version: Int = 0,
+        /**
+         * 补充**之前**那一版的 id——「不计入」要撤回时，撤回目标就是它。
+         * 让客户端自己去翻历史列表猜「上一版是谁」既脆弱又容易撤错。
+         */
+        @Json(name = "previous_profile_id") val previousProfileId: Long? = null,
         @Json(name = "origin") val origin: String = "",
         @Json(name = "origin_note") val originNote: String? = null,
         /** 撤回时才有：被恢复的那个版本号。 */
         @Json(name = "restored_from") val restoredFrom: Int? = null,
         @Json(name = "pruned") val pruned: Int = 0,
+    )
+
+    // ============ 观点 → 军师记忆 开关（2026-09-27）============
+
+    /**
+     * 一条军师记忆。只声明详情页要用的字段——服务端返回更多键也不影响，
+     * Moshi 会忽略未声明的。
+     */
+    @JsonClass(generateAdapter = true)
+    data class MemoryItemResponse(
+        @Json(name = "id") val id: Long = 0,
+        @Json(name = "memory_type") val memoryType: String = "",
+        @Json(name = "memory_text") val memoryText: String = "",
+        @Json(name = "visibility") val visibility: String = "private",
+        @Json(name = "source") val source: String? = null,
+        @Json(name = "source_id") val sourceId: Long? = null,
+        @Json(name = "created_at") val createdAt: String? = null,
+    )
+
+    /** 计入记忆时带上 AI 建议的类型；服务端会按白名单二次校验。 */
+    @JsonClass(generateAdapter = true)
+    data class LinkMemoryRequest(
+        @Json(name = "memory_type") val memoryType: String? = null,
     )
 }

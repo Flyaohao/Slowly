@@ -882,6 +882,8 @@ fun NavGraph(
                 onNavigateToEdit = { editId ->
                     navController.navigate("${Screen.ComposeDiary.route}?editId=$editId")
                 },
+                // 记忆开关只在情侣模式出现（军师记忆以关系为单位）
+                isCoupleMode = isCoupleMode,
             )
         }
 

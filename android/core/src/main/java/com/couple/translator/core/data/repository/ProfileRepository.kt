@@ -225,4 +225,62 @@ class ProfileRepository @Inject constructor(
             Result.failure(e)
         }
     }
+
+    // ============ 观点 → 军师记忆 开关（2026-09-27）============
+
+    /**
+     * 这条观点有没有进军师记忆——详情页开关的初始状态。
+     *
+     * 查不到 / 查失败一律按「没有记忆」呈现，而不是把错误弹给用户：这一屏的主角
+     * 是观点，开关的初始态与降级态在界面上本来就长一样（未计入），用户点开时
+     * POST 会给出真实原因（比如尚未绑定关系）。
+     */
+    suspend fun getViewpointMemory(diaryId: Long): Result<List<ProfileDto.MemoryItemResponse>> {
+        return try {
+            val response = apiService.getViewpointMemory(diaryId)
+            val data = response.data
+            if (response.isSuccess && data != null) {
+                Result.success(data)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Result.success(emptyList())
+        }
+    }
+
+    /** 计入军师记忆。服务端幂等：重复调用不会产生第二条。 */
+    suspend fun linkViewpointMemory(
+        diaryId: Long,
+        memoryType: String?,
+    ): Result<List<ProfileDto.MemoryItemResponse>> {
+        return try {
+            val response = apiService.linkViewpointMemory(
+                diaryId,
+                ProfileDto.LinkMemoryRequest(memoryType),
+            )
+            val data = response.data
+            if (response.isSuccess && data != null) {
+                Result.success(data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** 撤除这条观点产生的记忆（连同向量库里的派生数据一起）。 */
+    suspend fun unlinkViewpointMemory(diaryId: Long): Result<Unit> {
+        return try {
+            val response = apiService.unlinkViewpointMemory(diaryId)
+            if (response.isSuccess) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

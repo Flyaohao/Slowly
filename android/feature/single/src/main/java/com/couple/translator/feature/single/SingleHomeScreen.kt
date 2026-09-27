@@ -150,7 +150,8 @@ private fun DiaryRow(
 ) {
     AppListItem(
         title = diary.title.ifBlank { "无标题" },
-        subtitle = diary.mood,
+        // 2026-09-27：心情/天气已从观点移除，副标题改回正文摘要
+        subtitle = diary.content.replace('\n', ' ').take(24).ifBlank { null },
         leadingEmoji = "📝",
         trailingText = diary.createdAt?.take(10),
         onClick = onClick,
