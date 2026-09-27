@@ -97,6 +97,11 @@ fun RelationshipEventScreen(
             )
             Spacer(modifier = Modifier.height(AppSpacing.md))
 
+            // 注意：此处不能写 return@Column —— Column 是 inline composable，
+            // qualified return 会触发 Compose 编译器 group 错位 bug（compose-jb#2230，
+            // 真机表现为：进入本页数据到达后即 IndexOutOfBoundsException 闪退，
+            // 堆栈在 ComposerImpl.exitGroup 弹空栈），必须用 if/else 分支结构。
+            // 2026-09-27 真机复现并按此修复（抽屉「纪念事件」入口）。
             if (uiState.items.isEmpty() && !uiState.isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -108,21 +113,20 @@ fun RelationshipEventScreen(
                         color = AppTextTertiary,
                     )
                 }
-                return@Column
-            }
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(uiState.items, key = { it.id }) { item ->
-                    EventCard(
-                        item = item,
-                        onClick = { onNavigateToEdit(item.id) },
-                        onDelete = { viewModel.delete(item.id) },
-                    )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(uiState.items, key = { it.id }) { item ->
+                        EventCard(
+                            item = item,
+                            onClick = { onNavigateToEdit(item.id) },
+                            onDelete = { viewModel.delete(item.id) },
+                        )
+                    }
+                    item { Spacer(modifier = Modifier.height(88.dp)) }
                 }
-                item { Spacer(modifier = Modifier.height(88.dp)) }
             }
         }
     }
