@@ -122,7 +122,7 @@ fun SingleHomeScreen(
             } else {
                 SectionTitle(text = "最近的私密记录")
                 AppLinkRow(
-                    label = "还没有记录，写一篇给军师的私密记录",
+                    label = "还没有记录，写一条给军师的私密记录",
                     leadingEmoji = "📝",
                     onClick = onNavigateToDiary,
                     modifier = Modifier.padding(horizontal = AppSpacing.screenH),

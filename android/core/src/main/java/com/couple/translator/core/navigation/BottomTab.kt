@@ -9,5 +9,5 @@ enum class BottomTab(val route: String, val label: String) {
     Home("tab_home", "空间"),
     // 单身模式
     SingleHome("tab_single_home", "我"),
-    Diary("tab_diary", "日记"),
+    Diary("tab_diary", "观点"),
 }

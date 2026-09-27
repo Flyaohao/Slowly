@@ -202,7 +202,7 @@ fun ComposeLetterScreen(
                     uiState.isSending -> "发送中..."
                     uiState.isSaving -> "保存中..."
                     isCoupleMode -> "写信"
-                    else -> "写日记"
+                    else -> "写观点"
                 },
                 subtitle = if (uiState.letterId != null && !uiState.isSaving && !uiState.isSending) {
                     "草稿已自动保存"

@@ -100,7 +100,7 @@ fun ComposeDiaryScreen(
     ) {
         AppBackTopBar(
             onBack = onNavigateBack,
-            title = if (uiState.isEditMode) "编辑日记" else "写日记",
+            title = if (uiState.isEditMode) "编辑观点" else "写观点",
         )
 
         Column(
@@ -114,7 +114,7 @@ fun ComposeDiaryScreen(
                 value = uiState.title,
                 onValueChange = viewModel::updateTitle,
                 label = { Text("标题") },
-                placeholder = { Text("给日记起个名字") },
+                placeholder = { Text("给这个观点起个名字") },
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = AppAccent,
@@ -232,8 +232,8 @@ fun ComposeDiaryScreen(
             AppPrimaryButton(
                 text = when {
                     uiState.isSaving -> "保存中..."
-                    uiState.isEditMode -> "更新日记"
-                    else -> "保存日记"
+                    uiState.isEditMode -> "更新观点"
+                    else -> "保存观点"
                 },
                 onClick = viewModel::save,
                 enabled = !uiState.isSaving,

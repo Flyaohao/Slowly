@@ -137,7 +137,7 @@ fun DiaryDetailScreen(
             topBar = {
                 AppBackTopBar(
                     onBack = onNavigateBack,
-                    title = "日记详情",
+                    title = "观点详情",
                     trailing = {
                         if (diary != null) {
                             // [W4.5 收缩] 目录（Markdown 标题导航）入口隐藏，隐藏 ≠ 删除
@@ -256,8 +256,8 @@ fun DiaryDetailScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("删除日记") },
-            text = { Text("确定要删除这篇日记吗？删除后无法恢复。") },
+            title = { Text("删除观点") },
+            text = { Text("确定要删除这条观点吗？删除后无法恢复。") },
             confirmButton = {
                 TextButton(
                     onClick = {

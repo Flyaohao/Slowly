@@ -129,11 +129,11 @@ fun GuideScreen(
                     icon = Icons.Outlined.AutoAwesome,
                     title = "开始使用",
                     // L3：底栏入口按模式区分——情侣模式是「军师 + 关系」，
-                    // 单身模式是「我 + 日记」，写死两入口会误导另一模式的用户。
+                    // 单身模式是「我 + 观点」，写死两入口会误导另一模式的用户。
                     desc = if (isCoupleMode) {
                         "底部两个入口：军师、关系。核心功能是「军师」，关系状态都在「关系」里。"
                     } else {
-                        "底部两个入口：我、日记。核心功能是「我」，日记是给军师的私密记录。"
+                        "底部两个入口：我、观点。核心功能是「我」，观点是给军师的私密记录。"
                     },
                     route = null,
                     onNavigateToRoute = onNavigateToRoute,
@@ -308,7 +308,7 @@ fun GuideScreen(
                     // [W4.5 收缩] 日记降级为「给军师的私密记录」入口，不再宣传笔记软件能力
                     GuideEntryRow(
                         icon = Icons.Outlined.Book,
-                        title = "日记",
+                        title = "观点",
                         desc = "给军师的私密记录：写下来的心情只有你和军师能看到。",
                         route = Screen.DiaryList.route,
                         onNavigateToRoute = onNavigateToRoute,

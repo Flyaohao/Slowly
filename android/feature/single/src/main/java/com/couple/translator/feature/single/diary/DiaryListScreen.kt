@@ -74,8 +74,11 @@ fun DiaryListScreen(
     onNavigateToDetail: (Long) -> Unit,
     onNavigateToCompose: () -> Unit,
     identity: TopBarIdentity = TopBarIdentity(),
-    /** 页面叫什么：单身侧是「日记」，情侣抽屉里是「观点」。同一份数据、两个入口。 */
-    title: String = "日记",
+    /**
+     * 页面标题。全 App 统一叫「观点」——2026-09-27 用户裁决：观点就是日记，
+     * 不再区分单身侧叫法。
+     */
+    title: String = "观点",
     /** 非空表示这是一个二级页（从抽屉进入），顶栏显示返回而不是抽屉图标。 */
     onNavigateBack: (() -> Unit)? = null,
     viewModel: DiaryListViewModel = hiltViewModel(),
@@ -99,7 +102,7 @@ fun DiaryListScreen(
                     // 所以这里要关掉顶栏自带的状态栏间距，否则会被垫高两次。
                     AppBackTopBar(
                         onBack = { viewModel.toggleSelectionMode() },
-                        title = "已选择 ${uiState.selectedIds.size} 篇",
+                        title = "已选择 ${uiState.selectedIds.size} 条",
                         applyStatusBarInset = false,
                         trailing = {
                             AppLinkText(label = "全选", onClick = { viewModel.selectAll() })
@@ -159,7 +162,7 @@ fun DiaryListScreen(
                         subtitle = "记录你的生活和心情。",
                         action = {
                             AppPrimaryButton(
-                                text = "写第一篇$title",
+                                text = "写第一条$title",
                                 icon = Icons.Outlined.Edit,
                                 onClick = onNavigateToCompose,
                                 modifier = Modifier.padding(horizontal = AppSpacing.screenH),
@@ -223,7 +226,7 @@ fun DiaryListScreen(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("批量删除") },
-            text = { Text("确定要删除选中的 ${uiState.selectedIds.size} 篇日记吗？删除后无法恢复。") },
+            text = { Text("确定要删除选中的 ${uiState.selectedIds.size} 条观点吗？删除后无法恢复。") },
             confirmButton = {
                 TextButton(
                     onClick = {

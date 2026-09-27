@@ -158,7 +158,7 @@ fun MemoryScreen(
 private val SOURCE_FILTERS = listOf(
     null to "全部",
     "letter" to "信件",
-    "diary" to "日记",
+    "diary" to "观点",
     "dual" to "双视角",
     "anniversary" to "纪念日",
     "questionnaire" to "量表",
@@ -340,7 +340,7 @@ private fun MemoryItemCard(
 private fun sourceLabel(source: String?): String? = when (source) {
     null, "" -> null
     "letter" -> "信件"
-    "diary" -> "日记"
+    "diary" -> "观点"
     "dual" -> "双视角"
     "anniversary" -> "纪念日"
     "questionnaire" -> "量表"

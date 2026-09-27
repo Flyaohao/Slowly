@@ -38,7 +38,7 @@ import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.feature.couple.data.model.LetterDto
 
 /**
- * 深度表达（情侣模式，原「信箱」）/ 我的日记（单身模式）。
+ * 深度表达（情侣模式，原「信箱」）/ 我的观点（单身模式）。
  *
  * 排版原则和首页对齐：**顶栏只放叠头像入口，标题交给正文大标题**；
  * 列表不再是「裸行 + 全宽分隔线」，而是收进卡片里 —— 分组一看就清楚，
@@ -206,21 +206,21 @@ private fun SingleDiaryContent(
     val total = uiState.recentDiaries.size
 
     AppPageHeader(
-        title = "我的日记",
-        subtitle = if (total > 0) "已经写下 $total 篇" else "写给自己，也算数。",
+        title = "我的观点",
+        subtitle = if (total > 0) "已经写下 $total 条" else "写给自己，也算数。",
     )
 
     Spacer(modifier = Modifier.height(AppSpacing.section))
 
     AppPrimaryButton(
-        text = "写一篇日记",
+        text = "写一条观点",
         icon = Icons.Outlined.Edit,
         onClick = onNavigateToCompose,
         modifier = Modifier.padding(horizontal = AppSpacing.screenH),
     )
 
     if (uiState.recentDiaries.isNotEmpty()) {
-        SectionTitle(text = "最近日记", count = uiState.recentDiaries.size)
+        SectionTitle(text = "最近观点", count = uiState.recentDiaries.size)
         AppListCard(
             items = uiState.recentDiaries,
             modifier = Modifier.padding(horizontal = AppSpacing.screenH),
@@ -250,7 +250,7 @@ private fun SingleDiaryContent(
     if (uiState.recentDiaries.isEmpty() && uiState.favoriteLetters.isEmpty()) {
         AppEmptyState(
             icon = Icons.Outlined.Edit,
-            title = "还没有日记",
+            title = "还没有观点",
             subtitle = "记录此刻的心情。",
             modifier = Modifier.padding(top = AppSpacing.section),
         )
@@ -258,7 +258,7 @@ private fun SingleDiaryContent(
 
     SectionTitle(text = "更多")
     AppLinkRow(
-        label = "全部日记",
+        label = "全部观点",
         leadingIcon = Icons.Outlined.Edit,
         onClick = onNavigateToLetterList,
         modifier = Modifier.padding(horizontal = AppSpacing.screenH),

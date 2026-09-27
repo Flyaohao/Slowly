@@ -855,8 +855,8 @@ fun NavGraph(
             )
         }
 
-        // 观点（= 日记，同一份数据）。单身侧底栏叫「日记」，情侣抽屉里叫「观点」；
-        // 这个根路由就是抽屉那条入口，所以按二级页处理（返回而非抽屉图标）。
+        // 观点（内部数据仍是 diary_entry，全 App 统一叫「观点」——2026-09-27 用户裁决）。
+        // 这个根路由是抽屉那条入口，所以按二级页处理（返回而非抽屉图标）。
         composable(Screen.DiaryList.route) {
             DiaryListScreen(
                 onOpenDrawer = {},

@@ -138,7 +138,7 @@ fun LetterListScreen(
                 title = if (uiState.isSelectionMode) {
                     "已选 ${uiState.selectedIds.size} 项"
                 } else {
-                    if (isCoupleMode) "全部信件" else "全部日记"
+                    if (isCoupleMode) "全部信件" else "全部观点"
                 },
                 trailing = {
                     if (uiState.isSelectionMode) {
@@ -206,7 +206,7 @@ fun LetterListScreen(
                         ) {
                             AppEmptyState(
                                 icon = if (isCoupleMode) Icons.Outlined.MailOutline else Icons.Outlined.Edit,
-                                title = if (isCoupleMode) "还没有信件" else "还没有日记",
+                                title = if (isCoupleMode) "还没有信件" else "还没有观点",
                                 subtitle = "点击右下角按钮写一封吧",
                             )
                         }
