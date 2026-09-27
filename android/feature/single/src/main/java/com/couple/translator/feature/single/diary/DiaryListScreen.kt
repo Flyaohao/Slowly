@@ -40,14 +40,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
@@ -80,23 +80,22 @@ fun DiaryListScreen(
     onNavigateToCompose: () -> Unit,
     identity: TopBarIdentity = TopBarIdentity(),
     /**
-     * 页面标题。全 App 统一叫「观点」—�?2026-09-27 用户裁决：观点就是日记，
-     * 不再区分单身侧叫法�?
+     * 页面标题。全 App 统一叫「观点」——2026-09-27 用户裁决：观点就是日记，
+     * 不再区分单身侧叫法。
      */
     title: String = "观点",
-    /** 非空表示这是一个二级页（从抽屉进入），顶栏显示返回而不是抽屉图标�? */
+    /** 非空表示这是一个二级页（从抽屉进入），顶栏显示返回而不是抽屉图标。 */
     onNavigateBack: (() -> Unit)? = null,
     viewModel: DiaryListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    // �����ص��б���������д�Ĺ۵㣺����ջ����ͬһ�� ViewModel��popBackStack
-    // ���ؽ��������� init ���Ǵ� loadDiaries �������ꡣ���� ON_RESUME ��һ�ξ�Ĭˢ�¡�
-    // ?? ������ remember ��־λ�������״Ρ�����д��ҳ����ʱ�� composable �ᱻ
-    // �ؽ���NavHost �� dispose ����ҳ�棩��remember ״̬����������־λ��ȻʧЧ����
-    // ������Ѹ��֣�������б��������¼�¼���ֶ��������У�����ˢһ���޺���
-    // ©ˢһ���û��Ϳ�������д�Ĺ۵㣬����ÿ�� ON_RESUME ��ˢ��
+    // 保存后回到列表看不到刚写的观点：导航栈复用同一个 ViewModel（popBackStack
+    // 不重建它），而 init 里那次 loadDiaries 早已跑完。监听 ON_RESUME 补一次静默刷新。
+    // ⚠️ 不能用 remember 标志位跳过「首次」：从写作页返回时本 composable 会被重建
+    // （NavHost 会 dispose 离屏页面），remember 状态不保留，标志位必然失效——真机
+    // 已复现。多刷一次无害，漏刷一次用户就看不到刚写的观点，所以每次都刷。
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -119,15 +118,15 @@ fun DiaryListScreen(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 if (uiState.isSelectionMode) {
-                    // 选择态顶栏：返回 + 计数 + 全�? + 删除，复用二级页顶栏的形状�?
-                    // 本页�? tab 页、处在外�? Scaffold 的内容区里，顶部 inset 已经由外壳让过位�?
-                    // 所以这里要关掉顶栏自带的状态栏间距，否则会被垫高两次�?
+                    // 选择态顶栏：返回 + 计数 + 全选 + 删除，复用二级页顶栏的形状。
+                    // 本页是 tab 页、处在外壳 Scaffold 的内容区里，顶部 inset 已经由外壳让过位，
+                    // 所以这里要关掉顶栏自带的状态栏间距，否则会被垫高两次。
                     AppBackTopBar(
                         onBack = { viewModel.toggleSelectionMode() },
-                        title = "已选择 ${uiState.selectedIds.size} �?",
+                        title = "已选择 ${uiState.selectedIds.size} 条",
                         applyStatusBarInset = false,
                         trailing = {
-                            AppLinkText(label = "全�?", onClick = { viewModel.selectAll() })
+                            AppLinkText(label = "全选", onClick = { viewModel.selectAll() })
                             AppTopBarAction(
                                 icon = Icons.Outlined.Delete,
                                 contentDescription = "删除",
@@ -137,17 +136,21 @@ fun DiaryListScreen(
                         },
                     )
                 } else if (onNavigateBack != null) {
-                    // 从情侣抽屉进来时这是二级页：给返回按钮，而不是一个点不动的抽屉图�?
+                    // 从情侣抽屉进来时这是二级页：给返回按钮，而不是一个点不动的抽屉图标。
+                    // ⚠️ 必须让顶栏自己垫状态栏高度：这条入口走根 NavGraph，外面没有
+                    // 外壳 Scaffold 帮它让位——之前写成 false，顶栏和状态栏叠在一起。
                     AppBackTopBar(
                         onBack = onNavigateBack,
                         title = title,
-                        applyStatusBarInset = false,
+                        applyStatusBarInset = true,
+                        trailing = { ComposeEntryButton(onClick = onNavigateToCompose) },
                     )
                 } else {
                     AppTopBar(
                         onOpenDrawer = onOpenDrawer,
                         isCoupleMode = false,
                         identity = identity,
+                        trailing = { ComposeEntryButton(onClick = onNavigateToCompose) },
                     )
                 }
 
@@ -155,11 +158,11 @@ fun DiaryListScreen(
                 if (onNavigateBack == null) {
                     AppPageHeader(
                         title = title,
-                        // [W4.5 收缩] 入口语义收成「给军师的私密记录�?
+                        // [W4.5 收缩] 入口语义收成「给军师的私密记录」
                         subtitle = when {
-                            uiState.isSelectionMode -> "长按可多选，删除不可恢复�?"
-                            uiState.diaries.isEmpty() -> "给军师的私密记录，只有你和它能看到�?"
-                            else -> "已经写下 ${uiState.diaries.size} 条私密记录�?"
+                            uiState.isSelectionMode -> "长按可多选，删除不可恢复。"
+                            uiState.diaries.isEmpty() -> "给军师的私密记录，只有你和它能看到。"
+                            else -> "已经写下 ${uiState.diaries.size} 条私密记录。"
                         },
                         modifier = Modifier.padding(top = AppSpacing.sm),
                     )
@@ -180,11 +183,11 @@ fun DiaryListScreen(
 
                     uiState.diaries.isEmpty() -> AppEmptyState(
                         icon = Icons.Outlined.Book,
-                        title = "还没�?$title",
-                        subtitle = "记录你的生活和心情�?",
+                        title = "还没有$title",
+                        subtitle = "记录你的生活和心情。",
                         action = {
                             AppPrimaryButton(
-                                text = "写第一�?$title",
+                                text = "写第一条$title",
                                 icon = Icons.Outlined.Edit,
                                 onClick = onNavigateToCompose,
                                 modifier = Modifier.padding(horizontal = AppSpacing.screenH),
@@ -197,7 +200,7 @@ fun DiaryListScreen(
                         contentPadding = PaddingValues(
                             start = AppSpacing.screenH,
                             end = AppSpacing.screenH,
-                            bottom = 108.dp,
+                            bottom = 24.dp,
                         ),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
@@ -214,13 +217,13 @@ fun DiaryListScreen(
                                     }
                                 },
                                 onLongClick = {
-                                    // [W4.5 收缩] 长按多选（批量删除）入口隐藏，隐藏 �? 删除
+                                    // [W4.5 收缩] 长按多选（批量删除）入口隐藏，隐藏 ≠ 删除
                                     // if (!uiState.isSelectionMode) {
                                     //     viewModel.toggleSelectionMode()
                                     //     viewModel.toggleSelect(diary.id)
                                     // }
                                 },
-                                // [W4.5 收缩] 收藏入口隐藏，隐�? �? 删除
+                                // [W4.5 收缩] 收藏入口隐藏，隐藏 ≠ 删除
                                 // onToggleFavorite = { viewModel.toggleFavorite(diary.id) },
                                 onToggleFavorite = {},
                             )
@@ -229,26 +232,13 @@ fun DiaryListScreen(
                 }
             }
         }
-
-        // 主操作固定在底部：和首页/信箱�?"全宽黑按�?"是同一个动作语�?
-        if (!uiState.isSelectionMode) {
-            AppPrimaryButton(
-                text = "�?$title",
-                icon = Icons.Outlined.Edit,
-                onClick = onNavigateToCompose,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = AppSpacing.screenH)
-                    .padding(bottom = AppSpacing.lg),
-            )
-        }
     }
 
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("批量删除") },
-            text = { Text("确定要删除选中�? ${uiState.selectedIds.size} 条观点吗？删除后无法恢复�?") },
+            text = { Text("确定要删除选中的 ${uiState.selectedIds.size} 条观点吗？删除后无法恢复。") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -277,7 +267,7 @@ private fun DiaryFilterRow(
         "all" to "全部",
         "week" to "本周",
         "month" to "本月",
-        // [W4.5 收缩] 收藏筛选随收藏能力一并隐藏（隐藏 �? 删除�?
+        // [W4.5 收缩] 收藏筛选随收藏能力一并隐藏（隐藏 ≠ 删除）
         // "favorite" to "收藏",
     )
     Row(
@@ -352,7 +342,7 @@ private fun DiaryItem(
                 )
             }
 
-            // [W4.5 收缩] 收藏按钮入口隐藏（隐�? �? 删除�?
+            // [W4.5 收缩] 收藏按钮入口隐藏（隐藏 ≠ 删除）
             // if (!isSelectionMode) {
             //     Box(
             //         modifier = Modifier
@@ -379,8 +369,8 @@ private fun DiaryItem(
                 style = MaterialTheme.typography.labelSmall,
                 color = AppTextTertiary,
             )
-            // 2026-09-27：心�?/天气已从观点移除，这里改展示正文摘要—�?
-            // 副标题位置空着会让卡片看起来像缺了信息�?
+            // 2026-09-27：心情/天气已从观点移除，这里改展示正文摘要——
+            // 副标题位置空着会让卡片看起来像缺了信息。
             if (diary.content.isNotBlank()) {
                 Text(
                     text = diary.content.replace('\n', ' ').take(24),
@@ -391,5 +381,20 @@ private fun DiaryItem(
                 )
             }
         }
+    }
+}
+
+/**
+ * 顶栏右上角的「写观点」入口：取代原底部的全宽大按钮——
+ * 与顶栏标题同行、占位小，把列表页的纵向空间还给内容。
+ */
+@Composable
+private fun ComposeEntryButton(onClick: () -> Unit) {
+    TextButton(onClick = onClick) {
+        Text(
+            text = "写观点",
+            style = MaterialTheme.typography.labelLarge,
+            color = AppAccent,
+        )
     }
 }
