@@ -916,12 +916,18 @@ def get_status(db: Session, session_id: int, user_id: int) -> dict:
         partner_text = so.get("rewrite_b") or ""
         inviter_original = _last_input(all_messages, session.user_id)
         partner_original = _last_input(all_messages, session.partner_user_id)
-        # §8.5-3：对方那一侧的原话与改写只在公开后才给
-        rewrites = [{"author_user_id": session.user_id, "content": inviter_text}]
+        # §8.5-3：对方那一侧的原话与改写只在公开后才给。
+        # `rewrites` 也必须按**观看者**过滤——此前它无条件把 inviter 那一侧
+        # （author_user_id=session.user_id）放进数组，于是 partner 在
+        # `confirming`（尚未公开）就能读到对方的改写；`my_rewrite` 那两行按
+        # `my_role` 分得很细，这个数组却漏了，等于从侧门把同一份内容递出去。
+        mine_author = session.user_id if my_role == "inviter" else session.partner_user_id
+        mine_text = inviter_text if my_role == "inviter" else partner_text
+        other_author = session.partner_user_id if my_role == "inviter" else session.user_id
+        other_text = partner_text if my_role == "inviter" else inviter_text
+        rewrites = [{"author_user_id": mine_author, "content": mine_text}]
         if revealed:
-            rewrites.append(
-                {"author_user_id": session.partner_user_id, "content": partner_text}
-            )
+            rewrites.append({"author_user_id": other_author, "content": other_text})
         if my_role == "inviter":
             my_rewrite = {"original": inviter_original, "rewritten": inviter_text}
             if revealed:
