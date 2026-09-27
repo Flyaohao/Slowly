@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.EventNote
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.Lock
@@ -125,6 +126,12 @@ fun DrawerContent(
                 label = "待办",
                 onClick = { onNavigateToRoute(Screen.TodoList.route) },
                 badgeCount = pendingCount,
+            )
+            // 2026-09-28 共同调解室（设计 §一）：抽屉入口（三处入口之一）
+            DrawerNavItem(
+                icon = Icons.Outlined.Forum,
+                label = "共同调解室",
+                onClick = { onNavigateToRoute(Screen.MediationRoomList.route) },
             )
             // [W4.3 合并] 关系画像入口并入「人格画像」
             // DrawerNavItem(

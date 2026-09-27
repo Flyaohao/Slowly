@@ -50,13 +50,30 @@ def _stop(signum, frame):  # noqa: ARG001
 
 
 def run_once() -> int:
-    """一次巡回：先回收僵尸任务，再执行到期任务。返回执行数量。"""
+    """一次巡回：先回收僵尸任务，再执行到期任务；最后处理房间任务。返回执行数量。"""
     db = SessionLocal()
     try:
         recovered = ai_task_service.recover_stale_tasks(db)
         if recovered:
             logger.warning("回收了 %s 个中断任务（worker 重启/租约过期）", recovered)
-        return ai_task_service.run_due_tasks(db, worker_id=ai_task_service.WORKER_ID, limit=BATCH)
+        done = ai_task_service.run_due_tasks(
+            db, worker_id=ai_task_service.WORKER_ID, limit=BATCH
+        )
+        # 共同调解室（v4.0）：结算（调解书/事件/观点落库）+ 滚动摘要压缩。
+        # 房间任务自带租约（mediation_room 行上），不占 ai_task 队列的抢占窗口。
+        from app.services import room_settlement_service
+
+        done += room_settlement_service.run_due_room_tasks(
+            db, worker_id=ai_task_service.WORKER_ID
+        )
+        # 孤儿占位清理（客户端拿了召唤 token 却没开流）
+        try:
+            from app.repositories import mediation_room_repo
+
+            mediation_room_repo.expire_stale_pending(db)
+        except Exception:  # noqa: BLE001 —— 清理失败不影响主巡回
+            db.rollback()
+        return done
     finally:
         db.close()
 

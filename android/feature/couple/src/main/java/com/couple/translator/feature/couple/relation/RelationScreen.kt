@@ -216,17 +216,15 @@ private fun BackgroundSection(
             onClick = { onNavigateToRoute(Screen.Mailbox.route) },
         )
 
-        // §8.5-6「能回看」：已完成的调解必须有一条**用户看得见**的路——
-        // 后端已把 completed 保留在 mine/all 里（不拒绝访问），但客户端此前
-        // 没有任何入口能列出它们：用户想回头看看上次谈成了什么，无处可去。
-        // 这里复用调解邀请列表同一个端点（role=mine 含已完成），失败就整行不显示，
-        // 不新增会报错的入口。
+        // §8.5-6「能回看」+ 2026-09-28 D-LEGACY：旧调解链路改名「各自的看法」
+        // （定位=共同调解室的前置准备：各自私下向军师陈述立场）。数据与路由全保留，
+        // 只改展示文案；新「共同调解室」入口见军师 tab 顶部 / 抽屉 / 待办。
         val pastMediations = uiState.completedMediations
         if (pastMediations.isNotEmpty()) {
             AppListItemDivider()
             AppListItem(
-                title = "调解回看",
-                subtitle = "已完成的沟通总结（${pastMediations.size} 次）",
+                title = "各自的看法",
+                subtitle = "已完成的沟通记录（${pastMediations.size} 次）",
                 leadingIcon = Icons.Outlined.History,
                 showChevron = true,
                 onClick = { onNavigateToRoute(Screen.MediationHistory.route) },

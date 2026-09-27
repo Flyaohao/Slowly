@@ -37,6 +37,12 @@ enum class Screen(val route: String) {
     MediationExplanation("mediation_explanation"),
     /** 整改 §8.5-6：已完成的调解回看列表（「能回看」的用户入口）。 */
     MediationHistory("mediation_history"),
+
+    // 2026-09-28 共同调解室（设计文档裁决）：军师在场的三人房间（1v2）。
+    // 旧 B4.3 链路改名「各自的看法」，入口替换、数据保留（D-LEGACY）。
+    MediationRoomList("mediation_room_list"),
+    MediationRoomCreate("mediation_room_create"),
+    MediationRoomChat("mediation_room_chat/{roomId}"),
     Memory("memory"),
     DualPerspectiveList("dual_perspective_list"),
     DualPerspectiveDetail("dual_perspective_detail"),

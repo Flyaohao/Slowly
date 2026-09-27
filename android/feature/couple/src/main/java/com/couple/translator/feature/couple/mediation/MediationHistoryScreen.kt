@@ -60,7 +60,7 @@ fun MediationHistoryScreen(
     Scaffold(
         containerColor = AppBackground,
         topBar = {
-            AppBackTopBar(onBack = onNavigateBack, title = "调解回看")
+            AppBackTopBar(onBack = onNavigateBack, title = "各自的看法")
         },
     ) { padding ->
         Column(
@@ -70,8 +70,8 @@ fun MediationHistoryScreen(
                 .verticalScroll(rememberScrollState()),
         ) {
             AppPageHeader(
-                title = "调解回看",
-                subtitle = "已经谈完的那些，随时可以回来看看当时说定了什么",
+                title = "各自的看法",
+                subtitle = "已经聊完的那些，随时可以回来看看当时说定了什么",
             )
 
             // 注意不能用 return@Column：Column 是 inline composable，qualified return

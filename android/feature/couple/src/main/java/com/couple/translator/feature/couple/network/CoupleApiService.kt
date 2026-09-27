@@ -7,6 +7,7 @@ import com.couple.translator.feature.couple.data.model.AnniversaryDto
 import com.couple.translator.feature.couple.data.model.DualPerspectiveDto
 import com.couple.translator.feature.couple.data.model.LetterDto
 import com.couple.translator.feature.couple.data.model.MediationDto
+import com.couple.translator.feature.couple.data.model.MediationRoomDto
 import com.couple.translator.feature.couple.data.model.MemoryDto
 import com.couple.translator.feature.couple.data.model.MuseumDto
 import com.couple.translator.feature.couple.data.model.RelationshipEventDto
@@ -271,6 +272,74 @@ interface CoupleApiService {
         @Path("id") sessionId: Long,
         @Body body: MediationDto.MediationNextRequest,
     ): ApiResponse<MediationDto.MediationSessionResponse>
+
+    // ---- 共同调解室（设计文档 2026-09-28）----
+    // SSE 端点必须以 /stream 结尾（NetworkModule 的 StreamSafeLoggingInterceptor
+    // 对 /stream 结尾的请求强制 BASIC 日志，防 BODY 缓冲毁掉流式）。
+
+    @GET("api/v1/couple/ai/mediation-rooms/styles")
+    suspend fun getMediationRoomStyles(): ApiResponse<List<MediationRoomDto.StyleItem>>
+
+    @POST("api/v1/couple/ai/mediation-rooms")
+    suspend fun createMediationRoom(
+        @Body body: MediationRoomDto.CreateRoomRequest,
+    ): ApiResponse<MediationRoomDto.RoomSummary>
+
+    @GET("api/v1/couple/ai/mediation-rooms")
+    suspend fun getMediationRooms(): ApiResponse<MediationRoomDto.RoomListResponse>
+
+    @GET("api/v1/couple/ai/mediation-rooms/{id}")
+    suspend fun getMediationRoom(
+        @Path("id") roomId: Long,
+    ): ApiResponse<MediationRoomDto.RoomDetail>
+
+    @GET("api/v1/couple/ai/mediation-rooms/{id}/messages")
+    suspend fun getMediationRoomMessages(
+        @Path("id") roomId: Long,
+        @Query("after_id") afterId: Long = 0,
+        @Query("limit") limit: Int = 100,
+    ): ApiResponse<MediationRoomDto.RoomMessagesResponse>
+
+    @POST("api/v1/couple/ai/mediation-rooms/{id}/messages")
+    suspend fun postMediationRoomMessage(
+        @Path("id") roomId: Long,
+        @Body body: MediationRoomDto.PostMessageRequest,
+    ): ApiResponse<MediationRoomDto.PostMessageResponse>
+
+    /** 军师发言 SSE 流（凭 postMessage 返回的 token 认领生成权）。 */
+    @Streaming
+    @POST("api/v1/couple/ai/mediation-rooms/{id}/advisor/stream")
+    suspend fun streamMediationRoomAdvisor(
+        @Path("id") roomId: Long,
+        @Body body: MediationRoomDto.AdvisorStreamRequest,
+    ): Response<ResponseBody>
+
+    @POST("api/v1/couple/ai/mediation-rooms/{id}/agree")
+    suspend fun agreeMediationRoom(
+        @Path("id") roomId: Long,
+    ): ApiResponse<MediationRoomDto.SimpleActionResponse>
+
+    @POST("api/v1/couple/ai/mediation-rooms/{id}/supplement")
+    suspend fun supplementMediationRoom(
+        @Path("id") roomId: Long,
+        @Body body: MediationRoomDto.SupplementRequest,
+    ): ApiResponse<MediationRoomDto.SupplementResponse>
+
+    @POST("api/v1/couple/ai/mediation-rooms/{id}/end")
+    suspend fun endVoteMediationRoom(
+        @Path("id") roomId: Long,
+        @Body body: MediationRoomDto.EndVoteRequest,
+    ): ApiResponse<MediationRoomDto.SimpleActionResponse>
+
+    @POST("api/v1/couple/ai/mediation-rooms/{id}/settlement/confirm")
+    suspend fun confirmMediationRoomSettlement(
+        @Path("id") roomId: Long,
+    ): ApiResponse<MediationRoomDto.SimpleActionResponse>
+
+    @POST("api/v1/couple/ai/mediation-rooms/{id}/settlement/retry")
+    suspend fun retryMediationRoomSettlement(
+        @Path("id") roomId: Long,
+    ): ApiResponse<MediationRoomDto.SimpleActionResponse>
 
     // Memory
     // 注意：后端 `GET /ai/memory` 的 data 直接是数组，不是 {items:[...]} 包装对象

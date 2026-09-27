@@ -282,6 +282,17 @@ fun NewAiChatScreen(
             onResumeStale = viewModel::resumeStaleSession,
         )
 
+        // 2026-09-28 共同调解室（设计 §一）：军师 tab 顶部主入口。
+        // 私聊=1v1，调解室=军师在场的三人房间（1v2），入口常驻但不打扰。
+        AppCard(modifier = Modifier.padding(horizontal = 16.dp)) {
+            AppListItem(
+                title = "共同调解室",
+                subtitle = "吵架了？把军师请进房间，三人一起聊",
+                showChevron = true,
+                onClick = { onNavigateToRoute(Screen.MediationRoomList.route) },
+            )
+        }
+
         LazyColumn(
             state = listState,
             modifier = Modifier

@@ -24,3 +24,6 @@ class DiaryEntry(BigIntPKMixin, TimestampMixin, Base):
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     #: P-C1 §1（v2_7）：关系 id——取到 active relation 才写日记记忆（单身日记不写）
     relation_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    #: 来源（v4.0 共同调解室）：NULL=普通观点；'mediation_room'=调解室结算压缩产生。
+    #: D-OPINION：调解室观点默认不计入画像，来源列是用户筛选/展示的落点。
+    source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)

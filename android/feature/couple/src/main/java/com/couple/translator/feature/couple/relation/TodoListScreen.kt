@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Favorite
+import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Visibility
@@ -100,12 +101,25 @@ fun TodoListScreen(
                     ) {
                         var isFirst = true
 
+                        // 2026-09-28 共同调解室（D-IA：双方强提醒）。进行中的房间
+                        // 两端都可见，是最强的事件提醒对象。
+                        if (uiState.mediationRoomActive > 0) {
+                            isFirst = false
+                            AppListItem(
+                                title = "共同调解室",
+                                subtitle = "有 ${uiState.mediationRoomActive} 间调解室正在进行",
+                                leadingIcon = Icons.Outlined.Forum,
+                                showChevron = true,
+                                onClick = { onNavigateToRoute(Screen.MediationRoomList.route) },
+                            )
+                        }
+
                         uiState.mediationInvites.forEach { invite ->
                             if (!isFirst) AppListItemDivider()
                             isFirst = false
                             AppListItem(
-                                title = invite.title ?: "双人调解邀请",
-                                subtitle = "对方发起了调解，等你回应",
+                                title = invite.title ?: "各自的看法邀请",
+                                subtitle = "对方发起了「各自的看法」，等你回应",
                                 leadingIcon = Icons.Outlined.People,
                                 showChevron = true,
                                 onClick = {

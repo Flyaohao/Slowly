@@ -30,6 +30,9 @@ import com.couple.translator.core.ui.settings.SettingsViewModel
 import com.couple.translator.core.ui.theme.ThemeMode
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
+import com.couple.translator.feature.couple.mediation.room.MediationRoomChatScreen
+import com.couple.translator.feature.couple.mediation.room.MediationRoomCreateScreen
+import com.couple.translator.feature.couple.mediation.room.MediationRoomListScreen
 import com.couple.translator.feature.couple.ai.AiSessionListScreen
 import com.couple.translator.feature.couple.ai.FeedbackOutcomeScreen
 import com.couple.translator.feature.couple.ai.MemoryScreen
@@ -466,6 +469,43 @@ fun NavGraph(
                         popUpTo(Screen.MediationExplanation.route) { inclusive = true }
                     }
                 },
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        // ---- 2026-09-28 共同调解室（设计 §九 Android）----
+        // 房间列表（主入口）→ 创建流（事件卡）→ 三人房间聊天页。
+        composable(Screen.MediationRoomList.route) {
+            MediationRoomListScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenRoom = { roomId ->
+                    navController.navigate("${Screen.MediationRoomChat.route.replace("{roomId}", roomId.toString())}")
+                },
+                onCreateRoom = { navController.navigate(Screen.MediationRoomCreate.route) },
+            )
+        }
+
+        composable(Screen.MediationRoomCreate.route) {
+            MediationRoomCreateScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onRoomCreated = { roomId ->
+                    // 创建后说明页不再留在栈里：返回键回到列表而不是表单
+                    navController.navigate(
+                        Screen.MediationRoomChat.route.replace("{roomId}", roomId.toString())
+                    ) {
+                        popUpTo(Screen.MediationRoomCreate.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(
+            route = Screen.MediationRoomChat.route,
+            arguments = listOf(navArgument("roomId") { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val roomId = backStackEntry.arguments?.getLong("roomId") ?: 0L
+            MediationRoomChatScreen(
+                roomId = roomId,
                 onNavigateBack = { navController.popBackStack() },
             )
         }

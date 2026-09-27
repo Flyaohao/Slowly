@@ -9,6 +9,7 @@ import com.couple.translator.feature.couple.data.model.MediationDto
 import com.couple.translator.feature.couple.data.repository.CoupleRepository
 import com.couple.translator.feature.couple.data.repository.DualPerspectiveRepository
 import com.couple.translator.feature.couple.data.repository.MediationRepository
+import com.couple.translator.feature.couple.data.repository.MediationRoomRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -40,9 +41,15 @@ data class TodoUiState(
     /** status=one_side 且 records 里没有我的双视角事件（我还没写）。 */
     val myUnsubmittedDuals: List<DualPerspectiveDto.DualEventResponse> = emptyList(),
     val unbindStatus: UnbindStatusUi? = null,
+    /**
+     * 2026-09-28 共同调解室（D-IA：双方强提醒）：进行中的房间数
+     * （active/settling/settlement_ready）。任一方开房，两端都进待办。
+     */
+    val mediationRoomActive: Int = 0,
 ) {
     val pendingCount: Int
-        get() = mediationInvites.size + myUnsubmittedDuals.size + (if (unbindStatus != null) 1 else 0)
+        get() = mediationInvites.size + myUnsubmittedDuals.size +
+            (if (unbindStatus != null) 1 else 0) + mediationRoomActive
 }
 
 @HiltViewModel
@@ -50,6 +57,7 @@ class TodoViewModel @Inject constructor(
     private val coupleRepository: CoupleRepository,
     private val mediationRepository: MediationRepository,
     private val dualPerspectiveRepository: DualPerspectiveRepository,
+    private val mediationRoomRepository: MediationRoomRepository,
     private val sharedApiService: SharedApiService,
 ) : ViewModel() {
 
@@ -76,16 +84,19 @@ class TodoViewModel @Inject constructor(
                 val coupleDeferred = async { coupleRepository.getCoupleInfo() }
                 val invitesDeferred = async { mediationRepository.getMediationList("invited") }
                 val dualsDeferred = async { loadMyUnsubmittedDuals(myUserId) }
+                val roomsDeferred = async { mediationRoomRepository.listRooms() }
 
                 val coupleResult = coupleDeferred.await()
                 val invitesResult = invitesDeferred.await()
                 val dualsResult = dualsDeferred.await()
+                val roomsResult = roomsDeferred.await()
 
                 val coupleInfo: CoupleDto.CoupleRelationResponse? = coupleResult.getOrNull()
 
                 val pendingReliable = myUserId != null &&
                     invitesResult.isSuccess &&
                     dualsResult.isSuccess &&
+                    roomsResult.isSuccess &&
                     coupleResult.isSuccess
 
                 TodoUiState(
@@ -93,6 +104,7 @@ class TodoViewModel @Inject constructor(
                     pendingReliable = pendingReliable,
                     mediationInvites = invitesResult.getOrNull() ?: emptyList(),
                     myUnsubmittedDuals = dualsResult.getOrNull() ?: emptyList(),
+                    mediationRoomActive = roomsResult.getOrNull()?.activeCount ?: 0,
                     unbindStatus = coupleInfo?.unbindRequestedAt?.let { at ->
                         UnbindStatusUi(
                             requestedAt = at,

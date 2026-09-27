@@ -42,6 +42,13 @@ SCENE_CONFIGS = {
         "privacy_level": "private",
         "description": "复盘一次争吵、冷战或和好，找出循环并给出下次可用的表达",
     },
+    # v4.0 共同调解室：军师在场的三人房间（prompt 组装走 room_advisor_service，
+    # 此处注册仅用于 scene 归因/日志；LLM 的 system 来自风格 skill 注册表）
+    "mediation_room": {
+        "name": "共同调解室",
+        "privacy_level": "couple",
+        "description": "军师在场的三人调解房间，@召唤发言，结束生成调解书",
+    },
 }
 
 
