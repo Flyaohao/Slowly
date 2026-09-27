@@ -63,6 +63,10 @@ enum class Screen(val route: String) {
     // sessionId 可空：从首页任务卡进（只知会话）；带 messageId 时直接定位到那条建议
     FeedbackOutcome("feedback_outcome"),
 
+    // 2026-09-27 关系页改版（用户裁决）：调解邀请 / 双视角 / 解绑确认三项待办
+    // 从关系页迁出，收敛为侧边栏「待办」条目 + 独立列表页（角标显示待办数）
+    TodoList("todo_list"),
+
     // 单身模式专属
     DiaryList("diary_list"),
     DiaryDetail("diary_detail"),

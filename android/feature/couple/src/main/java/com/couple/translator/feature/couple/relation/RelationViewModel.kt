@@ -6,13 +6,10 @@ import com.couple.translator.core.data.model.CoupleDto
 import com.couple.translator.core.data.model.HomeDto
 import com.couple.translator.core.data.repository.HomeRepository
 import com.couple.translator.core.data.repository.ProfileRepository
-import com.couple.translator.core.network.SharedApiService
 import com.couple.translator.feature.couple.data.model.AnniversaryDto
-import com.couple.translator.feature.couple.data.model.DualPerspectiveDto
 import com.couple.translator.feature.couple.data.model.MediationDto
 import com.couple.translator.feature.couple.data.repository.AnniversaryRepository
 import com.couple.translator.feature.couple.data.repository.CoupleRepository
-import com.couple.translator.feature.couple.data.repository.DualPerspectiveRepository
 import com.couple.translator.feature.couple.data.repository.LetterRepository
 import com.couple.translator.feature.couple.data.repository.MediationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -44,10 +41,11 @@ internal fun refreshFailedMessage(failedCount: Int): String =
     "有 $failedCount 项没刷新出来，显示的是上次的内容"
 
 /**
- * 关系 tab MVP（契约 §3.5 / 整改 §8.4）。
+ * 关系 tab（契约 §3.5 / 整改 §8.4）。
  *
- * 待处理：调解邀请（§2.3-3）+ 双视角「我未提交」+ 解绑 confirm 状态。
- * 关系背景：纪念日、绑定信息（love_days）、关系画像摘要、深度表达入口。
+ * 2026-09-27 关系页改版：调解邀请 / 双视角「我未提交」/ 解绑确认三类待办
+ * 迁往 [TodoViewModel]（侧边栏「待办」条目 + 待办列表页），本 VM 只剩
+ * 关系背景：纪念日、绑定信息（love_days）、关系画像摘要、深度表达、调解回看。
  *
  * 每条数据源独立降级：任何一路失败只丢对应区块，不拖垮整页；
  * 失败时优先沿用上一次成功的结果，且不得把「读不到」渲染成「没有」。
@@ -66,31 +64,14 @@ data class RelationUiState(
      */
     val loadError: Boolean = false,
 
-    // ----- 待处理 -----
-    /** §2.3-3：role=invited 的调解邀请（后端未落地 → 空列表）。 */
-    val mediationInvites: List<MediationDto.MediationListItem> = emptyList(),
+    // ----- 关系背景 -----
     /**
      * §8.5-6「能回看」：我参与过的**已完成**调解（role=history）。
      * 后端已保证 completed 不再被拒（`_get_session` 放行、mine/all 保留），
      * 客户端这条入口把它变成用户看得见的一条路——此前列表只查 invited，
-     * 调解一结束就从 App 里彻底消失了。
+     * 调解一结束就从 App 里彻底消失了。渲染成「调解回看」行，仅非空时显示。
      */
     val completedMediations: List<MediationDto.MediationListItem> = emptyList(),
-    /** status=one_side 且 records 里没有我的双视角事件（我还没写）。 */
-    val myUnsubmittedDuals: List<DualPerspectiveDto.DualEventResponse> = emptyList(),
-    val unbindStatus: UnbindStatusUi? = null,
-
-    /**
-     * 「待处理」区块是否可信。
-     *
-     * 只由**待处理三类数据源**决定（邀请 / 双视角 / couples-me），与纪念日、
-     * 画像、收件箱无关：那三路失败时「暂无待处理事项」依然是真的。
-     * false 时 [RelationScreen] 渲染「状态读取失败 + 重试」而不是空态——
-     * 曾经邀请接口一挂，页面就写着「暂无待处理事项」，用户以为没有待办。
-     */
-    val pendingReliable: Boolean = true,
-
-    // ----- 关系背景 -----
     val loveDays: Int? = null,
     val partnerNickname: String? = null,
     val bindTime: String? = null,
@@ -98,21 +79,16 @@ data class RelationUiState(
     val upcomingDaysUntil: Int? = null,
     val coupleSummary: String? = null,
     val inboxCount: Int = 0,
-) {
-    val pendingCount: Int
-        get() = mediationInvites.size + myUnsubmittedDuals.size + (if (unbindStatus != null) 1 else 0)
-}
+)
 
 @HiltViewModel
 class RelationViewModel @Inject constructor(
     private val homeRepository: HomeRepository,
     private val coupleRepository: CoupleRepository,
     private val mediationRepository: MediationRepository,
-    private val dualPerspectiveRepository: DualPerspectiveRepository,
     private val anniversaryRepository: AnniversaryRepository,
     private val profileRepository: ProfileRepository,
     private val letterRepository: LetterRepository,
-    private val sharedApiService: SharedApiService,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RelationUiState())
@@ -157,19 +133,11 @@ class RelationViewModel @Inject constructor(
         if (isRefresh && _uiState.value.isLoading) return
         _uiState.update { it.copy(isLoading = !isRefresh, loadError = false) }
         viewModelScope.launch {
-            // 我的 user_id 是双视角「我未提交」与解绑「谁发起」的判定基准；拿不到就各自降级。
-            val myUserId = runCatching {
-                sharedApiService.getCurrentUser().data?.userId
-            }.getOrNull()
-
             val state = coroutineScope {
                 val homeDeferred = async { homeRepository.getHomeData() }
                 val coupleDeferred = async { coupleRepository.getCoupleInfo() }
-                val invitesDeferred = async { mediationRepository.getMediationList("invited") }
-                // §8.5-6：已完成调解单独查一路（role=history），失败就整行不显示，
-                // 不影响「待处理」那一块的可靠性判定。
+                // §8.5-6：已完成调解单独查一路（role=history），失败就整行不显示。
                 val mediationHistoryDeferred = async { mediationRepository.getMediationList("history") }
-                val dualsDeferred = async { loadMyUnsubmittedDuals(myUserId) }
                 val anniversaryDeferred = async { anniversaryRepository.getAnniversaries() }
                 val profileDeferred = async { profileRepository.getCoupleProfile() }
                 val inboxDeferred = async { letterRepository.getInbox() }
@@ -177,9 +145,7 @@ class RelationViewModel @Inject constructor(
                 // 先拿 Result，成功/失败都要能区分——整页失败判定（M3）依赖它。
                 val homeResult = homeDeferred.await()
                 val coupleResult = coupleDeferred.await()
-                val invitesResult = invitesDeferred.await()
                 val mediationHistoryResult = mediationHistoryDeferred.await()
-                val dualsResult = dualsDeferred.await()
                 val anniversaryResult = anniversaryDeferred.await()
                 val profileResult = profileDeferred.await()
                 val inboxResult = inboxDeferred.await()
@@ -189,17 +155,9 @@ class RelationViewModel @Inject constructor(
                 val anniversaries: AnniversaryDto.AnniversaryListResponse? = anniversaryResult.getOrNull()
 
                 // 整页失败（M3 / 整改 §8.4）：只有关键源 home + couples/me **同时**失败
-                // 才算整页失败。两路合起来提供伴侣昵称 / 绑定时间 / 解绑状态，
-                // 都没有时页面无从渲染。其余任一路失败只丢对应区块。
+                // 才算整页失败。两路合起来提供伴侣昵称 / 绑定时间，都没有时页面无从渲染。
+                // 其余任一路失败只丢对应区块。
                 val loadError = homeResult.isFailure && coupleResult.isFailure
-
-                // 「待处理」是否可信只看它自己的三类源：邀请、双视角、couples/me
-                // （解绑状态来自它）。再加一条：拿不到 myUserId 就判定不了
-                // 「双视角我提交没有」，同样不许报「暂无待处理事项」。
-                val pendingReliable = myUserId != null &&
-                    invitesResult.isSuccess &&
-                    dualsResult.isSuccess &&
-                    coupleResult.isSuccess
 
                 // 成功就更新缓存，失败沿用上一次成功的结果（见 load() 的说明）。
                 if (home != null) lastHome = home
@@ -229,40 +187,16 @@ class RelationViewModel @Inject constructor(
                 val nextAnniversary = effectiveAnniversaries?.items
                     ?.let { pickUpcoming(it) }
 
-                // 刷新失败计数：只看「整页失败态不覆盖」的那几路——邀请 / 双视角 /
-                // 解绑（couples-me）才是用户最需要看到的东西。
-                val failedCount = listOf(homeResult, invitesResult, dualsResult, coupleResult)
-                    .count { it.isFailure }
+                // 刷新失败计数：只看「整页失败态不覆盖」的那几路。
+                val failedCount = listOf(homeResult, coupleResult).count { it.isFailure }
 
                 RelationUiState(
                     isLoading = false,
                     loadError = loadError,
-                    pendingReliable = pendingReliable,
-                    mediationInvites = if (invitesResult.isSuccess) {
-                        invitesResult.getOrNull() ?: emptyList()
-                    } else {
-                        emptyList()
-                    },
                     completedMediations = if (mediationHistoryResult.isSuccess) {
                         mediationHistoryResult.getOrNull() ?: emptyList()
                     } else {
                         emptyList()
-                    },
-                    myUnsubmittedDuals = if (dualsResult.isSuccess) {
-                        dualsResult.getOrNull() ?: emptyList()
-                    } else {
-                        emptyList()
-                    },
-                    unbindStatus = effectiveCouple?.unbindRequestedAt?.let { at ->
-                        UnbindStatusUi(
-                            requestedAt = at,
-                            // M2：拿不到 myUserId 就无法判定发起方 → null（中性文案），不能当成 false
-                            isInitiator = if (myUserId == null) {
-                                null
-                            } else {
-                                effectiveCouple.unbindRequestedBy?.let { by -> by == myUserId }
-                            },
-                        )
                     },
                     // 契约 §3.5 love_days 首选 couples/me（收敛期新增字段），未落地前回退 GET /home。
                     loveDays = effectiveCouple?.loveDays ?: effectiveHome?.relation?.loveDays,
@@ -281,28 +215,6 @@ class RelationViewModel @Inject constructor(
                 _messages.tryEmit(refreshFailedMessage(state.second))
             }
         }
-    }
-
-    /**
-     * 「我未提交」判定：one_side = 只有一方提交；detail.records 里没有我的 user_id
-     * → 伴侣已提交、等我写。detail 拉取失败的事件不进入列表（宁缺毋错）。
-     * 最多查 3 条详情，避免关系 tab 打开时串行打爆请求。
-     *
-     * 返回 [Result]：事件列表本身拉不到才算失败（进入整页失败判定）；
-     * 单条 detail 失败仍按「宁缺毋错」丢条目，不算整路失败。
-     */
-    private suspend fun loadMyUnsubmittedDuals(
-        myUserId: Long?,
-    ): Result<List<DualPerspectiveDto.DualEventResponse>> = runCatching {
-        if (myUserId == null) return@runCatching emptyList()
-        val events = dualPerspectiveRepository.getEvents().getOrThrow()?.items ?: emptyList()
-        events
-            .filter { it.status == "one_side" }
-            .take(3)
-            .filter { event ->
-                val detail = dualPerspectiveRepository.getEventDetail(event.id).getOrNull()
-                detail != null && detail.records.none { it.userId == myUserId }
-            }
     }
 
     /**

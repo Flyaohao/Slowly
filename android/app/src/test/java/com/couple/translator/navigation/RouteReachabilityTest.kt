@@ -75,8 +75,9 @@ class RouteReachabilityTest {
             Screen.CreateDualEvent.route to setOf("NavGraph.kt", "NewAiChatScreen.kt"),
             Screen.SubmitDualRecord.route to setOf("NavGraph.kt"),
             // §8.5 调解（正式入口受 FeatureGate 门控，但页面链路必须完整可达）
+            // 2026-09-27 关系页改版：调解邀请的列表入口从 RelationScreen 迁到 TodoListScreen
             Screen.MediationExplanation.route to setOf("CoupleShell.kt", "NavGraph.kt"),
-            Screen.MediationInvite.route to setOf("NavGraph.kt", "RelationScreen.kt"),
+            Screen.MediationInvite.route to setOf("NavGraph.kt", "TodoListScreen.kt"),
             Screen.MediationInput.route to setOf("NavGraph.kt"),
             Screen.MediationConfirm.route to setOf("NavGraph.kt"),
             Screen.MediationResult.route to setOf("NavGraph.kt"),
@@ -85,6 +86,9 @@ class RouteReachabilityTest {
             Screen.Memory.route to setOf("CoupleShell.kt", "UnderstandingScreen.kt", "DrawerContent.kt"),
             Screen.Understanding.route to setOf("DrawerContent.kt"),
             Screen.AdvisorSettings.route to setOf("DrawerContent.kt"),
+            // 2026-09-27 关系页改版：待办是调解邀请 / 双视角 / 解绑确认的唯一列表入口，
+            // 入口只在抽屉——误删抽屉条目就等于用户永远到不了待办。
+            Screen.TodoList.route to setOf("DrawerContent.kt"),
             // §8.8 纪念日：抽屉一级入口按契约移除后，必须有别的路可走
             // （使用指南 + AI 里的「附上一个纪念日」），否则这条保留能力就断在第一步。
             // 注意 RelationScreen 用的是**根路由字符串**而不是 Screen 常量，

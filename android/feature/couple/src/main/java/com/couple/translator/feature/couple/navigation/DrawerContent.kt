@@ -52,6 +52,8 @@ import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
@@ -64,6 +66,8 @@ fun DrawerContent(
     onNavigateToRoute: (String) -> Unit,
     onLogout: () -> Unit = {},
     coupleStateManager: CoupleStateManager? = null,
+    /** 待办数（调解邀请 + 未提交双视角 + 解绑确认），> 0 时「待办」条目显示红点角标。 */
+    pendingCount: Int = 0,
 ) {
     val defaultState = androidx.compose.runtime.remember { CoupleState() }
     val coupleState = coupleStateManager?.state?.collectAsState()?.value ?: defaultState
@@ -113,6 +117,15 @@ fun DrawerContent(
 
         // 以下功能仅情侣模式可用
         if (isCoupleMode) {
+            // 2026-09-27 关系页改版（用户裁决 ①A）：调解邀请 / 双视角 / 解绑确认
+            // 三类低频通知从关系页迁出，收敛为抽屉「待办」条目 + 红点角标；
+            // 无待办时条目仍显示、不显示角标（②A，入口稳定）。
+            DrawerNavItem(
+                icon = Icons.Outlined.FavoriteBorder,
+                label = "待办",
+                onClick = { onNavigateToRoute(Screen.TodoList.route) },
+                badgeCount = pendingCount,
+            )
             // [W4.3 合并] 关系画像入口并入「人格画像」
             // DrawerNavItem(
             //     icon = Icons.Outlined.ViewSidebar,
@@ -278,6 +291,7 @@ private fun DrawerNavItem(
     label: String,
     onClick: () -> Unit,
     highlight: Boolean = false,
+    badgeCount: Int = 0,
 ) {
     Row(
         modifier = Modifier
@@ -299,5 +313,21 @@ private fun DrawerNavItem(
             style = MaterialTheme.typography.bodyLarge,
             color = if (highlight) AppAccent else AppTextPrimary,
         )
+        if (badgeCount > 0) {
+            Spacer(modifier = Modifier.weight(1f))
+            // 红点角标：数字超过 99 按 99+ 截断（角标是提醒，不是统计报表）
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(AppErrorRed)
+                    .padding(horizontal = 6.dp, vertical = 1.dp),
+            ) {
+                Text(
+                    text = if (badgeCount > 99) "99+" else badgeCount.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppSurface,
+                )
+            }
+        }
     }
 }

@@ -37,6 +37,7 @@ import com.couple.translator.feature.couple.ai.PendingSessionHolder
 import com.couple.translator.feature.couple.ai.ReviewHistoryScreen
 import com.couple.translator.feature.couple.ai.ReviewScreen
 import com.couple.translator.feature.couple.anniversary.AddAnniversaryScreen
+import com.couple.translator.feature.couple.relation.TodoListScreen
 import com.couple.translator.feature.couple.relationship_event.RelationshipEventEditScreen
 import com.couple.translator.feature.couple.relationship_event.RelationshipEventScreen
 import com.couple.translator.feature.couple.anniversary.AnniversaryListScreen
@@ -704,6 +705,15 @@ fun NavGraph(
                 onNavigateToAdd = {
                     navController.navigate(Screen.AddMuseumItem.route)
                 },
+            )
+        }
+
+        // 2026-09-27 关系页改版：待办列表页（侧边栏「待办」条目进入）。
+        // 调解邀请 / 双视角 / 解绑确认三项待办的唯一列表入口。
+        composable(Screen.TodoList.route) {
+            TodoListScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToRoute = { route -> navController.navigate(route) },
             )
         }
 

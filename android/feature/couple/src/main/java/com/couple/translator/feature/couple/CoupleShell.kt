@@ -41,6 +41,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.feature.couple.data.repository.CoupleState
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
 import com.couple.translator.core.data.repository.NotificationPermissionStore
@@ -53,6 +54,7 @@ import com.couple.translator.feature.couple.letter.NewMailboxScreen
 import com.couple.translator.feature.couple.navigation.DrawerContent
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
 import com.couple.translator.feature.couple.relation.RelationScreen
+import com.couple.translator.feature.couple.relation.TodoViewModel
 import com.couple.translator.feature.couple.network.toNotice
 import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.ui.components.BottomTabBar
@@ -87,6 +89,11 @@ fun CoupleShell(
         partnerAvatarUrl = coupleState.partnerAvatarUrl,
         partnerNickname = coupleState.partnerNickname,
     )
+
+    // 2026-09-27 关系页改版：待办（调解邀请 / 双视角 / 解绑确认）角标的数据源。
+    // 壳层持有，抽屉开几次都共用同一份；ON_RESUME 刷新保证回到前台角标不滞后。
+    val todoViewModel: TodoViewModel = hiltViewModel()
+    val todoState by todoViewModel.uiState.collectAsState()
 
     // 实时通道：进入情侣模式建立 WS 连接，退出时断开；事件转 Snackbar + 系统通知栏
     val snackbarHostState = remember { SnackbarHostState() }
@@ -138,12 +145,13 @@ fun CoupleShell(
         }
     }
 
-    // 每次回到前台时刷新情侣状态
+    // 每次回到前台时刷新情侣状态 + 待办角标
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 scope.launch { coupleStateManager?.refresh() }
+                todoViewModel.load()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -181,6 +189,7 @@ fun CoupleShell(
                         }
                     },
                     coupleStateManager = coupleStateManager,
+                    pendingCount = todoState.pendingCount,
                 )
             }
         },

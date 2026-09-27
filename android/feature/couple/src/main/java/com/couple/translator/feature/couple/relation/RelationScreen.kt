@@ -15,16 +15,12 @@ import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MailOutline
-import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.ViewSidebar
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -46,9 +42,14 @@ import com.couple.translator.core.ui.theme.AppSpacing
 /**
  * 关系 tab（契约 §3.5 MVP，S2 两 tab 壳的新主页之一）。
  *
- * 结构：
- * 1. 待处理 —— 调解邀请、双视角「我未提交」、解绑确认状态
- * 2. 关系背景 —— 纪念日、绑定信息（love_days）、关系画像摘要、深度表达入口
+ * 2026-09-27 关系页改版（用户裁决）：
+ * - 首屏第一眼 = 「在一起 N 天」大字页头；
+ * - 待处理三项（调解邀请 / 双视角 / 解绑确认）是低频通知，全部迁往
+ *   侧边栏「待办」条目（[com.couple.translator.feature.couple.relation.TodoListScreen]），
+ *   本页不再渲染，也不再把空态占半屏。
+ *
+ * 结构：页头（在一起 N 天）+ 关系背景（纪念日、绑定信息、关系画像摘要、
+ * 深度表达入口、调解回看）。
  *
  * 整改 §8.4：原先「更多」区块里的当前议题 / 共同约定 / 关系模式 / 关系脉络
  * 四个占位行已删除——它们全是「阶段四开放」的假功能，点了没有任何反应。
@@ -94,14 +95,21 @@ fun RelationScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
         ) {
+            // 2026-09-27 改版：页头第一眼 = 「在一起 N 天」（③A 页头大字 + 绑定日期副行）。
+            // loveDays 还没读到时降级为「我们的关系」，不闪空标题。
             AppPageHeader(
-                title = "关系",
-                subtitle = "需要你处理的在最上面，其余是你们的共同信息",
+                title = uiState.loveDays?.let { "在一起 $it 天" } ?: "我们的关系",
+                subtitle = uiState.bindTime?.take(10)?.let { "绑定于 $it" },
             )
 
             if (uiState.loadError) {
                 // 整页失败：关键源（home + couples/me）都没回来，页面无从渲染——
-                // 给错误 + 重试，不能静默渲染成「暂无待处理事项」。
+                // 给错误 + 重试，不能静默渲染成「没事发生」。
+                //
+                // 注意不能写 return@Column：Column 是 inline composable，
+                // qualified return 会触发 Compose 编译器 group 错位 bug
+                // （同 MuseumScreen.kt / RelationshipEventScreen.kt 记录的
+                // compose-jb#2230 类闪退），必须用 if/else 分支结构。
                 AppEmptyState(
                     icon = Icons.Outlined.Info,
                     title = "关系页加载失败",
@@ -114,124 +122,16 @@ fun RelationScreen(
                     },
                 )
                 Spacer(modifier = Modifier.height(AppSpacing.block))
-                return@Column
+            } else {
+                // ---------- 关系背景 ----------
+                SectionTitle("关系背景")
+                BackgroundSection(
+                    uiState = uiState,
+                    onNavigateToRoute = onNavigateToRoute,
+                )
             }
-
-            // ---------- 1. 待处理 ----------
-            SectionTitle(
-                text = "待处理",
-                count = uiState.pendingCount.takeIf { it > 0 },
-            )
-            PendingSection(
-                uiState = uiState,
-                onNavigateToRoute = onNavigateToRoute,
-                onRetry = { viewModel.load() },
-            )
-
-            // ---------- 2. 关系背景 ----------
-            SectionTitle("关系背景")
-            BackgroundSection(
-                uiState = uiState,
-                onNavigateToRoute = onNavigateToRoute,
-            )
 
             Spacer(modifier = Modifier.height(AppSpacing.block))
-        }
-    }
-}
-
-@Composable
-private fun PendingSection(
-    uiState: RelationUiState,
-    onNavigateToRoute: (String) -> Unit,
-    onRetry: () -> Unit,
-) {
-    if (uiState.isLoading) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = AppSpacing.block),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            CircularProgressIndicator(color = AppAccent)
-        }
-        return
-    }
-
-    if (uiState.pendingCount == 0) {
-        // 整改 §8.4：读不到 ≠ 没有。任何一类「待处理」源失败时都不能说
-        // 「暂无待处理事项」——那会让用户以为真的没事要做（曾经邀请接口一挂
-        // 就是这样），也给一个就地重试的出口。
-        if (!uiState.pendingReliable) {
-            AppEmptyState(
-                icon = Icons.Outlined.Info,
-                title = "待处理状态没读出来",
-                subtitle = "网络或服务异常，重试一次试试",
-                action = { AppPrimaryButton(text = "重试", onClick = onRetry) },
-            )
-            return
-        }
-        AppEmptyState(
-            icon = Icons.Outlined.Favorite,
-            title = "暂无待处理事项",
-            subtitle = "调解邀请、双视角与解绑确认会出现在这里",
-        )
-        return
-    }
-
-    AppCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = AppSpacing.screenH),
-    ) {
-        var isFirst = true
-
-        uiState.mediationInvites.forEach { invite ->
-            if (!isFirst) AppListItemDivider()
-            isFirst = false
-            AppListItem(
-                title = invite.title ?: "双人调解邀请",
-                subtitle = "对方发起了调解，等你回应",
-                leadingIcon = Icons.Outlined.People,
-                showChevron = true,
-                onClick = {
-                    // isInviter=false：邀请列表的语义就是「伴侣发起、我来应答」；
-                    // 进页后仍会以 GET {id} 的 my_role 为真源校正。
-                    onNavigateToRoute(
-                        "${Screen.MediationInvite.route}?sessionId=${invite.sessionId}&isInviter=false"
-                    )
-                },
-            )
-        }
-
-        uiState.myUnsubmittedDuals.forEach { dual ->
-            if (!isFirst) AppListItemDivider()
-            isFirst = false
-            AppListItem(
-                title = dual.title,
-                subtitle = "对方已提交，等你写下自己的视角",
-                leadingIcon = Icons.Outlined.Visibility,
-                showChevron = true,
-                onClick = {
-                    onNavigateToRoute("${Screen.DualPerspectiveDetail.route}/${dual.id}")
-                },
-            )
-        }
-
-        uiState.unbindStatus?.let { unbind ->
-            if (!isFirst) AppListItemDivider()
-            val subtitle = when (unbind.isInitiator) {
-                true -> "你已发起解绑，可前往取消"
-                false -> "对方发起了结绑申请，可前往查看与确认"
-                null -> "有一笔解绑申请待处理"
-            }
-            AppListItem(
-                title = "解除绑定待确认",
-                subtitle = subtitle,
-                leadingIcon = Icons.Outlined.Info,
-                showChevron = true,
-                onClick = { onNavigateToRoute(Screen.CoupleInfo.route) },
-            )
         }
     }
 }
