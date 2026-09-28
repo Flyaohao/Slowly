@@ -33,6 +33,8 @@ import com.couple.translator.core.data.model.ProfileDto
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppLinkText
+import com.couple.translator.core.ui.components.AppTag
+import com.couple.translator.core.ui.components.AppTagTone
 import com.couple.translator.core.ui.components.AppPageHeader
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
@@ -181,18 +183,11 @@ private fun VersionCard(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                    Text(
-                        text = version.originLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = AppAccent,
-                    )
+                    // 去AI味 P-3f：来源/当前从 accent 小灰字升级为 AppTag 徽章
+                    AppTag(text = version.originLabel, tone = AppTagTone.Accent)
                     if (isCurrent) {
                         Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                        Text(
-                            text = "当前",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = AppTextSecondary,
-                        )
+                        AppTag(text = "当前", tone = AppTagTone.Success)
                     }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
@@ -244,16 +239,32 @@ private fun VersionCard(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     diff.items.forEach { item ->
+                        // 去AI味 P-3f：去掉「· label：from → to」的单色拼接，
+                        // 改为「维度名左、分数变化右」的两端对齐行，变化量一眼可读
                         val label = item.label.ifBlank {
                             ProfileDimensionLabels.of(item.dimensionKey)
                         }
                         val from = item.baseScore?.let { fmt(it) } ?: "—"
                         val to = item.targetScore?.let { fmt(it) } ?: "—"
-                        Text(
-                            text = "· $label：$from → $to",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppTextSecondary,
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTextSecondary,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = "$from → $to",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = AppAccent,
+                            )
+                        }
                     }
                 }
             }
