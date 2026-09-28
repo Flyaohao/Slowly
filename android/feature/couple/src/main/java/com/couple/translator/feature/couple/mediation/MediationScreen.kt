@@ -9,8 +9,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -1046,11 +1050,21 @@ private fun ResultSection(
             )
             Spacer(modifier = Modifier.height(8.dp))
             items.forEach { item ->
-                Text(
-                    text = "• $item",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(vertical = 2.dp),
-                )
+                // P-3f：「• 」文字拼接改圆点结构行，圆点跟随区块语义色
+                Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .size(4.dp)
+                            .clip(CircleShape)
+                            .background(accentColor),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = item,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
         }
     }

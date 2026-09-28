@@ -39,10 +39,13 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.AppPrimaryButton
+import com.couple.translator.core.ui.components.AppTag
+import com.couple.translator.core.ui.components.AppTagTone
 import com.couple.translator.core.ui.components.SkeletonPlainListPage
-import com.couple.translator.core.ui.components.pressFeedback
+import com.couple.translator.core.ui.theme.AppWarm
 import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
@@ -161,47 +164,52 @@ fun MediationRoomListScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(uiState.rooms, key = { it.id }) { room ->
-                    // G4：按压缩放反馈替代 M3 水波纹（Card(onClick) 默认涟漪显脏）
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = AppSurface),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .pressFeedback { onOpenRoom(room.id) },
+                    // G4：按压缩放反馈 + S-C 柔影（AppCard 内建），替代裸 m3 Card
+                    AppCard(
+                        onClick = { onOpenRoom(room.id) },
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = room.name,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = AppTextPrimary,
-                                    modifier = Modifier.weight(1f, fill = false),
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                // 进行中徽标：红点脉冲 + 文案（M-8）
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (room.isActiveRoom) {
-                                        PulsingDot()
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                    }
-                                    Text(
-                                        text = statusLabel(room.status),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (room.isActiveRoom) AppErrorRed else AppTextTertiary,
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             Text(
-                                text = buildString {
-                                    append(room.eventTime)
-                                    if (room.staleOverAWeek) append(" · 已 7 天无活动，建议结算")
-                                },
+                                text = room.name,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = AppTextPrimary,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            // 状态徽章（P-3f）：AppTag 分色替代裸文字
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (room.isActiveRoom) {
+                                    PulsingDot()
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                }
+                                AppTag(
+                                    text = statusLabel(room.status),
+                                    tone = when (room.status) {
+                                        "settlement_ready" -> AppTagTone.Warm
+                                        "active", "settling" -> AppTagTone.Accent
+                                        else -> AppTagTone.Neutral
+                                    },
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = room.eventTime,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTextTertiary,
+                        )
+                        // 疏于活动是独立提醒，不再用「·」拼在时间后面
+                        if (room.staleOverAWeek) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "已 7 天无活动，建议结算",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = AppTextTertiary,
+                                color = AppWarm,
                             )
                         }
                     }

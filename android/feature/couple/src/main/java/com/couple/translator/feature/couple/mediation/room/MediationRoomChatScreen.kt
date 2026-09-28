@@ -74,6 +74,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppPrimaryButton
+import com.couple.translator.core.ui.components.AppTag
+import com.couple.translator.core.ui.components.AppTagTone
 import com.couple.translator.core.ui.components.ChatInputBar
 import com.couple.translator.core.ui.components.SkeletonChatPage
 import com.couple.translator.core.ui.components.rememberAppHaptics
@@ -836,20 +838,26 @@ private fun SettlementCard(state: RoomState, onConfirm: () -> Unit) {
     val labelB = s.partyLabels?.userB?.takeIf { it.isNotBlank() } ?: "当事人B"
     Card(colors = CardDefaults.cardColors(containerColor = AppSurface), modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                text = "调解书 · ${s.resultLabel ?: ""}",
-                style = MaterialTheme.typography.titleSmall,
-                color = AppTextPrimary,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "调解书",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = AppTextPrimary,
+                )
+                if (!s.resultLabel.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    AppTag(text = s.resultLabel!!, tone = AppTagTone.Accent)
+                }
+            }
             Text(s.summaryText, style = MaterialTheme.typography.bodySmall, color = AppTextPrimary)
             if (s.agreements.isNotEmpty()) {
                 Text("共同约定", style = MaterialTheme.typography.labelMedium, color = AppTextSecondary)
-                s.agreements.forEach { Text("· $it", style = MaterialTheme.typography.bodySmall, color = AppTextPrimary) }
+                s.agreements.forEach { BulletRow(text = it) }
             }
             s.responsibilities?.let { r ->
                 Text("各自责任", style = MaterialTheme.typography.labelMedium, color = AppTextSecondary)
-                if (r.userA.isNotBlank()) Text("· $labelA：${r.userA}", style = MaterialTheme.typography.bodySmall, color = AppTextPrimary)
-                if (r.userB.isNotBlank()) Text("· $labelB：${r.userB}", style = MaterialTheme.typography.bodySmall, color = AppTextPrimary)
+                if (r.userA.isNotBlank()) PartyBulletRow(label = labelA, text = r.userA)
+                if (r.userB.isNotBlank()) PartyBulletRow(label = labelB, text = r.userB)
             }
             if (state.status == "settlement_ready") {
                 if (state.confirmMe != true) {
@@ -859,9 +867,42 @@ private fun SettlementCard(state: RoomState, onConfirm: () -> Unit) {
                     Text("你已确认，等待对方确认", style = MaterialTheme.typography.bodySmall, color = AppTextTertiary)
                 }
             } else {
-                Text("已结算", style = MaterialTheme.typography.labelMedium, color = AppTextTertiary)
+                AppTag(text = "已结算", tone = AppTagTone.Success)
             }
         }
+    }
+}
+
+/** 调解书条目行：品牌色小圆点 + 文本，替代「· 」文字拼接（P-3f）。 */
+@Composable
+private fun BulletRow(text: String) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .padding(top = 7.dp)
+                .size(4.dp)
+                .clip(CircleShape)
+                .background(AppAccent),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = AppTextPrimary)
+    }
+}
+
+/** 责任条目行：圆点 + 称呼加重 + 内容。 */
+@Composable
+private fun PartyBulletRow(label: String, text: String) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .padding(top = 7.dp)
+                .size(4.dp)
+                .clip(CircleShape)
+                .background(AppAccent),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(label, style = MaterialTheme.typography.bodySmall, color = AppTextPrimary, fontWeight = FontWeight.SemiBold)
+        Text("：$text", style = MaterialTheme.typography.bodySmall, color = AppTextPrimary)
     }
 }
 
