@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -123,7 +124,7 @@ fun SingleHomeScreen(
                 SectionTitle(text = "最近的私密记录")
                 AppLinkRow(
                     label = "还没有记录，写一条给军师的私密记录",
-                    leadingEmoji = "📝",
+                    leadingIcon = Icons.Outlined.EditNote,
                     onClick = onNavigateToDiary,
                     modifier = Modifier.padding(horizontal = AppSpacing.screenH),
                 )
@@ -152,7 +153,7 @@ private fun DiaryRow(
         title = diary.title.ifBlank { "无标题" },
         // 2026-09-27：心情/天气已从观点移除，副标题改回正文摘要
         subtitle = diary.content.replace('\n', ' ').take(24).ifBlank { null },
-        leadingEmoji = "📝",
+        leadingIcon = Icons.Outlined.EditNote,
         trailingText = diary.createdAt?.take(10),
         onClick = onClick,
     )

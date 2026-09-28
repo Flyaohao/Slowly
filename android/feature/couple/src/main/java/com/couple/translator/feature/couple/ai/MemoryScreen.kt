@@ -19,7 +19,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +47,7 @@ import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.AppFilterChip
+import com.couple.translator.core.ui.components.AppInfoBanner
 import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.SkeletonListCard
 import com.couple.translator.core.ui.theme.AppAccent
@@ -79,11 +83,10 @@ fun MemoryScreen(
             Column(modifier = Modifier.fillMaxSize()) {
                 // 整改 §8.8：入口改名为「记忆与隐私」后，页面自己要把隐私规则说清楚
                 // ——「军师记住了什么」是用户最该一眼看到的事，不能只靠空态文案暗示。
-                Text(
+                AppInfoBanner(
                     text = "这里列出军师记住的关于你们的内容。标记为「仅自己」的，伴侣看不到；" +
                         "每条都可以改可见范围或直接删除。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppTextTertiary,
+                    icon = Icons.Outlined.Info,
                     modifier = Modifier.padding(
                         start = AppSpacing.screenH,
                         end = AppSpacing.screenH,
@@ -290,12 +293,12 @@ private fun MemoryItemCard(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // P-C3 §4.2：★/☆ 标星（importance 2/0，调新端点）
+                    // P-C3 §4.2：标星（importance 2/0，调新端点）；★/☆ 文字符号→语义图标
                     IconButton(onClick = onToggleStar) {
-                        Text(
-                            text = if (isStarred) "★" else "☆",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = if (isStarred) AppAccent else AppTextTertiary,
+                        Icon(
+                            imageVector = if (isStarred) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                            contentDescription = if (isStarred) "取消标星" else "标为重要",
+                            tint = if (isStarred) AppAccent else AppTextTertiary,
                         )
                     }
                     IconButton(onClick = onDelete) {

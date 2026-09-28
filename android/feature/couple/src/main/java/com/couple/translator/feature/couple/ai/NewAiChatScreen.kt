@@ -26,13 +26,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.outlined.Assignment
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentCut
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Quiz
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Card
@@ -602,7 +610,7 @@ fun NewAiChatScreen(
         )
     }
 
-    // P-B §1.6：回答深度三选一（⚡快速 / 🧠深度 / 🎓专家）
+    // P-B §1.6：回答深度三选一（快速 / 深度 / 专家）
     if (showChatModeSheet) {
         ChatModeSheet(
             current = uiState.chatMode,
@@ -970,7 +978,7 @@ private fun formatUsage(value: Int): String {
 }
 
 /** P-C4：输入区收敛为 [输入框] [发送]；选项全在下方一行 chip：
- *  [场景 chip]（帮我理清…）[档位 chip]（⚡快速/🧠深度/🎓专家）[更多 ▾]（原「＋」菜单）
+ *  [场景 chip]（帮我理清…）[档位 chip]（快速/深度/专家）[更多 ▾]（原「＋」菜单）
  *  [隐藏/显示 Tab 栏]（沉浸模式开关）。对话中每一轮都可重选——不再藏进悬浮「＋」。 */
 @Composable
 private fun AiInputBar(
@@ -1033,7 +1041,7 @@ private fun AiInputBar(
             InputOptionChip(label = sceneLabel, onClick = onOpenScenePanel)
             Spacer(modifier = Modifier.width(8.dp))
             InputOptionChip(
-                label = "${option.icon} ${option.label}",
+                label = option.label,
                 onClick = onOpenModePanel,
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -1070,10 +1078,11 @@ private fun InputOptionChip(label: String, onClick: () -> Unit, showChevron: Boo
         )
         if (showChevron) {
             Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = "▾",
-                style = MaterialTheme.typography.labelSmall,
-                color = AppTextTertiary,
+            Icon(
+                imageVector = Icons.Outlined.ExpandMore,
+                contentDescription = null,
+                tint = AppTextTertiary,
+                modifier = Modifier.size(14.dp),
             )
         }
     }
@@ -1082,7 +1091,7 @@ private fun InputOptionChip(label: String, onClick: () -> Unit, showChevron: Boo
 /** P-B §1.6：三档选项定义——chip 与底部面板共用一份，文案是验收项（P2）逐字核对的。 */
 private data class ChatModeOption(
     val key: String,
-    val icon: String,
+    val icon: ImageVector,
     val label: String,
     /** 可感知差异（速度/长度），不是参数罗列 */
     val benefit: String,
@@ -1091,10 +1100,10 @@ private data class ChatModeOption(
 )
 
 private val CHAT_MODE_OPTIONS = listOf(
-    ChatModeOption("quick", "⚡", "快速", "1 秒内先给一句能说的话", "不查记忆"),
-    ChatModeOption("deep", "🧠", "深度", "会先想清楚再答，约 15 秒", "查记忆 + 理论"),
+    ChatModeOption("quick", Icons.Outlined.Bolt, "快速", "1 秒内先给一句能说的话", "不查记忆"),
+    ChatModeOption("deep", Icons.Outlined.Psychology, "深度", "会先想清楚再答，约 15 秒", "查记忆 + 理论"),
     ChatModeOption(
-        "expert", "🎓", "专家",
+        "expert", Icons.Outlined.School, "专家",
         "分点讲清依据，附替代解释，约 20 秒", "查全部记忆 + 事件时间线",
     ),
 )
@@ -1158,31 +1167,40 @@ private fun ChatModeOptionCard(
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "${option.icon} ${option.label}",
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = AppTextPrimary,
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = option.icon,
+                contentDescription = null,
+                tint = AppAccent,
+                modifier = Modifier.size(20.dp),
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = option.benefit,
-                style = MaterialTheme.typography.bodySmall,
-                color = AppTextSecondary,
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = option.retrieval,
-                style = MaterialTheme.typography.labelSmall,
-                color = AppTextTertiary,
-            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = option.label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = AppTextPrimary,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = option.benefit,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextSecondary,
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = option.retrieval,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppTextTertiary,
+                )
+            }
         }
         if (selected) {
-            Text(
-                text = "✓",
-                style = MaterialTheme.typography.bodyLarge,
-                color = AppAccent,
+            Icon(
+                imageVector = Icons.Outlined.Check,
+                contentDescription = "已选择",
+                tint = AppAccent,
             )
         }
     }
@@ -1214,8 +1232,15 @@ private fun EvidencePanel(evidence: AiDto.EvidencePayload) {
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ChevronRight,
+                contentDescription = null,
+                tint = AppTextSecondary,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = if (expanded) "▾ 我依据了什么" else "▸ 我依据了什么",
+                text = "我依据了什么",
                 style = MaterialTheme.typography.labelMedium,
                 color = AppTextSecondary,
                 modifier = Modifier.weight(1f),
@@ -1232,11 +1257,7 @@ private fun EvidencePanel(evidence: AiDto.EvidencePayload) {
         if (expanded) {
             if (hasProfile) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "📋 你们的画像",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = AppAccent,
-                )
+                EvidenceSectionHeader(icon = Icons.Outlined.Assignment, text = "你们的画像")
                 if (evidence.selfProfileCard.isNotBlank()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -1265,11 +1286,7 @@ private fun EvidencePanel(evidence: AiDto.EvidencePayload) {
 
             if (hasMemory) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "🧠 我记得的",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = AppAccent,
-                )
+                EvidenceSectionHeader(icon = Icons.Outlined.Psychology, text = "我记得的")
                 evidence.recalledMemories.forEach { mem ->
                     val meta = listOf(mem.source, mem.createdAt)
                         .filter { !it.isNullOrBlank() }
@@ -1285,11 +1302,7 @@ private fun EvidencePanel(evidence: AiDto.EvidencePayload) {
 
             if (hasTheory) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "📚 参考的理论",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = AppAccent,
-                )
+                EvidenceSectionHeader(icon = Icons.Outlined.MenuBook, text = "参考的理论")
                 evidence.theoryChunks.forEach { chunk ->
                     val head = chunk.title.ifBlank { "参考" }
                     Text(
@@ -1304,11 +1317,7 @@ private fun EvidencePanel(evidence: AiDto.EvidencePayload) {
             // P-C2 §5：本轮省略了什么（分层预算裁剪说明）——空列表整栏不显示
             if (evidence.omitted.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "✂️ 本轮省略了什么",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = AppAccent,
-                )
+                EvidenceSectionHeader(icon = Icons.Outlined.ContentCut, text = "本轮省略了什么")
                 evidence.omitted.forEach { item ->
                     Text(
                         text = "· $item",
@@ -1328,6 +1337,25 @@ private fun EvidencePanel(evidence: AiDto.EvidencePayload) {
                 )
             }
         }
+    }
+}
+
+/** 依据面板的小节标题：emoji 换成语义图标，色仍走 AppAccent。 */
+@Composable
+private fun EvidenceSectionHeader(icon: ImageVector, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = AppAccent,
+            modifier = Modifier.size(15.dp),
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = AppAccent,
+        )
     }
 }
 

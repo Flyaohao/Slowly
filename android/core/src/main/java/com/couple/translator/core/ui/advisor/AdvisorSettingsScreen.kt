@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -235,10 +238,10 @@ private fun OptionGroup(
                     )
                 }
                 if (isSelected) {
-                    Text(
-                        text = "✓",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = AppAccent,
+                    Icon(
+                        imageVector = Icons.Outlined.Check,
+                        contentDescription = "已选择",
+                        tint = AppAccent,
                     )
                 }
             }

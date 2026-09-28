@@ -22,13 +22,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.Quiz
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -276,7 +279,7 @@ fun QuestionnaireResultScreen(
                 // === 关系优势 ===
                 if (analysis.strengths.isNotBlank()) {
                     SectionTitle("你的关系优势")
-                    HighlightCard(text = analysis.strengths, icon = "💪")
+                    HighlightCard(text = analysis.strengths, icon = Icons.Outlined.FitnessCenter)
                 }
 
                 // === 成长建议 ===
@@ -437,15 +440,20 @@ private fun BodyCard(text: String) {
 
 /** 强调卡：品牌浅色底 + 图标 + 一句话优势。 */
 @Composable
-private fun HighlightCard(text: String, icon: String) {
+private fun HighlightCard(text: String, icon: ImageVector) {
     AppCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = AppSpacing.screenH),
         containerColor = AppAccentLight,
     ) {
-        Row(modifier = Modifier.padding(AppSpacing.lg)) {
-            Text(icon, style = MaterialTheme.typography.titleLarge)
+        Row(modifier = Modifier.padding(AppSpacing.lg), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = AppAccent,
+                modifier = Modifier.size(22.dp),
+            )
             Spacer(modifier = Modifier.width(AppSpacing.md))
             Text(
                 text = text.trim(),

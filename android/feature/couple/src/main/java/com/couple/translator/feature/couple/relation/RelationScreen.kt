@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,8 +28,11 @@ import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.Spa
 import androidx.compose.material.icons.outlined.ViewSidebar
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -48,7 +53,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.ui.components.AppCard
@@ -360,37 +364,47 @@ private fun ObservationCard(
     ) {
         if (state.content == null) {
             // 态③ 冷启动：没有任何可拼装素材（首观察前）
-            Text(
-                text = "🌱",
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 10.dp),
-                textAlign = TextAlign.Center,
-                fontSize = 20.sp,
-            )
-            Text(
-                text = "随着你们使用，军师会在这里\n记下它对这段关系的观察。",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp, bottom = 8.dp),
-                textAlign = TextAlign.Center,
-                fontSize = 12.sp,
-                lineHeight = 20.sp,
-                color = AppTextSecondary,
-            )
+                    .padding(top = 12.dp, bottom = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(AppAccentFaint),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Spa,
+                        contentDescription = null,
+                        tint = AppAccent,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "随着你们使用，军师会在这里\n记下它对这段关系的观察。",
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextSecondary,
+                )
+            }
         } else {
             // 态① 高亮 / 态② 安静：同一结构，只有颜色与 NEW 角标不同
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "军师的观察",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = if (state.isNewForCard) AppAccent else AppTextSecondary,
                 )
                 state.observedAt?.let { observationRelativeTime(it) }?.let { timeText ->
                     Text(
                         text = " · $timeText",
-                        fontSize = 10.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         color = AppTextTertiary,
                     )
                 }
@@ -420,7 +434,7 @@ private fun ObservationCard(
                             text = "NEW",
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
                             color = Color.White,
-                            fontSize = 9.sp,
+                            style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                         )
                     }
@@ -429,8 +443,7 @@ private fun ObservationCard(
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = state.content,
-                fontSize = 13.sp,
-                lineHeight = 22.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 color = AppTextPrimary,
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
@@ -439,7 +452,7 @@ private fun ObservationCard(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "引用：调解书《$title》",
-                    fontSize = 10.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     color = AppTextTertiary,
                 )
             }
@@ -473,22 +486,21 @@ private fun ObservationDetailDialog(
                 if (timeText != null) {
                     Text(
                         text = timeText,
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         color = AppTextTertiary,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 Text(
                     text = body,
-                    fontSize = 14.sp,
-                    lineHeight = 24.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = AppTextPrimary,
                 )
                 state.citationTitle?.let { title ->
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = "引用：调解书《$title》",
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         color = AppTextTertiary,
                     )
                 }

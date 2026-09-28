@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.Send
@@ -241,7 +242,7 @@ private fun SingleDiaryContent(
         ) { letter ->
             LetterRow(
                 letter = letter,
-                emoji = "📝",
+                icon = Icons.Outlined.EditNote,
                 onClick = { onNavigateToLetterDetail(letter.id) },
             )
         }

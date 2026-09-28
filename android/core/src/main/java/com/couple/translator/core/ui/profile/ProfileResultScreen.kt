@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.Quiz
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,6 +33,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -269,7 +272,7 @@ fun ProfileResultScreen(
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    HighlightCard(text = uiState.strengths, icon = "💪")
+                    HighlightCard(text = uiState.strengths, icon = Icons.Outlined.FitnessCenter)
                     Spacer(modifier = Modifier.height(16.dp))
                 }
 
@@ -518,14 +521,19 @@ private fun MarkdownCard(markdown: String) {
 }
 
 @Composable
-private fun HighlightCard(text: String, icon: String) {
+private fun HighlightCard(text: String, icon: ImageVector) {
     AppCard(
         modifier = Modifier.fillMaxWidth(),
         containerColor = AppAccentLight,
         contentPadding = PaddingValues(16.dp),
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            Text(icon, style = MaterialTheme.typography.titleLarge)
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = AppAccent,
+                modifier = Modifier.size(22.dp),
+            )
             Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = text.trim(),

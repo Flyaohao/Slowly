@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -109,10 +110,10 @@ private fun ModeItem(
             modifier = Modifier.weight(1f),
         )
         if (selected) {
-            Text(
-                text = "✓",
-                style = MaterialTheme.typography.bodyLarge,
-                color = AppAccent,
+            Icon(
+                imageVector = Icons.Outlined.Check,
+                contentDescription = "已选择",
+                tint = AppAccent,
             )
         }
     }

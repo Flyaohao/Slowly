@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AlertDialog
@@ -321,7 +322,12 @@ private fun DiaryItem(
                     .background(AppSurfaceMuted),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(text = "📝", style = MaterialTheme.typography.titleSmall)
+                Icon(
+                    imageVector = Icons.Outlined.EditNote,
+                    contentDescription = null,
+                    tint = AppTextSecondary,
+                    modifier = Modifier.size(17.dp),
+                )
             }
 
             Spacer(modifier = Modifier.width(AppSpacing.md))

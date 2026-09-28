@@ -3,17 +3,23 @@ package com.couple.translator.feature.couple.mediation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Forum
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -42,6 +48,7 @@ import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 import com.couple.translator.core.ui.theme.AppWarm
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -829,17 +836,36 @@ private fun ConfirmProgressRow(myConfirmed: Boolean, partnerConfirmed: Boolean) 
         contentPadding = PaddingValues(16.dp),
     ) {
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                text = if (myConfirmed) "✓ 你已确认" else "○ 等你确认",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (myConfirmed) AppAccent else AppTextSecondary,
+            ConfirmStatusLine(
+                confirmed = myConfirmed,
+                confirmedText = "你已确认",
+                pendingText = "等你确认",
             )
-            Text(
-                text = if (partnerConfirmed) "✓ 对方已确认" else "○ 对方还没确认",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (partnerConfirmed) AppAccent else AppTextSecondary,
+            ConfirmStatusLine(
+                confirmed = partnerConfirmed,
+                confirmedText = "对方已确认",
+                pendingText = "对方还没确认",
             )
         }
+    }
+}
+
+/** 单行确认状态：✓/○ 文字符号改语义图标，状态色不变。 */
+@Composable
+private fun ConfirmStatusLine(confirmed: Boolean, confirmedText: String, pendingText: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = if (confirmed) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
+            contentDescription = null,
+            tint = if (confirmed) AppAccent else AppTextTertiary,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = if (confirmed) confirmedText else pendingText,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (confirmed) AppAccent else AppTextSecondary,
+        )
     }
 }
 
