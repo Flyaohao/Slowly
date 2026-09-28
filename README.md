@@ -14,9 +14,9 @@ AI 链路全部接入真实大模型，已容器化部署在线运行。
 |---|---|
 | 客户端 | 231 个 Kotlin 文件 / 48,000 行 |
 | 后端 | 183 个 Python 文件 / 31,700 行 |
-| 接口 | 163 个 REST 端点 + SSE 流式 + WebSocket |
-| 数据模型 | 53 个 ORM 模型，35 个 Alembic 迁移，单 head，可从空库一键重建 |
-| 测试 | 77 个后端验证脚本 + 15 个 Android JVM 测试文件 |
+| 接口 | 165 个 REST 端点 + SSE 流式 + WebSocket |
+| 数据模型 | 53 个 ORM 模型，36 个 Alembic 迁移，单 head，可从空库一键重建 |
+| 测试 | 78 个后端验证脚本 + 15 个 Android JVM 测试文件 |
 
 ---
 
@@ -27,6 +27,7 @@ AI 链路全部接入真实大模型，已容器化部署在线运行。
 - [系统架构](#系统架构)
 - [AI 军师：记忆是怎么转起来的](#ai-军师记忆是怎么转起来的)
 - [共同调解室：把军师请进房间](#共同调解室把军师请进房间)
+- [军师的观察：它主动开口](#军师的观察它主动开口)
 - [几个值得一看的设计](#几个值得一看的设计)
 - [技术栈](#技术栈)
 - [功能模块](#功能模块)
@@ -43,6 +44,10 @@ AI 链路全部接入真实大模型，已容器化部署在线运行。
 | 共同调解室：吵架后开一间房，双方与军师三方同聊 | 房间内 @军师：流式回复，结束后双方投票生成调解书 |
 |---|---|
 | <img src="docs/screenshots/07-mediation-room-list.png" width="280"/> | <img src="docs/screenshots/08-mediation-room-advisor.png" width="280"/> |
+
+| 军师的观察：有新观察时高亮 + NEW，底部 tab 同步角标 | 点开观察卡：完整建议全文 + 相对时间 + 引用来源 |
+|---|---|
+| <img src="docs/screenshots/09-observation-card.png" width="280"/> | <img src="docs/screenshots/10-observation-detail.png" width="280"/> |
 
 | 军师对话：结构化建议 + 可展开的判断依据 | 记忆与隐私：AI 记住的一切可查、可控、可删 |
 |---|---|
@@ -93,7 +98,7 @@ flowchart TB
     end
 
     subgraph Backend["FastAPI 后端"]
-        REST["REST API（152 端点）"]
+        REST["REST API（165 端点）"]
         SSE["SSE 流式通道<br/>thinking / delta 双通道"]
         WS["WebSocket 实时事件"]
         AISvc["AI 服务层<br/>场景分流 · 安全过滤 · 落库"]
@@ -222,6 +227,29 @@ flowchart TB
 
 ---
 
+## 军师的观察：它主动开口
+
+前面的能力都是「你问，军师才答」。军师的观察是反过来的：**它把最近看到的，主动讲给你听**。
+关系页顶部有一张观察卡——有新内容时高亮 + NEW 角标，底部 tab 同步亮角标；
+点开卡片看完整建议，NEW 与高亮即时回落；读过之后回归安静态，
+还没有可说的素材时，它显示一句冷启动引导语，不装作有话要说。
+
+V1 版本刻意**零新增模型调用**：观察内容由既有数据拼装——优先取最近一次调解书的结论
+（「上次关于『周末安排』的调解以和解收场，定下了 3 条约定」），否则取关系画像摘要。
+拼不出素材就返回空，前端不伪造内容。几个关键设计：
+
+- **已读是服务端状态**：每份观察内容带 md5 签名，「已读」= 把签名写回 `couple_relation`——
+  判定在服务端完成，角标跨设备一致，换台手机登录也不会把读过的再看一遍；
+- **壳层只读，进页才算已读**：用户停在军师 tab 时，壳层的后台拉取只为亮角标、**绝不 ack**——
+  「已读」只能发生在真正打开关系页那一刻，push 语义不会因为切个 tab 就被静默消费；
+- **角标是合计口径**：关系 tab 角标 = 新观察 + 待办（调解邀请 / 双视角 / 解绑确认），
+  一处看清所有「等着你的事」。
+
+V2 事件驱动的独立观察生成已排期：观察将有自己的生成节奏（防抖 + 水位线，与调解书联动），
+正文更长，点击卡片会从弹窗升级为二级页——当前的数据结构与 ack 协议为它预留了位置。
+
+---
+
 ## 几个值得一看的设计
 
 ### 1. 流式 AI：思考与正文双通道，且断开即止血
@@ -284,7 +312,7 @@ AI 的判断错了，用户能纠正，纠正过程本身可追溯。
 业务错误一律 `HTTP 200 + {code, message, data}`，`message` 是可直接展示给用户的中文；
 只有认证/权限失败才用 401 / 403，收口在 `main.py` 的异常处理器里，业务代码不写 try/except 样板。
 
-34 个迁移全部写成**幂等**的（建表 / 加列前先判断存在性）——MySQL 不支持事务性 DDL，
+36 个迁移全部写成**幂等**的（建表 / 加列前先判断存在性）——MySQL 不支持事务性 DDL，
 所以幂等性比任何回滚机制都重要。`scripts/verify_migrations.py` 校验迁移链与 ORM 模型的差异应为 0。
 
 ---
@@ -309,7 +337,7 @@ embedding 用 `text-embedding-v4`（1024 维）。
 |----|------|
 | 基础 | 用户认证、个人资料、情侣绑定 / 解绑 |
 | 画像 | 心理问卷（11 维度）、依恋类型判定、个人画像、情侣组合画像、画像版本化 |
-| AI 军师 | 7 场景对话、混合记忆召回、记忆蒸馏管线、判断依据面板、记忆与隐私管理 |
+| AI 军师 | 7 场景对话、混合记忆召回、记忆蒸馏管线、判断依据面板、记忆与隐私管理、军师主动观察（观察卡 + 已读 ack） |
 | 沟通 | 情侣邮箱（写信 / 收信 / 草稿 / AI 辅助）、各自的看法（单人调解）、共同调解室（双方 + 军师同房） |
 | 沉淀 | 双视角记录、关系纪念馆、关系练习、纪念日、愿望清单、观点（日记） |
 | 体验 | AI 形象（捏脸 / 换装）、远程陪伴、情侣空间首页 |
@@ -392,8 +420,8 @@ backend/
     repositories/    数据访问；service 不直接碰 db.query()
     models/ schemas/ ORM 模型与 Pydantic 出入参（含 AI 输出模型）
     tasks/           后台任务（解绑冷静期巡检）
-  alembic/versions/  34 个迁移，单 head
-  tests/             77 个可执行验证脚本
+  alembic/versions/  36 个迁移，单 head
+  tests/             78 个可执行验证脚本
   scripts/           seed_* / build_vectorstore / build_memory_index / verify_migrations
 
 android/
@@ -409,7 +437,7 @@ android/
 
 ## 测试
 
-后端是**可执行脚本**而非 pytest（便于单跑、便于留档），77 个脚本按主题分片：
+后端是**可执行脚本**而非 pytest（便于单跑、便于留档），78 个脚本按主题分片：
 
 ```bash
 cd backend
@@ -434,6 +462,7 @@ python tests/test_memory_dualwrite_parity.py  # 双写一致性
 python tests/test_memory_pipeline_idempotency.py  # 幂等与重试
 python tests/test_memory_access.py       # 可见性 / 权限复滤
 python tests/test_mediation_room.py      # 共同调解室：房间状态机 / 并发互斥 / 事务写回
+python tests/test_observation.py         # 军师观察：内容拼装 / 签名 ack / 无素材降级
 
 python scripts/verify_migrations.py      # 迁移链与 ORM 模型差异校验
 ```
