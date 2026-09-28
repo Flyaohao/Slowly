@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Quiz
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.data.model.ProfileDto
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
@@ -119,6 +121,70 @@ fun UnderstandingScreen(
                         showChevron = true,
                         onClick = { onNavigateToRoute(Screen.QuestionnaireIntro.route) },
                     )
+                }
+            }
+
+            // ---------- 性格辅助信息 ----------
+            // 2026-09-28 用户拍板：MBTI/星盘此前只进军师 prompt，画像页不展示；
+            // 本次新增展示区。口径不变：问卷画像为主，MBTI 次之，星座/星盘最弱，
+            // 权重说明由后端统一下发（reference_note），不混入上面的维度评分体系。
+            SectionTitle("性格辅助信息")
+            AppCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = AppSpacing.screenH),
+            ) {
+                val personality = uiState.personality
+                if (personality == null) {
+                    Text(
+                        text = if (uiState.isLoading) "加载中…" else "暂时拿不到性格辅助信息",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTextSecondary,
+                    )
+                } else {
+                    val me = personality.me
+                    if (me != null && me.filled) {
+                        PersonalityEntryContent(me)
+                    } else {
+                        AppListItem(
+                            title = "去个人资料页补充 MBTI 与生日",
+                            subtitle = "补充后，这里会显示你的性格参考信息",
+                            leadingIcon = Icons.Outlined.Person,
+                            showChevron = true,
+                            onClick = { onNavigateToRoute(Screen.Profile.route) },
+                        )
+                    }
+
+                    val partner = personality.partner
+                    AppListItemDivider()
+                    Text(
+                        text = "TA 的性格",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextSecondary,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    when {
+                        partner == null -> Text(
+                            text = "绑定伴侣后，可查看对方的性格辅助信息。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AppTextSecondary,
+                        )
+                        partner.filled -> PersonalityEntryContent(partner)
+                        else -> Text(
+                            text = "对方还没在 TA 的资料页补充 MBTI/生日。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AppTextSecondary,
+                        )
+                    }
+
+                    personality.referenceNote?.takeIf { it.isNotBlank() }?.let { note ->
+                        AppListItemDivider()
+                        Text(
+                            text = note,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTextSecondary,
+                        )
+                    }
                 }
             }
 
@@ -237,5 +303,48 @@ fun UnderstandingScreen(
 
             Spacer(modifier = Modifier.height(AppSpacing.block))
         }
+    }
+}
+
+/**
+ * 一个人的 MBTI + 星座展示（自己/伴侣共用）。
+ *
+ * 数据全部由服务端算好下发；缺哪段就不显示哪段，不占位、不编数据——
+ * 与后端 astrology_service「缺失如实为 null」的口径一致。
+ */
+@Composable
+private fun PersonalityEntryContent(entry: ProfileDto.PersonalityEntryResponse) {
+    val mbtiLine = buildString {
+        entry.mbti?.let { append(it) }
+        entry.mbtiName?.let { if (isNotEmpty()) append(" · "); append(it) }
+    }
+    if (mbtiLine.isNotBlank()) {
+        Text(
+            text = mbtiLine,
+            style = MaterialTheme.typography.bodyMedium,
+            color = AppTextSecondary,
+        )
+    }
+    entry.mbtiDescription?.takeIf { it.isNotBlank() }?.let { desc ->
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = desc,
+            style = MaterialTheme.typography.bodySmall,
+            color = AppTextSecondary,
+        )
+    }
+
+    val zodiacLine = buildString {
+        entry.zodiac?.let { append("太阳 ${it}座") }
+        entry.moonSign?.let { if (isNotEmpty()) append(" · "); append("月亮 ${it}座") }
+        entry.risingSign?.let { if (isNotEmpty()) append(" · "); append("上升 ${it}座") }
+    }
+    if (zodiacLine.isNotBlank()) {
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = zodiacLine,
+            style = MaterialTheme.typography.bodySmall,
+            color = AppTextSecondary,
+        )
     }
 }

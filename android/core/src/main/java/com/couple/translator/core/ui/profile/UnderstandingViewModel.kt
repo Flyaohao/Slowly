@@ -15,15 +15,18 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * 「人格画像」页（原名「军师如何理解我们」，契约 §3.2 画像三合一，零新后端）。
- * 组合现有端点：GET /profiles/me、/profiles/me/dimensions、/profiles/couple。
- * 单身/未做双人问卷时 coupleProfile 拉取失败 → null → 关系画像区块降级为提示文案。
+ * 「人格画像」页（原名「军师如何理解我们」，契约 §3.2 画像三合一）。
+ * 组合端点：GET /profiles/me、/profiles/me/dimensions、/profiles/couple、
+ * /profiles/personality（性格辅助信息，2026-09-28）。
+ * 单身/未做双人问卷时 coupleProfile 拉取失败 → null → 关系画像区块降级为提示文案；
+ * personality 拉取失败同理，不影响画像主区块。
  */
 data class UnderstandingUiState(
     val isLoading: Boolean = true,
     val myProfile: ProfileDto.RelationshipProfileResponse? = null,
     val dimensions: List<ProfileDto.DimensionScoreResponse> = emptyList(),
     val coupleProfile: ProfileDto.CoupleProfileResponse? = null,
+    val personality: ProfileDto.PersonalityInfoResponse? = null,
     val error: String = "",
 )
 
@@ -46,16 +49,19 @@ class UnderstandingViewModel @Inject constructor(
                 val myProfileDeferred = async { profileRepository.getMyProfile().getOrNull() }
                 val dimensionsDeferred = async { profileRepository.getMyDimensions().getOrNull() ?: emptyList() }
                 val coupleDeferred = async { profileRepository.getCoupleProfile().getOrNull() }
+                val personalityDeferred = async { profileRepository.getPersonality().getOrNull() }
 
                 val myProfile = myProfileDeferred.await()
                 val dimensions = dimensionsDeferred.await()
                 val coupleProfile = coupleDeferred.await()
+                val personality = personalityDeferred.await()
 
                 UnderstandingUiState(
                     isLoading = false,
                     myProfile = myProfile,
                     dimensions = dimensions,
                     coupleProfile = coupleProfile,
+                    personality = personality,
                     // 我的画像与维度都拿不到才报错；关系画像缺失属正常（单身/未做双人问卷）
                     error = if (myProfile == null && dimensions.isEmpty()) {
                         "画像加载失败，稍后重试"

@@ -56,6 +56,20 @@ class ProfileRepository @Inject constructor(
         }
     }
 
+    /** 性格辅助信息（自己 + 伴侣）。拉取失败由调用方降级，不影响画像主区块。 */
+    suspend fun getPersonality(): Result<ProfileDto.PersonalityInfoResponse?> {
+        return try {
+            val response = apiService.getPersonality()
+            if (response.isSuccess) {
+                Result.success(response.data)
+            } else {
+                Result.failure(Exception(response.message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun getProfileHistory(): Result<List<ProfileDto.RelationshipProfileResponse>> {
         return try {
             val response = apiService.getProfileHistory()

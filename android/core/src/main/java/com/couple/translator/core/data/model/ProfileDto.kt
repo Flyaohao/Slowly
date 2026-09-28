@@ -152,6 +152,34 @@ object ProfileDto {
         @Json(name = "pruned") val pruned: Int = 0,
     )
 
+    // ============ 性格辅助信息（人格画像页展示区，2026-09-28）============
+
+    /**
+     * 一个人的性格辅助信息（MBTI + 星座）。
+     *
+     * 星座由服务端按生日/时辰/出生地算好，客户端零计算；生日原值不随响应下发
+     * （伴侣侧隐私最小化）。任何一项缺失都如实为 null，[filled] 供页面走
+     * 「去资料页补充」引导分支。
+     */
+    @JsonClass(generateAdapter = true)
+    data class PersonalityEntryResponse(
+        @Json(name = "mbti") val mbti: String? = null,
+        @Json(name = "mbti_name") val mbtiName: String? = null,
+        @Json(name = "mbti_description") val mbtiDescription: String? = null,
+        @Json(name = "zodiac") val zodiac: String? = null,
+        @Json(name = "moon_sign") val moonSign: String? = null,
+        @Json(name = "rising_sign") val risingSign: String? = null,
+        @Json(name = "filled") val filled: Boolean = false,
+    )
+
+    @JsonClass(generateAdapter = true)
+    data class PersonalityInfoResponse(
+        @Json(name = "reference_note") val referenceNote: String? = null,
+        @Json(name = "me") val me: PersonalityEntryResponse? = null,
+        /** 未绑定伴侣时为 null（正常情况，页面降级为提示文案）。 */
+        @Json(name = "partner") val partner: PersonalityEntryResponse? = null,
+    )
+
     // ============ 观点 → 军师记忆 开关（2026-09-27）============
 
     /**

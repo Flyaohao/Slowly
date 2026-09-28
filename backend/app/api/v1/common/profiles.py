@@ -7,7 +7,7 @@ from app.schemas.common import ApiResponse
 from app.schemas.profile_schema import EnrichProfileRequest, ManualVersionRequest
 from app.repositories import profile_repo, couple_repo
 from app.services.conflict_detector import CONFLICT_PATTERN_INFO
-from app.services import profile_service
+from app.services import profile_service, personality_service
 from app.services.ai_service import generate_profile_report
 
 router = APIRouter(prefix="/profiles", tags=["关系画像"])
@@ -83,6 +83,19 @@ def get_my_dimensions(
         }
         for s in scores
     ])
+
+
+@router.get("/personality", response_model=ApiResponse)
+def get_personality(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """人格画像页「性格辅助信息」：自己 + 伴侣的 MBTI/星座（后端算好）。
+
+    纯只读 + 纯计算，不触 LLM；未绑定伴侣时 partner=None（不报错，
+    由客户端降级展示引导文案）。
+    """
+    return ApiResponse(data=personality_service.get_personality_info(db, current_user.id))
 
 
 @router.get("/couple", response_model=ApiResponse)

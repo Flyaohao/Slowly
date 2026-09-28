@@ -151,6 +151,10 @@ interface SharedApiService {
     @GET("api/v1/profiles/couple")
     suspend fun getCoupleProfile(): ApiResponse<ProfileDto.CoupleProfileResponse>
 
+    /** 性格辅助信息：自己 + 伴侣的 MBTI/星座，服务端算好，星座缺失如实为 null。 */
+    @GET("api/v1/profiles/personality")
+    suspend fun getPersonality(): ApiResponse<ProfileDto.PersonalityInfoResponse>
+
     @GET("api/v1/profiles/history")
     suspend fun getProfileHistory(): ApiResponse<List<ProfileDto.RelationshipProfileResponse>>
 
