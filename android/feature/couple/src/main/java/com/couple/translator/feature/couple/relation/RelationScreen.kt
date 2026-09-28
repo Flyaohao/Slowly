@@ -8,6 +8,7 @@ import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,7 +60,6 @@ import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.AppListItem
 import com.couple.translator.core.ui.components.AppListItemDivider
-import com.couple.translator.core.ui.components.AppPageHeader
 import com.couple.translator.core.ui.components.AppPrimaryButton
 import com.couple.translator.core.ui.components.AppTopBar
 import com.couple.translator.core.ui.components.SectionTitle
@@ -72,6 +72,9 @@ import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppMotion
+import com.couple.translator.core.ui.theme.AppOnAccent
+import com.couple.translator.core.ui.theme.AppPrimaryGradient
+import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
@@ -156,6 +159,8 @@ fun RelationScreen(
             // 2026-09-27 改版：页头第一眼 = 「在一起 N 天」（③A 页头大字 + 绑定日期副行）。
             // loveDays 还没读到时降级为「我们的关系」，不闪空标题。
             // R 系列：数字用 animateIntAsState 从 0 滚动入场（读到位才开始滚，不闪跳）。
+            // 去AI味 P-3b：页头升级为渐变 hero 卡（S5 白名单①「关系页页头底色」），
+            // 与两个首页同一套语言；天数居中放大做首屏唯一重心。
             val targetDays = uiState.loveDays
             val animatedDays by animateIntAsState(
                 targetValue = targetDays ?: 0,
@@ -165,10 +170,54 @@ fun RelationScreen(
                 ),
                 label = "loveDays",
             )
-            AppPageHeader(
-                title = targetDays?.let { "在一起 $animatedDays 天" } ?: "我们的关系",
-                subtitle = uiState.bindTime?.take(10)?.let { "绑定于 $it" },
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = AppSpacing.screenH)
+                    .padding(top = AppSpacing.md)
+                    .clip(RoundedCornerShape(AppRadius.xl))
+                    .background(AppPrimaryGradient)
+                    .border(0.5.dp, AppOnAccent.copy(alpha = 0.25f), RoundedCornerShape(AppRadius.xl))
+                    .padding(horizontal = AppSpacing.lg, vertical = AppSpacing.section),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (targetDays != null) {
+                    Text(
+                        text = "在一起",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = AppOnAccent.copy(alpha = 0.85f),
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = animatedDays.toString(),
+                            style = MaterialTheme.typography.displaySmall,
+                            color = AppOnAccent,
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "天",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = AppOnAccent.copy(alpha = 0.8f),
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "我们的关系",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = AppOnAccent,
+                    )
+                }
+                uiState.bindTime?.take(10)?.let { bindDate ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "绑定于 $bindDate",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppOnAccent.copy(alpha = 0.8f),
+                    )
+                }
+            }
 
             // ---------- 军师的观察（第一内容位，V1 聚合版） ----------
             // 《军师主动观察》设计文档 §二：push 位——用户不开口，军师也告诉
