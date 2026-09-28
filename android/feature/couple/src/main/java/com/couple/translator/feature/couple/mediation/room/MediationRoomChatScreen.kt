@@ -79,6 +79,7 @@ import com.couple.translator.core.ui.components.SkeletonChatPage
 import com.couple.translator.core.ui.components.rememberAppHaptics
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentFaint
+import com.couple.translator.core.ui.theme.AppSoftGradient
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppMotion
@@ -435,26 +436,27 @@ private fun TimeDividerLabel(label: String) {
     )
 }
 
-/** 圆形头像（D1：首字占位；军师用暖色专属徽标）。 */
+/** 圆形头像（D1：首字占位；军师用软渐变专属徽标 F2：淡底+暖色图标，区别但不刺眼）。 */
 @Composable
 private fun PartyAvatar(mine: Boolean, advisor: Boolean, char: String, modifier: Modifier = Modifier) {
-    val bg = when {
-        advisor -> AppWarm
-        mine -> AppAccent
-        else -> AppSurfaceMuted
-    }
     Box(
         modifier = modifier
             .size(28.dp)
             .clip(CircleShape)
-            .background(bg),
+            .then(
+                if (advisor) {
+                    Modifier.background(AppSoftGradient)
+                } else {
+                    Modifier.background(if (mine) AppAccent else AppSurfaceMuted)
+                },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         if (advisor) {
             Icon(
                 imageVector = Icons.Outlined.AutoAwesome,
                 contentDescription = "军师",
-                tint = Color.White,
+                tint = AppWarm,
                 modifier = Modifier.size(15.dp),
             )
         } else {

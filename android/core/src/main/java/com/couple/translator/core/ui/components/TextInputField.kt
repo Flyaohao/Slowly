@@ -15,9 +15,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentFaint
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppRadius
-import com.couple.translator.core.ui.theme.AppTextPrimary
+import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextTertiary
 
 @Composable
@@ -68,8 +69,11 @@ fun TextInputField(
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = AppAccent,
             unfocusedBorderColor = AppBorderLight,
+            // S-G：聚焦时输入区微微「亮起来」——淡品牌底 + 光标品牌色
+            focusedContainerColor = AppAccentFaint,
+            unfocusedContainerColor = AppSurface,
             focusedLabelColor = AppAccent,
-            cursorColor = AppTextPrimary,
+            cursorColor = AppAccent,
         ),
         shape = RoundedCornerShape(AppRadius.md),
     )

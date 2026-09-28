@@ -28,8 +28,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.couple.translator.core.ui.components.AiRiskLevel
+import com.couple.translator.core.ui.theme.AppErrorContainer
 import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppIsDark
+import com.couple.translator.core.ui.theme.AppWarning
+import com.couple.translator.core.ui.theme.AppWarningContainer
 
 // 风险等级直接用 core 的 AiRiskLevel（P-A §2.2）：本文件此前有一份本地
 // SafetyRiskLevel 枚举与之逐档重复，已删——wire 值映射只在 AiRiskLevel.fromWire 一处。
@@ -99,21 +102,15 @@ fun SafetyWarningCard(
     // UNKNOWN 没有本地文案可渲染——它不是「某一档危险」，是「不知道有多危险」。
     // 这里直接不渲染；阻断动作的责任在 mediationBlockedByRisk，不在这张卡片。
     val warning = safetyWarnings[riskLevel] ?: return
-    val isDark = AppIsDark
-    // 深色模式不能沿用浅色警示底（会在黑底上炸出一块白），改为同色系的深底 + 提亮图标色
+    // F1（2026-09-28 视觉美化批2）：硬编码警示色全部迁入语义色板——
+    // 注意档（情绪/表达提醒）用 warning，危险档（滥用/自伤）用 error；
+    // 深色模式由 DarkAppColors 的深底+提亮前景自动成立，不再按 isDark 分支写死色值。
+    // 原黄色系（MANIPULATION_RISK）与橙色系（HEATED_CONFLICT）同属「注意」，收敛为一档。
     val (containerColor, iconTint) = when (riskLevel) {
-        AiRiskLevel.HEATED_CONFLICT ->
-            if (isDark) Color(0xFF3A2A12) to Color(0xFFFFB74D)
-            else Color(0xFFFFF3E0) to Color(0xFFE65100)
-        AiRiskLevel.MANIPULATION_RISK ->
-            if (isDark) Color(0xFF3A3212) to Color(0xFFFFD54F)
-            else Color(0xFFFFF8E1) to Color(0xFFF9A825)
-        AiRiskLevel.ABUSE_RISK ->
-            if (isDark) Color(0xFF3A1A1E) to AppErrorRed
-            else Color(0xFFFFEBEE) to AppErrorRed
-        AiRiskLevel.SELF_HARM_RISK ->
-            if (isDark) Color(0xFF4A1A1C) to Color(0xFFFF8A80)
-            else Color(0xFFFFCDD2) to Color(0xFFB71C1C)
+        AiRiskLevel.HEATED_CONFLICT -> AppWarningContainer to AppWarning
+        AiRiskLevel.MANIPULATION_RISK -> AppWarningContainer to AppWarning
+        AiRiskLevel.ABUSE_RISK -> AppErrorContainer to AppErrorRed
+        AiRiskLevel.SELF_HARM_RISK -> AppErrorContainer to AppErrorRed
         // 走不到：上面 `safetyWarnings[riskLevel] ?: return` 已经挡掉没有文案的档位。
         // 显式写出来而不是加 `else`，是为了让「以后新增一个档位」时编译器
         // 在这里报错——新档位必须有文案，否则它会静默地什么都不显示。
@@ -121,7 +118,7 @@ fun SafetyWarningCard(
     }
     // 深色下按钮底是提亮色，文字改用深底同色；浅色保持原有取色不变
     val buttonContentColor =
-        if (isDark) containerColor else MaterialTheme.colorScheme.onSurface
+        if (AppIsDark) containerColor else MaterialTheme.colorScheme.onSurface
 
     Card(
         modifier = modifier.fillMaxWidth(),

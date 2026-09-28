@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -52,7 +53,10 @@ import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppMotion
+import com.couple.translator.core.ui.theme.AppOnAccent
+import com.couple.translator.core.ui.theme.AppPrimaryGradient
 import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppShadow
 import com.couple.translator.core.ui.theme.AppSize
 import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
@@ -89,6 +93,13 @@ fun BottomTabBar(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                // S-D：胶囊浮起——柔光阴影让它从「贴在页面上」变「浮在页面上」
+                .shadow(
+                    elevation = 12.dp,
+                    shape = RoundedCornerShape(AppRadius.pill),
+                    ambientColor = AppShadow,
+                    spotColor = AppShadow,
+                )
                 .clip(RoundedCornerShape(AppRadius.pill))
                 .background(AppSurface)
                 .border(0.5.dp, AppBorderLight, RoundedCornerShape(AppRadius.pill))
@@ -121,7 +132,8 @@ fun BottomTabBar(
                         .height(AppSize.tabItem)
                         .alpha(indicatorAlpha)
                         .clip(RoundedCornerShape(AppRadius.pill))
-                        .background(AppTextPrimary),
+                        // S4 拍板：选中滑块用品牌渐变，门面件配得上品牌色
+                        .background(AppPrimaryGradient),
                 )
 
                 Row(
@@ -164,9 +176,11 @@ private fun TabItem(
         BottomTab.Diary -> Icons.Outlined.Book
     }
 
-    val surface = AppSurface
+    // 滑块已是品牌渐变（两种主题下都是粉色系），选中内容统一用白色而非 surface——
+    // 深色模式下 surface 是深灰，叠在粉色渐变上会糊
+    val activeContent = AppOnAccent
     val contentColor by animateColorAsState(
-        targetValue = if (isActive) surface else AppTextTertiary,
+        targetValue = if (isActive) activeContent else AppTextTertiary,
         animationSpec = tween(durationMillis = AppMotion.normal, easing = AppMotion.EaseOut),
         label = "tabContentColor",
     )

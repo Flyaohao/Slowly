@@ -66,8 +66,9 @@ import com.couple.translator.core.ui.components.SkeletonBlock
 import com.couple.translator.core.ui.components.TopBarIdentity
 import com.couple.translator.core.ui.components.pressFeedback
 import com.couple.translator.core.ui.theme.AppAccent
-import com.couple.translator.core.ui.theme.AppAccentFaint
 import com.couple.translator.core.ui.theme.AppAccentLight
+import com.couple.translator.core.ui.theme.AppOnAccent
+import com.couple.translator.core.ui.theme.AppPrimaryGradient
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppRadius
@@ -289,8 +290,6 @@ private fun HomeHeroCard(
     userNickname: String?,
     partnerNickname: String?,
 ) {
-    val accent = AppAccent
-
     val numberStyle = TextStyle(
         fontFamily = InterFontFamily,
         fontWeight = FontWeight.SemiBold,
@@ -312,15 +311,16 @@ private fun HomeHeroCard(
             .padding(horizontal = AppSpacing.screenH)
             .padding(top = AppSpacing.lg)
             .clip(RoundedCornerShape(AppRadius.xl))
-            .background(AppAccentFaint)
-            .border(0.5.dp, accent.copy(alpha = 0.14f), RoundedCornerShape(AppRadius.xl))
+            // S-B/S5 拍板：主视觉卡用品牌渐变（批2 落地），文字整体翻白
+            .background(AppPrimaryGradient)
+            .border(0.5.dp, AppOnAccent.copy(alpha = 0.25f), RoundedCornerShape(AppRadius.xl))
             .padding(vertical = AppSpacing.section),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = "在一起",
             style = MaterialTheme.typography.labelMedium,
-            color = accent,
+            color = AppOnAccent.copy(alpha = 0.85f),
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -330,13 +330,13 @@ private fun HomeHeroCard(
                 Text(
                     text = daysCount.toString(),
                     style = numberStyle,
-                    color = AppTextPrimary,
+                    color = AppOnAccent,
                 )
                 Spacer(modifier = Modifier.width(5.dp))
                 Text(
                     text = "天",
                     style = MaterialTheme.typography.titleMedium,
-                    color = AppTextSecondary,
+                    color = AppOnAccent.copy(alpha = 0.8f),
                     modifier = Modifier.padding(bottom = 10.dp),
                 )
             }
@@ -344,7 +344,7 @@ private fun HomeHeroCard(
             Text(
                 text = "刚刚开始",
                 style = MaterialTheme.typography.headlineMedium,
-                color = AppTextPrimary,
+                color = AppOnAccent,
             )
         }
 
@@ -353,7 +353,7 @@ private fun HomeHeroCard(
             Text(
                 text = nicknameLine,
                 style = MaterialTheme.typography.bodySmall,
-                color = AppTextTertiary,
+                color = AppOnAccent.copy(alpha = 0.65f),
             )
         }
     }

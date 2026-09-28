@@ -1,8 +1,13 @@
 package com.couple.translator.core.ui.components
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,18 +29,25 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppOnAccent
+import com.couple.translator.core.ui.theme.AppPrimaryGradient
 import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppShadow
 import com.couple.translator.core.ui.theme.AppSize
 import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
@@ -53,13 +65,37 @@ fun AppPrimaryButton(
 ) {
     val container = AppTextPrimary
     val content = AppSurface
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "primaryButtonScale",
+    )
     Button(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier
             .fillMaxWidth()
-            .height(AppSize.button),
+            .height(AppSize.button)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .then(
+                if (enabled) {
+                    Modifier.shadow(
+                        elevation = 6.dp,
+                        shape = RoundedCornerShape(AppRadius.pill),
+                        ambientColor = AppShadow,
+                        spotColor = AppShadow,
+                    )
+                } else {
+                    Modifier
+                },
+            ),
         shape = RoundedCornerShape(AppRadius.pill),
+        interactionSource = interaction,
         colors = ButtonDefaults.buttonColors(
             containerColor = container,
             contentColor = content,
@@ -72,7 +108,7 @@ fun AppPrimaryButton(
     }
 }
 
-/** 品牌色主按钮：用于「邀请 TA」这类需要跳出品牌色的场合。 */
+/** 品牌色主按钮：S-E 拍板改品牌渐变填充 + 柔光阴影 + 按压缩放。 */
 @Composable
 fun AppAccentButton(
     text: String,
@@ -81,18 +117,51 @@ fun AppAccentButton(
     enabled: Boolean = true,
     icon: ImageVector? = null,
 ) {
-    val container = AppAccent
+    val shape = RoundedCornerShape(AppRadius.pill)
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "accentButtonScale",
+    )
     Button(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier
             .fillMaxWidth()
-            .height(AppSize.button),
-        shape = RoundedCornerShape(AppRadius.pill),
+            .height(AppSize.button)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .then(
+                if (enabled) {
+                    Modifier.shadow(
+                        elevation = 8.dp,
+                        shape = shape,
+                        ambientColor = AppShadow,
+                        spotColor = AppShadow,
+                    )
+                } else {
+                    Modifier
+                },
+            )
+            .then(
+                // M3 Button 的 containerColor 只吃 Color，渐变垫在透明容器底下；
+                // disabled 态回退半透明品牌色，不用渐变
+                if (enabled) {
+                    Modifier.background(AppPrimaryGradient, shape)
+                } else {
+                    Modifier
+                },
+            ),
+        shape = shape,
+        interactionSource = interaction,
         colors = ButtonDefaults.buttonColors(
-            containerColor = container,
+            containerColor = if (enabled) Color.Transparent else AppAccent.copy(alpha = 0.35f),
             contentColor = AppOnAccent,
-            disabledContainerColor = container.copy(alpha = 0.35f),
+            disabledContainerColor = AppAccent.copy(alpha = 0.35f),
             disabledContentColor = AppOnAccent.copy(alpha = 0.75f),
         ),
         contentPadding = PaddingValues(horizontal = AppSpacing.screenH),
@@ -125,7 +194,7 @@ fun AppSecondaryButton(
             disabledContainerColor = container,
             disabledContentColor = AppTextSecondary.copy(alpha = 0.5f),
         ),
-        border = androidx.compose.foundation.BorderStroke(0.5.dp, border),
+        border = androidx.compose.foundation.BorderStroke(1.dp, border),
         contentPadding = PaddingValues(horizontal = AppSpacing.screenH),
     ) {
         ButtonLabel(text = text, icon = icon)
@@ -197,9 +266,10 @@ fun AppFilterChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val container = if (selected) AppAccent.copy(alpha = 0.10f) else AppBackground
+    // S-E：选中态用 accentContainer 实底替代 10% 透明度——大量胶囊并排时「实」的那个更醒目
+    val container = if (selected) AppAccentLight else AppBackground
     val content = if (selected) AppAccent else AppTextSecondary
-    val border = if (selected) AppAccent.copy(alpha = 0.25f) else AppBorderLight
+    val border = if (selected) AppAccent.copy(alpha = 0.30f) else AppBorderLight
 
     Box(
         modifier = modifier

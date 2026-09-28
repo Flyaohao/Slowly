@@ -2,11 +2,25 @@ package com.couple.translator.core.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.couple.translator.core.R
 
-val InterFontFamily = FontFamily.Default
+/**
+ * S-F（2026-09-28 视觉美化批2 拍板）：Inter 字体真身生效。
+ *
+ * 此前 `InterFontFamily = FontFamily.Default`，设计里写的 Inter 从未渲染。
+ * 四档静态 ttf 来自 rsms/inter v4.1（OFL 许可，见 res/font/inter_license.txt）；
+ * Inter 无 CJK 字形，中文自动回退系统字体，不会出现中英混排撕裂。
+ */
+val InterFontFamily = FontFamily(
+    Font(R.font.inter_regular, FontWeight.Normal),
+    Font(R.font.inter_medium, FontWeight.Medium),
+    Font(R.font.inter_semibold, FontWeight.SemiBold),
+    Font(R.font.inter_bold, FontWeight.Bold),
+)
 
 val Typography = Typography(
     displayLarge = TextStyle(
@@ -50,13 +64,13 @@ val Typography = Typography(
         fontFamily = InterFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
-        lineHeight = 24.sp,
+        lineHeight = 25.sp,
     ),
     bodyMedium = TextStyle(
         fontFamily = InterFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
-        lineHeight = 20.sp,
+        lineHeight = 21.sp,
     ),
     bodySmall = TextStyle(
         fontFamily = InterFontFamily,

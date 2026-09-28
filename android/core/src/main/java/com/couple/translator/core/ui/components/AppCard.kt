@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -33,6 +34,7 @@ import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppShadow
 import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppSurfaceMuted
@@ -63,6 +65,13 @@ fun AppCard(
     Column(
         modifier = modifier
             .then(interaction)
+            // S-C 柔光阴影：8dp + 低透明度黑，只做「能感知的层级」不做重投影
+            .shadow(
+                elevation = 8.dp,
+                shape = shape,
+                ambientColor = AppShadow,
+                spotColor = AppShadow,
+            )
             .clip(shape)
             .background(containerColor)
             .border(0.5.dp, borderColor, shape)

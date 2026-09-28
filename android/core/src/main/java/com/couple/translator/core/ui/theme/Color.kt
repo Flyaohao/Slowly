@@ -46,21 +46,35 @@ data class AppColors(
     val onAccent: Color,
     /** 错误 / 危险操作 */
     val error: Color,
+    /** 错误容器底：安全警示卡（滥用/自伤档）的浅底，深色为暗红底 */
+    val errorContainer: Color,
+    /** 警示色（琥珀橙）：情绪提醒等「注意但不危险」档 */
+    val warning: Color,
+    /** 警示容器底：情绪提醒/表达提醒档的浅底 */
+    val warningContainer: Color,
     /** 成功 / 已完成 */
     val success: Color,
+    /** 品牌渐变起点（较亮一端）：主按钮、选中滑块、空态插画底 */
+    val gradientStart: Color,
+    /** 品牌渐变终点（较深一端，保证白字对比度） */
+    val gradientEnd: Color,
+    /** 柔光阴影色：黑色低透明度，深色下需更高 alpha 才可感知 */
+    val shadow: Color,
     /** 当前是否深色模式，供 Canvas 绘制等无法使用语义色的场景分支 */
     val isDark: Boolean,
 )
 
 internal val LightAppColors = AppColors(
-    background = Color(0xFFFAF9F7),
+    // 带 2% 粉调的暖白：肉眼几乎无感，但整屏氛围从「办公」变「柔软」
+    background = Color(0xFFFBF7F5),
     surface = Color(0xFFFFFFFF),
     textPrimary = Color(0xFF171717),
     textSecondary = Color(0xFF5C5C5C),
     textTertiary = Color(0xFFA1A1A1),
     border = Color(0xFFECEAE7),
     track = Color(0xFFECEAE7),
-    accent = Color(0xFFBE185D),
+    // 比 0xFFBE185D 亮一档：按钮/选中态更「鲜」而不刺眼
+    accent = Color(0xFFC9195F),
     accentContainer = Color(0xFFFCE7F3),
     accentFaint = Color(0xFFFCF0F4),
     surfaceMuted = Color(0xFFF3F1EE),
@@ -68,13 +82,21 @@ internal val LightAppColors = AppColors(
     warmContainer = Color(0xFFFDEBD8),
     onAccent = Color(0xFFFFFFFF),
     error = Color(0xFFDC2626),
+    errorContainer = Color(0xFFFFEBEE),
+    warning = Color(0xFFE65100),
+    warningContainer = Color(0xFFFFF3E0),
     success = Color(0xFF16A34A),
+    // 亮玫瑰 → 品牌粉：可见的渐变，两端都压得住白字
+    gradientStart = Color(0xFFDB2777),
+    gradientEnd = Color(0xFFC9195F),
+    shadow = Color(0x14000000),
     isDark = false,
 )
 
 internal val DarkAppColors = AppColors(
-    // 深色不用纯黑，避免 OLED 上的「黑洞感」与滚动拖影，同时保留原有的 iOS 观感
-    background = Color(0xFF0D0D0F),
+    // 深色不用纯黑，避免 OLED 上的「黑洞感」与滚动拖影，同时保留原有的 iOS 观感；
+    // 加一丝暖（红调）与浅色模式的暖白呼应
+    background = Color(0xFF121011),
     surface = Color(0xFF1C1C1E),
     textPrimary = Color(0xFFF5F5F7),
     textSecondary = Color(0xFFAEAEB2),
@@ -92,7 +114,15 @@ internal val DarkAppColors = AppColors(
     warmContainer = Color(0xFF3A2410),
     onAccent = Color(0xFFFFFFFF),
     error = Color(0xFFEF4444),
+    errorContainer = Color(0xFF3A1A1E),
+    warning = Color(0xFFFFB74D),
+    warningContainer = Color(0xFF3A2A12),
     success = Color(0xFF22C55E),
+    // 深色下渐变整体提亮一档，避免暗底上发闷
+    gradientStart = Color(0xFFE62E7E),
+    gradientEnd = Color(0xFFC2185B),
+    // 深色下黑阴影需要更高 alpha 才能被感知
+    shadow = Color(0x33000000),
     isDark = true,
 )
 
@@ -148,8 +178,26 @@ val AppOnAccent: Color
 val AppErrorRed: Color
     @Composable @ReadOnlyComposable get() = LocalAppColors.current.error
 
+val AppErrorContainer: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.errorContainer
+
+val AppWarning: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.warning
+
+val AppWarningContainer: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.warningContainer
+
 val AppSuccessGreen: Color
     @Composable @ReadOnlyComposable get() = LocalAppColors.current.success
+
+val AppGradientStart: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.gradientStart
+
+val AppGradientEnd: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.gradientEnd
+
+val AppShadow: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.shadow
 
 val AppIsDark: Boolean
     @Composable @ReadOnlyComposable get() = LocalAppColors.current.isDark
