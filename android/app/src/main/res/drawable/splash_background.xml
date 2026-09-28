@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 冷启动启动画面：底色取自 slowly-splash.webp 四角均值，图片居中放置，
+     屏幕比例不同时不拉伸，多余区域用同色底无缝填充 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splash_background" />
+    <item>
+        <bitmap
+            android:src="@drawable/slowly_splash"
+            android:gravity="center" />
+    </item>
+</layer-list>

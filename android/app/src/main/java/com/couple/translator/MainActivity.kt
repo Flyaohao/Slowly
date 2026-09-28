@@ -58,6 +58,9 @@ class MainActivity : ComponentActivity() {
     private val deepLinkRoute = MutableStateFlow<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 冷启动主题（启动图）只用于系统绘制首帧，进 Compose 前切回正常主题，
+        // 否则启动图会一直留在 windowBackground 里，转场/过滚动时可能透出
+        setTheme(R.style.Theme_CoupleTranslator)
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         deepLinkRoute.value = intent?.getStringExtra(AppNotifications.EXTRA_ROUTE)

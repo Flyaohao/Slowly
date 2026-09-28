@@ -6,4 +6,13 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
+
+    <!-- 冷启动专用主题：MainActivity 显示启动图，onCreate 里 setTheme 切回正常主题 -->
+    <style name="Theme.CoupleTranslator.Launch" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- 启动图本身是浅色底，两种外观模式下状态栏都用深色图标 -->
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
 </resources>

@@ -2,4 +2,6 @@
 <resources>
     <!-- 窗口底色：必须与 Color.kt 中 LightAppColors.background 保持一致 -->
     <color name="app_window_background">#FAF9F7</color>
+    <!-- 启动图底色（取 slowly-splash.webp 四角均值，保证居中放置后无缝衔接） -->
+    <color name="splash_background">#F7EDE7</color>
 </resources>
