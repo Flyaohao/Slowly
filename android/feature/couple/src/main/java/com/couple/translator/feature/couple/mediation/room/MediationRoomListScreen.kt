@@ -16,9 +16,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Forum
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,10 +30,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -45,12 +46,15 @@ import com.couple.translator.core.ui.components.AppPrimaryButton
 import com.couple.translator.core.ui.components.AppTag
 import com.couple.translator.core.ui.components.AppTagTone
 import com.couple.translator.core.ui.components.SkeletonPlainListPage
-import com.couple.translator.core.ui.theme.AppWarm
-import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentFaint
+import com.couple.translator.core.ui.theme.AppSoftGradient
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
+import com.couple.translator.core.ui.theme.AppWarm
+import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.feature.couple.data.model.MediationRoomDto
 import com.couple.translator.feature.couple.data.model.isActiveRoom
 import com.couple.translator.feature.couple.data.model.staleOverAWeek
@@ -61,6 +65,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 data class RoomListUiState(
@@ -107,7 +115,30 @@ private fun statusLabel(status: String): String = when (status) {
     else -> status
 }
 
-/** 房间列表（设计 §一：主入口，军师 tab 顶部 / 抽屉都落到这里）。 */@Composable
+/**
+ * 相对时间（D4）：今天/昨天/N 天前/MM-dd。
+ * 时间源用后端 ISO 时间（lastMessageAt ?: createdAt），event_time 是用户手填的自由文本
+ * 解析不了，解析失败时原样展示。
+ */
+private fun relativeTime(iso: String?, fallback: String): String {
+    if (iso.isNullOrBlank()) return fallback
+    val instant = runCatching {
+        Instant.parse(iso.replace(" ", "T") + if (iso.length == 19) "Z" else "")
+    }.getOrNull() ?: return fallback
+    val zone = ZoneId.systemDefault()
+    val local = instant.atZone(zone)
+    val today = LocalDate.now(zone)
+    val date = local.toLocalDate()
+    return when {
+        date == today -> "今天 ${local.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+        date == today.minusDays(1) -> "昨天 ${local.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+        date.isAfter(today.minusDays(7)) -> "${today.toEpochDay() - date.toEpochDay()} 天前"
+        else -> local.format(DateTimeFormatter.ofPattern("MM-dd"))
+    }
+}
+
+/** 房间列表（改版 2026-09-28：列表为主角，创建入口收进顶栏，低频 CTA 只在空态出现）。 */
+@Composable
 fun MediationRoomListScreen(
     onNavigateBack: () -> Unit,
     onOpenRoom: (Long) -> Unit,
@@ -119,32 +150,28 @@ fun MediationRoomListScreen(
     LaunchedEffect(Unit) { viewModel.load() }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        AppBackTopBar(onBack = onNavigateBack, title = "共同调解室")
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = if (uiState.activeCount > 0) "有 ${uiState.activeCount} 间调解室正在进行"
-                else "吵架了？把军师请进房间",
-                style = MaterialTheme.typography.bodyMedium,
-                color = AppTextSecondary,
-            )
-        }
-
-        AppPrimaryButton(
-            text = "发起调解",
-            onClick = onCreateRoom,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
+        AppBackTopBar(
+            onBack = onNavigateBack,
+            title = "共同调解室",
+            trailing = {
+                IconButton(onClick = onCreateRoom, modifier = Modifier.size(32.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(AppAccentFaint),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Add,
+                            contentDescription = "发起调解",
+                            tint = AppAccent,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            },
         )
-
-        Spacer(modifier = Modifier.height(8.dp))
 
         if (uiState.loading) {
             // G3：骨架屏替代「加载中…」文字，数据到位不跳版
@@ -154,8 +181,19 @@ fun MediationRoomListScreen(
                 icon = Icons.Outlined.Forum,
                 title = "还没有调解室",
                 subtitle = "发生争执后在这里开一间房间，双方一起聊，军师在场",
+                action = {
+                    AppPrimaryButton(
+                        text = "发起第一场调解",
+                        onClick = onCreateRoom,
+                        modifier = Modifier.padding(horizontal = 20.dp),
+                    )
+                },
             )
         } else {
+            // D2：进行中的房间置顶分组，已结束的沉底；分组头承担「N 间正在进行」的信息
+            val activeRooms = uiState.rooms.filter { it.isActiveRoom }
+            val endedRooms = uiState.rooms.filterNot { it.isActiveRoom }
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
@@ -163,58 +201,103 @@ fun MediationRoomListScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(uiState.rooms, key = { it.id }) { room ->
-                    // G4：按压缩放反馈 + S-C 柔影（AppCard 内建），替代裸 m3 Card
-                    AppCard(
-                        onClick = { onOpenRoom(room.id) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = room.name,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = AppTextPrimary,
-                                modifier = Modifier.weight(1f, fill = false),
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            // 状态徽章（P-3f）：AppTag 分色替代裸文字
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (room.isActiveRoom) {
-                                    PulsingDot()
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                }
-                                AppTag(
-                                    text = statusLabel(room.status),
-                                    tone = when (room.status) {
-                                        "settlement_ready" -> AppTagTone.Warm
-                                        "active", "settling" -> AppTagTone.Accent
-                                        else -> AppTagTone.Neutral
-                                    },
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = room.eventTime,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppTextTertiary,
-                        )
-                        // 疏于活动是独立提醒，不再用「·」拼在时间后面
-                        if (room.staleOverAWeek) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "已 7 天无活动，建议结算",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = AppWarm,
-                            )
-                        }
+                if (activeRooms.isNotEmpty()) {
+                    item(key = "header_active") {
+                        GroupHeader(text = "进行中 · ${activeRooms.size}")
+                    }
+                    items(activeRooms, key = { it.id }) { room ->
+                        RoomCard(room = room, onOpen = { onOpenRoom(room.id) })
+                    }
+                }
+                if (endedRooms.isNotEmpty()) {
+                    item(key = "header_ended") { GroupHeader(text = "已结束") }
+                    items(endedRooms, key = { it.id }) { room ->
+                        RoomCard(room = room, onOpen = { onOpenRoom(room.id) })
                     }
                 }
             }
+        }
+    }
+}
+
+/** 分组头：小号标签样式，弱存在感，不与卡片抢层级。 */
+@Composable
+private fun GroupHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.Medium,
+        color = AppTextTertiary,
+        modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+    )
+}
+
+/** 房间卡（D3）：左侧首字头像给视觉锚点，进行中用柔和渐变底，已结束用中性底。 */
+@Composable
+private fun RoomCard(room: MediationRoomDto.RoomSummary, onOpen: () -> Unit) {
+    AppCard(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .then(
+                        if (room.isActiveRoom) {
+                            Modifier.background(brush = AppSoftGradient)
+                        } else {
+                            Modifier.background(AppAccentFaint)
+                        }
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = room.name.trim().firstOrNull()?.toString() ?: "?",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = if (room.isActiveRoom) AppSurface else AppTextSecondary,
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = room.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = AppTextPrimary,
+                    maxLines = 1,
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = relativeTime(room.lastMessageAt ?: room.createdAt, room.eventTime),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextTertiary,
+                )
+                if (room.staleOverAWeek) {
+                    // 疏于活动是独立提醒，不再用「·」拼在时间后面
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "已 7 天无活动，建议结算",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppWarm,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            if (room.isActiveRoom) {
+                PulsingDot()
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+            // 状态徽章（P-3f）：AppTag 分色替代裸文字
+            AppTag(
+                text = statusLabel(room.status),
+                tone = when (room.status) {
+                    "settlement_ready" -> AppTagTone.Warm
+                    "active", "settling" -> AppTagTone.Accent
+                    else -> AppTagTone.Neutral
+                },
+            )
         }
     }
 }
