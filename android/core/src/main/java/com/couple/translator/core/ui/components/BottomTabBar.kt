@@ -1,7 +1,6 @@
 package com.couple.translator.core.ui.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -52,6 +51,7 @@ import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppMotion
 import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppSize
 import com.couple.translator.core.ui.theme.AppSpacing
@@ -102,7 +102,7 @@ fun BottomTabBar(
                 val targetOffset by animateDpAsState(
                     targetValue = itemWidth * activeIndex.coerceAtLeast(0),
                     animationSpec = spring(
-                        dampingRatio = 0.82f,
+                        dampingRatio = AppMotion.SpringDamping,
                         stiffness = Spring.StiffnessMediumLow,
                     ),
                     label = "tabIndicatorOffset",
@@ -110,7 +110,7 @@ fun BottomTabBar(
                 // 当前路由不属于任何 tab 时（如全屏二级页）不显示滑块
                 val indicatorAlpha by animateFloatAsState(
                     targetValue = if (activeIndex >= 0) 1f else 0f,
-                    animationSpec = tween(durationMillis = 180),
+                    animationSpec = tween(durationMillis = AppMotion.fast),
                     label = "tabIndicatorAlpha",
                 )
 
@@ -167,7 +167,7 @@ private fun TabItem(
     val surface = AppSurface
     val contentColor by animateColorAsState(
         targetValue = if (isActive) surface else AppTextTertiary,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = AppMotion.normal, easing = AppMotion.EaseOut),
         label = "tabContentColor",
     )
 

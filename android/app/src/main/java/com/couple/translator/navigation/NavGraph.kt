@@ -504,9 +504,13 @@ fun NavGraph(
             arguments = listOf(navArgument("roomId") { type = NavType.LongType }),
         ) { backStackEntry ->
             val roomId = backStackEntry.arguments?.getLong("roomId") ?: 0L
+            // M-2 头像/昵称体系：双方昵称来自壳层同一份 CoupleState（首字占位头像 D1）
+            val coupleState = coupleStateManager?.state?.collectAsState()?.value
             MediationRoomChatScreen(
                 roomId = roomId,
                 onNavigateBack = { navController.popBackStack() },
+                myNickname = coupleState?.userNickname,
+                partnerNickname = coupleState?.partnerNickname,
             )
         }
 

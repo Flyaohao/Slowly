@@ -15,6 +15,7 @@ from typing import Optional, Tuple
 
 from sqlalchemy.orm import Session
 
+from app.models.couple_relation import CoupleRelation
 from app.models.mediation_room import (
     RESULT_LABELS,
     RoomMessage,
@@ -30,6 +31,7 @@ from app.schemas.mediation_room_schema import (
     RoomSummaryOut,
 )
 from app.services import mediation_styles
+from app.services.party_labels import party_labels
 
 logger = logging.getLogger("couple.room")
 
@@ -287,6 +289,23 @@ def _settlement_dict(room) -> Optional[dict]:
     return data
 
 
+def _settlement_dict_with_labels(db: Session, room) -> Optional[dict]:
+    """调解书 + 双方称呼标签（D7：前端禁再硬编码「女方/男方」，
+    标签与 party_labels.py 单一事实源一致——按资料性别映射，
+    其他/未填回退「当事人A/B」，随快照实时计算）。"""
+    data = _settlement_dict(room)
+    if data is None:
+        return None
+    relation = (
+        db.query(CoupleRelation)
+        .filter(CoupleRelation.id == room.relation_id)
+        .first()
+    )
+    if relation is not None:
+        data["party_labels"] = party_labels(db, relation)
+    return data
+
+
 def _state_out(db: Session, room, role: str) -> RoomStateOut:
     generating = room_repo.get_pending_fresh(db, room.id) is not None
     partner_role = "user_b" if role == "user_a" else "user_a"
@@ -307,7 +326,7 @@ def _state_out(db: Session, room, role: str) -> RoomStateOut:
         last_message_id=room.last_message_id,
     )
     if room.status in (ROOM_SETTLING, ROOM_SETTLEMENT_READY, ROOM_SETTLED):
-        state.settlement = _settlement_dict(room)
+        state.settlement = _settlement_dict_with_labels(db, room)
         state.confirm_me = getattr(room, "confirm_" + role)
         state.confirm_partner = getattr(room, "confirm_" + partner_role)
     return state

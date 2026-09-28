@@ -1,6 +1,8 @@
 package com.couple.translator.feature.couple.mediation.room
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,8 +10,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material3.Card
@@ -22,13 +27,22 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.AppPrimaryButton
+import com.couple.translator.core.ui.components.SkeletonPlainListPage
+import com.couple.translator.core.ui.components.pressFeedback
 import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
@@ -90,8 +104,7 @@ private fun statusLabel(status: String): String = when (status) {
     else -> status
 }
 
-/** 房间列表（设计 §一：主入口，军师 tab 顶部 / 抽屉都落到这里）。 */
-@Composable
+/** 房间列表（设计 §一：主入口，军师 tab 顶部 / 抽屉都落到这里）。 */@Composable
 fun MediationRoomListScreen(
     onNavigateBack: () -> Unit,
     onOpenRoom: (Long) -> Unit,
@@ -131,11 +144,8 @@ fun MediationRoomListScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         if (uiState.loading) {
-            Text(
-                text = "加载中…",
-                modifier = Modifier.padding(20.dp),
-                color = AppTextTertiary,
-            )
+            // G3：骨架屏替代「加载中…」文字，数据到位不跳版
+            SkeletonPlainListPage(cardRows = 4)
         } else if (uiState.rooms.isEmpty()) {
             AppEmptyState(
                 icon = Icons.Outlined.Forum,
@@ -151,10 +161,12 @@ fun MediationRoomListScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(uiState.rooms, key = { it.id }) { room ->
+                    // G4：按压缩放反馈替代 M3 水波纹（Card(onClick) 默认涟漪显脏）
                     Card(
-                        onClick = { onOpenRoom(room.id) },
                         colors = CardDefaults.cardColors(containerColor = AppSurface),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pressFeedback { onOpenRoom(room.id) },
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Row(
@@ -168,11 +180,19 @@ fun MediationRoomListScreen(
                                     color = AppTextPrimary,
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
-                                Text(
-                                    text = statusLabel(room.status),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (room.isActiveRoom) AppErrorRed else AppTextTertiary,
-                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                // 进行中徽标：红点脉冲 + 文案（M-8）
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (room.isActiveRoom) {
+                                        PulsingDot()
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                    }
+                                    Text(
+                                        text = statusLabel(room.status),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (room.isActiveRoom) AppErrorRed else AppTextTertiary,
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
@@ -189,4 +209,26 @@ fun MediationRoomListScreen(
             }
         }
     }
+}
+
+/** 进行中状态的红点脉冲（M-8）：呼吸透明度，弱提醒不喧宾。 */
+@Composable
+private fun PulsingDot() {
+    val transition = rememberInfiniteTransition(label = "pulse")
+    val alpha by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "pulseAlpha",
+    )
+    Box(
+        modifier = Modifier
+            .size(6.dp)
+            .alpha(alpha)
+            .clip(CircleShape)
+            .background(AppErrorRed),
+    )
 }

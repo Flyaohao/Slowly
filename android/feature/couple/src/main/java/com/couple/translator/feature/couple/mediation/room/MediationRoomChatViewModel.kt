@@ -32,8 +32,23 @@ data class RoomChatUiState(
     val advisorStreaming: Boolean = false,
     /** 对端触发军师生成（pending 占位），本端只显示「军师正在输入」 */
     val advisorInputPending: Boolean = false,
+    /**
+     * 乐观上屏的待确认消息（全局 UI/UX 方案 M-7 / D8 拍板）：
+     * 发送即上屏（tempId 为负，不与服务端 id 冲突），轮询对账到同内容
+     * 消息后移除；失败保留并标 failed——错误不清空输入（红线）。
+     */
+    val pendingSends: List<PendingSend> = emptyList(),
     val toast: String = "",
     val error: String = "",
+)
+
+/** 乐观上屏条目。tempId 为负数时间戳；failed=true 时气泡标红、点击重发。 */
+data class PendingSend(
+    val tempId: Long,
+    val content: String,
+    val mention: Boolean,
+    val failed: Boolean = false,
+    val createdAtMs: Long = System.currentTimeMillis(),
 )
 
 @HiltViewModel
@@ -80,11 +95,23 @@ class MediationRoomChatViewModel @Inject constructor(
                 onSuccess = { data ->
                     if (data == null) return@launch
                     _uiState.update { cur ->
+                        val myRole = data.state?.myRole ?: cur.state?.myRole
+                        val arrived = data.messages
+                            .filter { myRole == null || it.senderType == myRole }
+                            .map { it.content }
+                            .toSet()
+                        val now = System.currentTimeMillis()
+                        // 对账：同内容已从服务端回来 → 移除乐观条目；
+                        // 超过 15s 仍未对账的也丢弃（防内容被服务端改写后永久滞留）
+                        val remaining = cur.pendingSends.filter { p ->
+                            p.content !in arrived && now - p.createdAtMs < 15_000L
+                        }
                         val merged = if (data.messages.isEmpty()) cur.messages
                         else cur.messages + data.messages
                         cur.copy(
                             loading = false,
                             messages = merged,
+                            pendingSends = remaining,
                             state = data.state ?: cur.state,
                             advisorInputPending = data.state?.advisorGenerating == true &&
                                 !cur.advisorStreaming,
@@ -105,11 +132,17 @@ class MediationRoomChatViewModel @Inject constructor(
     fun consumeToast() = _uiState.update { it.copy(toast = "") }
     fun clearError() = _uiState.update { it.copy(error = "") }
 
-    /** 发消息；mention=true 同时召唤军师（@军师）。 */
+    /** 发消息；mention=true 同时召唤军师（@军师）。发送即乐观上屏（M-7）。 */
     fun sendMessage(content: String, mention: Boolean) {
         val roomId = _uiState.value.roomId
         val text = content.trim()
         if (roomId == 0L || text.isEmpty()) return
+        val pending = PendingSend(
+            tempId = -System.currentTimeMillis(),
+            content = text,
+            mention = mention,
+        )
+        _uiState.update { it.copy(pendingSends = it.pendingSends + pending) }
         viewModelScope.launch {
             repository.postMessage(roomId, MediationRoomDto.PostMessageRequest(text, mention))
                 .fold(
@@ -124,10 +157,29 @@ class MediationRoomChatViewModel @Inject constructor(
                         pollNow(silent = true)
                     },
                     onFailure = { e ->
-                        _uiState.update { it.copy(error = e.message ?: "发送失败") }
+                        _uiState.update { st ->
+                            st.copy(
+                                pendingSends = st.pendingSends.map { p ->
+                                    if (p.tempId == pending.tempId) p.copy(failed = true) else p
+                                },
+                                error = e.message ?: "发送失败",
+                            )
+                        }
                     },
                 )
         }
+    }
+
+    /** 重发失败的乐观消息（点击失败气泡）。 */
+    fun retryPendingSend(tempId: Long) {
+        val pending = _uiState.value.pendingSends.firstOrNull { it.tempId == tempId } ?: return
+        _uiState.update { it.copy(pendingSends = it.pendingSends.filterNot { p -> p.tempId == tempId }) }
+        sendMessage(pending.content, pending.mention)
+    }
+
+    /** 撤下失败的乐观消息（长按/滑动丢弃；文本仍可从失败气泡里复制重打）。 */
+    fun dismissPendingSend(tempId: Long) {
+        _uiState.update { it.copy(pendingSends = it.pendingSends.filterNot { p -> p.tempId == tempId }) }
     }
 
     /** 军师发言 SSE（D-CHANNEL：API 进程流式）。 */

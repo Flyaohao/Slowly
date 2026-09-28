@@ -6,8 +6,6 @@ import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -62,6 +60,7 @@ import com.couple.translator.core.navigation.BottomTab
 import com.couple.translator.core.ui.components.BottomTabBar
 import com.couple.translator.core.ui.components.TopBarIdentity
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppMotion
 import kotlinx.coroutines.launch
 
 /**
@@ -258,33 +257,33 @@ fun CoupleShell(
                     val forward = tabIndexOf(tabs, targetState.destination.route) >=
                         tabIndexOf(tabs, initialState.destination.route)
                     slideInHorizontally(
-                        animationSpec = tween(durationMillis = 300, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)),
+                        animationSpec = tween(durationMillis = AppMotion.slow, easing = AppMotion.EaseOut),
                         initialOffsetX = { width -> if (forward) width / 5 else -width / 5 },
-                    ) + fadeIn(animationSpec = tween(durationMillis = 240, easing = LinearOutSlowInEasing))
+                    ) + fadeIn(animationSpec = tween(durationMillis = AppMotion.normal, easing = AppMotion.EaseOut))
                 },
                 exitTransition = {
                     val forward = tabIndexOf(tabs, targetState.destination.route) >=
                         tabIndexOf(tabs, initialState.destination.route)
                     slideOutHorizontally(
-                        animationSpec = tween(durationMillis = 300, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)),
+                        animationSpec = tween(durationMillis = AppMotion.slow, easing = AppMotion.EaseOut),
                         targetOffsetX = { width -> if (forward) -width / 5 else width / 5 },
-                    ) + fadeOut(animationSpec = tween(durationMillis = 200, easing = LinearOutSlowInEasing))
+                    ) + fadeOut(animationSpec = tween(durationMillis = AppMotion.fast, easing = AppMotion.EaseOut))
                 },
                 popEnterTransition = {
                     val forward = tabIndexOf(tabs, targetState.destination.route) >=
                         tabIndexOf(tabs, initialState.destination.route)
                     slideInHorizontally(
-                        animationSpec = tween(durationMillis = 300, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)),
+                        animationSpec = tween(durationMillis = AppMotion.slow, easing = AppMotion.EaseOut),
                         initialOffsetX = { width -> if (forward) width / 5 else -width / 5 },
-                    ) + fadeIn(animationSpec = tween(durationMillis = 240, easing = LinearOutSlowInEasing))
+                    ) + fadeIn(animationSpec = tween(durationMillis = AppMotion.normal, easing = AppMotion.EaseOut))
                 },
                 popExitTransition = {
                     val forward = tabIndexOf(tabs, targetState.destination.route) >=
                         tabIndexOf(tabs, initialState.destination.route)
                     slideOutHorizontally(
-                        animationSpec = tween(durationMillis = 300, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)),
+                        animationSpec = tween(durationMillis = AppMotion.slow, easing = AppMotion.EaseOut),
                         targetOffsetX = { width -> if (forward) -width / 5 else width / 5 },
-                    ) + fadeOut(animationSpec = tween(durationMillis = 200, easing = LinearOutSlowInEasing))
+                    ) + fadeOut(animationSpec = tween(durationMillis = AppMotion.fast, easing = AppMotion.EaseOut))
                 },
             ) {
                 composable(BottomTab.Home.route) {

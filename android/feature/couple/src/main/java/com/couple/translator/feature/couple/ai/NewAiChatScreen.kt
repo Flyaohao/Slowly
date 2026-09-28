@@ -82,6 +82,7 @@ import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppListItem
 import com.couple.translator.core.ui.components.AppListItemDivider
 import com.couple.translator.core.ui.components.AppMarkdownText
+import com.couple.translator.core.ui.components.ChatInputBar
 import com.couple.translator.core.ui.components.AppPageHeader
 import com.couple.translator.core.ui.components.AppTopBar
 import com.couple.translator.core.ui.components.AppTopBarAction
@@ -978,44 +979,16 @@ private fun AiInputBar(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppSurface)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .background(AppSurface),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("想说点什么…", color = AppTextTertiary) },
-                shape = RoundedCornerShape(24.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = AppAccent,
-                    unfocusedBorderColor = AppBorderLight,
-                    cursorColor = AppTextPrimary,
-                ),
-                maxLines = 4,
-            )
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            IconButton(
-                onClick = onSend,
-                enabled = value.isNotBlank() && !isLoading,
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(if (value.isNotBlank() && !isLoading) AppTextPrimary else AppBorderLight),
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "发送",
-                    tint = AppSurface,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
+        // D4（全局 UI/UX 方案）：输入框+发送键抽到 core ChatInputBar，与调解室共用一套手感
+        ChatInputBar(
+            value = value,
+            onValueChange = onValueChange,
+            onSend = onSend,
+            isLoading = isLoading,
+            placeholder = "想说点什么…",
+        )
 
         // P-B §1.6：档位 chip 在输入框下方常驻——档位决定这条消息多快多深，
         // 发送前必须一眼可见、一点可改；藏进悬浮按钮等于让用户以为没这个能力。

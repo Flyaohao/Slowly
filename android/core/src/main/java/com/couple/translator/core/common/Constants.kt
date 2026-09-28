@@ -13,6 +13,8 @@ object Constants {
     const val THEME_MODE_KEY = "theme_mode"
     /** 系统通知权限是否已询问过（问过一次就不再纠缠，拒绝也不影响主流程） */
     const val NOTIFICATION_ASKED_KEY = "notification_permission_asked"
+    /** 触感反馈总开关（全局 UI/UX 方案 D5：默认开，设置页 P1 接入开关行） */
+    const val HAPTICS_ENABLED_KEY = "haptics_enabled"
     /** 上次弹过「用量 80% 提示」的 sessionId（P-C3 §3.4：每段会话各一次） */
     const val USAGE_HINT_SESSION_KEY = "usage_hint_session_id"
     /** 上次成功获取的模式 couple/unbinding/single——情侣状态刷新失败时的本地兜底 */

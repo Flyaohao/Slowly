@@ -89,11 +89,19 @@ object MediationRoomDto {
         @Json(name = "summary_text") val summaryText: String = "",
         @Json(name = "agreements") val agreements: List<String> = emptyList(),
         @Json(name = "responsibilities") val responsibilities: Responsibilities? = null,
+        /** 双方称呼（后端 party_labels 按 gender 实时计算；禁前端硬编码女方/男方，D7） */
+        @Json(name = "party_labels") val partyLabels: PartyLabels? = null,
         @Json(name = "generated_at") val generatedAt: String? = null,
         @Json(name = "result_label") val resultLabel: String? = null,
     ) {
         @JsonClass(generateAdapter = true)
         data class Responsibilities(
+            @Json(name = "user_a") val userA: String = "",
+            @Json(name = "user_b") val userB: String = "",
+        )
+
+        @JsonClass(generateAdapter = true)
+        data class PartyLabels(
             @Json(name = "user_a") val userA: String = "",
             @Json(name = "user_b") val userB: String = "",
         )
