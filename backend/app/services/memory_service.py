@@ -703,6 +703,7 @@ def distill_in_background(
     if os.getenv("COUPLE_DISABLE_MEMORY_DISTILL") == "1":
         return None
     # v5.0 D4：用户未配置 AI → 静默跳过（后台线程路径，无需引导弹窗）
+    from app.core.database import SessionLocal
     from app.services import user_ai_config_service as uaicfg
 
     _probe_db = SessionLocal()
@@ -754,6 +755,7 @@ def distill_session_summary_in_background(
     if os.getenv("COUPLE_DISABLE_MEMORY_DISTILL") == "1":
         return None
     # v5.0 D4：按 user_id 判定配置；未配置直接跳过
+    from app.core.database import SessionLocal
     from app.services import user_ai_config_service as uaicfg
 
     _probe_db = SessionLocal()
