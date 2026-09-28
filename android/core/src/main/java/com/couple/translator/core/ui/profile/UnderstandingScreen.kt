@@ -179,9 +179,11 @@ fun UnderstandingScreen(
             }
 
             // ---------- 性格辅助信息 ----------
-            // 2026-09-28 用户拍板：MBTI/星盘此前只进军师 prompt，画像页不展示；
-            // 本次新增展示区。口径不变：问卷画像为主，MBTI 次之，星座/星盘最弱，
-            // 权重说明由后端统一下发（reference_note），不混入上面的维度评分体系。
+            // 2026-09-28 用户拍板：MBTI/星盘此前只进军师 prompt，画像页不展示。
+            // 口径：问卷画像为主，MBTI 与星座/星盘仅作辅助参考（展示版说明由
+            // 后端统一下发，不用 prompt 里那句「不得作为专业结论」——刚展示完
+            // 就自我否定，读起来前后矛盾，同日用户反馈）。
+            // 布局（用户反馈）：MBTI 一栏、星盘一栏，不挤在一起。
             SectionTitle("性格辅助信息")
             AppCard(
                 modifier = Modifier
@@ -194,41 +196,24 @@ fun UnderstandingScreen(
                         text = if (uiState.isLoading) "加载中…" else "暂时拿不到性格辅助信息",
                         style = MaterialTheme.typography.bodyMedium,
                         color = AppTextSecondary,
+                        modifier = Modifier.padding(vertical = 4.dp),
                     )
                 } else {
-                    val me = personality.me
-                    if (me != null && me.filled) {
-                        PersonalityEntryContent(me)
-                    } else {
-                        AppListItem(
-                            title = "去个人资料页补充 MBTI 与生日",
-                            subtitle = "补充后，这里会显示你的性格参考信息",
-                            leadingIcon = Icons.Outlined.Person,
-                            showChevron = true,
-                            onClick = { onNavigateToRoute(Screen.Profile.route) },
-                        )
-                    }
-
-                    val partner = personality.partner
-                    AppListItemDivider()
-                    Text(
-                        text = "TA 的性格",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTextSecondary,
+                    PersonalityRows(
+                        entry = personality.me,
+                        label = "我的",
+                        onFillProfile = { onNavigateToRoute(Screen.Profile.route) },
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    when {
-                        partner == null -> Text(
-                            text = "绑定伴侣后，可查看对方的性格辅助信息。",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AppTextSecondary,
+
+                    AppListItemDivider()
+                    val partner = personality.partner
+                    if (partner == null) {
+                        AppListItem(
+                            title = "TA 的性格",
+                            subtitle = "绑定伴侣后，可查看对方的性格辅助信息",
                         )
-                        partner.filled -> PersonalityEntryContent(partner)
-                        else -> Text(
-                            text = "对方还没在 TA 的资料页补充 MBTI/生日。",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AppTextSecondary,
-                        )
+                    } else {
+                        PersonalityRows(entry = partner, label = "TA 的", onFillProfile = null)
                     }
 
                     personality.referenceNote?.takeIf { it.isNotBlank() }?.let { note ->
@@ -237,6 +222,7 @@ fun UnderstandingScreen(
                             text = note,
                             style = MaterialTheme.typography.bodySmall,
                             color = AppTextSecondary,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                         )
                     }
                 }
@@ -418,44 +404,57 @@ private fun DimensionScoreRow(dimension: ProfileDto.DimensionScoreResponse) {
 }
 
 /**
- * 一个人的 MBTI + 星座展示（自己/伴侣共用）。
+ * 一个人的性格辅助两栏：MBTI 一栏、星盘一栏（2026-09-28 用户反馈，不再挤成一坨）。
  *
- * 数据全部由服务端算好下发；缺哪段就不显示哪段，不占位、不编数据——
+ * 数据全部由服务端算好下发；缺哪段就显示对应引导，不占位、不编数据——
  * 与后端 astrology_service「缺失如实为 null」的口径一致。
+ * [onFillProfile] 仅自己有（跳资料页补充）；伴侣的资料只能本人改，传 null。
  */
 @Composable
-private fun PersonalityEntryContent(entry: ProfileDto.PersonalityEntryResponse) {
-    val mbtiLine = buildString {
-        entry.mbti?.let { append(it) }
-        entry.mbtiName?.let { if (isNotEmpty()) append(" · "); append(it) }
-    }
-    if (mbtiLine.isNotBlank()) {
-        Text(
-            text = mbtiLine,
-            style = MaterialTheme.typography.bodyMedium,
-            color = AppTextSecondary,
+private fun PersonalityRows(
+    entry: ProfileDto.PersonalityEntryResponse?,
+    label: String,
+    onFillProfile: (() -> Unit)?,
+) {
+    if (entry == null || !entry.filled) {
+        AppListItem(
+            title = "${label}性格",
+            subtitle = if (onFillProfile != null) {
+                "还没补充 MBTI 与生日，点这里去资料页填写"
+            } else {
+                "对方还没在 TA 的资料页补充 MBTI/生日"
+            },
+            leadingIcon = if (onFillProfile != null) Icons.Outlined.Person else null,
+            showChevron = onFillProfile != null,
+            onClick = onFillProfile,
         )
-    }
-    entry.mbtiDescription?.takeIf { it.isNotBlank() }?.let { desc ->
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = desc,
-            style = MaterialTheme.typography.bodySmall,
-            color = AppTextSecondary,
+    } else {
+        val mbtiTitle = entry.mbti?.let { code ->
+            buildString {
+                append(label)
+                append("MBTI：")
+                append(code)
+                entry.mbtiName?.let {
+                    append(" · ")
+                    append(it)
+                }
+            }
+        } ?: "${label}MBTI"
+        AppListItem(
+            title = mbtiTitle,
+            subtitle = entry.mbtiDescription
+                ?: if (entry.mbti == null) "还没填 MBTI，可在个人资料页补充" else null,
         )
-    }
 
-    val zodiacLine = buildString {
-        entry.zodiac?.let { append("太阳 ${it}座") }
-        entry.moonSign?.let { if (isNotEmpty()) append(" · "); append("月亮 ${it}座") }
-        entry.risingSign?.let { if (isNotEmpty()) append(" · "); append("上升 ${it}座") }
-    }
-    if (zodiacLine.isNotBlank()) {
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = zodiacLine,
-            style = MaterialTheme.typography.bodySmall,
-            color = AppTextSecondary,
+        AppListItemDivider()
+        val zodiacLine = buildString {
+            entry.zodiac?.let { append("太阳 ${it}座") }
+            entry.moonSign?.let { if (isNotEmpty()) append(" · "); append("月亮 ${it}座") }
+            entry.risingSign?.let { if (isNotEmpty()) append(" · "); append("上升 ${it}座") }
+        }
+        AppListItem(
+            title = "${label}星盘",
+            subtitle = zodiacLine.ifBlank { "填了生日（含出生时辰更准）后自动推算" },
         )
     }
 }

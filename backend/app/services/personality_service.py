@@ -13,11 +13,17 @@ from typing import Optional
 
 from app.repositories import couple_repo, user_repo
 from app.services.astrology_service import (
-    REFERENCE_WEIGHT_NOTE,
     get_mbti_label,
     get_moon_sign,
     get_rising_sign,
     get_zodiac,
+)
+
+#: 展示版口径（人格画像页用）。与 prompt 注入用的 REFERENCE_WEIGHT_NOTE 是同一
+#: 事实，但措辞不同：页面上刚展示完 MBTI/星座，紧跟一句「不得作为专业结论」
+#: 读起来自相矛盾（2026-09-28 用户反馈），展示处换成中性说明。
+REFERENCE_NOTE_DISPLAY = (
+    "性格参考说明：军师的判断以问卷画像为主，这里的 MBTI 与星座/星盘仅作辅助参考。"
 )
 
 
@@ -76,7 +82,7 @@ def get_personality_info(db, user_id: int) -> dict:
         )
         partner_entry = _entry_for(db, partner_id)
     return {
-        "reference_note": REFERENCE_WEIGHT_NOTE,
+        "reference_note": REFERENCE_NOTE_DISPLAY,
         "me": _entry_for(db, user_id),
         "partner": partner_entry,
     }
