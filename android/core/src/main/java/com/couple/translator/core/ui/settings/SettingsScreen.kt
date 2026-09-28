@@ -78,6 +78,7 @@ import com.couple.translator.core.ui.theme.ThemeMode
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToProfile: () -> Unit,
+    onNavigateToAiConfig: () -> Unit = {},
     onLogout: () -> Unit,
     isCoupleMode: Boolean = true,
     themeMode: ThemeMode = ThemeMode.DEFAULT,
@@ -172,6 +173,13 @@ fun SettingsScreen(
                         title = "个人信息",
                         subtitle = "编辑昵称、性别、生日等",
                         onClick = onNavigateToProfile,
+                    )
+                    HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsItem(
+                        icon = Icons.Outlined.Psychology,
+                        title = "AI 服务配置",
+                        subtitle = "绑定你自己的模型 API，军师用你的 Key 干活",
+                        onClick = onNavigateToAiConfig,
                     )
                 }
             }

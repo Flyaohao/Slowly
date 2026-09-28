@@ -98,6 +98,12 @@ def seed() -> Session:
     db.commit()
     db.refresh(rel)
 
+    # v5.0 强制配置（D4）：prepare_dual_summary 会按用户解析客户端
+    from ai_config_seed import ensure_ai_config
+
+    ensure_ai_config(db, A_ID, real=False)
+    ensure_ai_config(db, B_ID, real=False)
+
     now = datetime.utcnow()
     # E1 双方都已提交（都 hidden、未 reveal）——detail 过滤 / dual-summary 门
     e1 = DualPerspectiveEvent(

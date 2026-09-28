@@ -57,7 +57,13 @@ def pick_active_user() -> int:
     try:
         rel = db.query(CoupleRelation).filter(CoupleRelation.status == "active").first()
         if rel:
-            return rel.user_a_id
+            uid = rel.user_a_id
+            # v5.0 强制配置（D4）：AI 端点要求用户先绑定自己的模型服务，
+            # 真调模型套件用全局真实配置补种
+            from ai_config_seed import ensure_ai_config
+
+            ensure_ai_config(db, uid, real=True)
+            return uid
         raise RuntimeError("数据库里没有 active 的情侣关系，请先造一条测试数据")
     finally:
         db.close()

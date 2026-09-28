@@ -10,7 +10,14 @@ from app.schemas.user_schema import (
     PrivateVerifyRequest,
     NotificationPrefUpdateRequest,
 )
+from app.schemas.user_schema import (
+    AiConfigSaveRequest,
+    AiConfigTestRequest,
+    AiKeyAddRequest,
+    AiKeyToggleRequest,
+)
 from app.services import user_service
+from app.services import user_ai_config_service as uaicfg
 
 router = APIRouter(prefix="/users", tags=["用户"])
 
@@ -113,3 +120,103 @@ def verify_private_password(
             detail={"code": 10005, "message": "密码错误", "data": None},
         )
     return ApiResponse(data={"private_token": token})
+
+
+# --------------------------------------------------------------------------- #
+# v5.0 用户级 AI 服务配置（设置页「AI 服务配置」）
+#
+# 错误约定：未配置 → 30010（全局处理器兜底）、配置非法/测试未过 → 30011
+# （AiConfigInvalidError 全局处理器兜底，message 透传探测原因）。
+# key 明文只进不出：读取一律打码。
+# --------------------------------------------------------------------------- #
+@router.get("/me/ai-config", response_model=ApiResponse)
+def get_ai_config(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """读取当前用户 AI 配置（key 打码）。未配置时 data=null。"""
+    return ApiResponse(data=uaicfg.masked_payload(db, current_user.id))
+
+
+@router.put("/me/ai-config", response_model=ApiResponse)
+def save_ai_config(
+    req: AiConfigSaveRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """保存配置。保存前强制「对话 + Embedding」双连通性测试（D10）。"""
+    uaicfg.test_and_save_config(
+        db,
+        current_user.id,
+        provider_type=req.provider_type,
+        base_url=req.base_url,
+        model_name=req.model_name,
+        embedding_base_url=req.embedding_base_url,
+        embedding_model=req.embedding_model,
+        embedding_api_key=req.embedding_api_key,
+        enable_rate_limit=req.enable_rate_limit,
+        new_keys=req.new_keys,
+    )
+    return ApiResponse(data=uaicfg.masked_payload(db, current_user.id))
+
+
+@router.delete("/me/ai-config", response_model=ApiResponse)
+def clear_ai_config(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """清空配置。清空后所有 AI 功能即刻不可用（D4 强制配置）。"""
+    uaicfg.clear_config(db, current_user.id)
+    return ApiResponse()
+
+
+@router.post("/me/ai-config/test", response_model=ApiResponse)
+def test_ai_config(
+    req: AiConfigTestRequest,
+    current_user=Depends(get_current_user),
+):
+    """只测不存：对话 + Embedding 双探测，通过返回实测向量维度。"""
+    dim = uaicfg.test_config(
+        provider_type=req.provider_type,
+        base_url=req.base_url,
+        model_name=req.model_name,
+        embedding_base_url=req.embedding_base_url,
+        embedding_model=req.embedding_model,
+        embedding_api_key=req.embedding_api_key,
+        keys=req.keys,
+    )
+    return ApiResponse(data={"ok": True, "embedding_dim": dim})
+
+
+@router.post("/me/ai-config/keys", response_model=ApiResponse)
+def add_ai_key(
+    req: AiKeyAddRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """新增一把 key（即时探测通过才入库，D8 轮换）。"""
+    item = uaicfg.add_key(db, current_user.id, req.key, req.label)
+    return ApiResponse(data=item)
+
+
+@router.patch("/me/ai-config/keys/{key_id}", response_model=ApiResponse)
+def toggle_ai_key(
+    key_id: int,
+    req: AiKeyToggleRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """启用/停用一把 key（停用后轮换会跳过它）。"""
+    uaicfg.set_key_enabled(db, current_user.id, key_id, req.enabled)
+    return ApiResponse()
+
+
+@router.delete("/me/ai-config/keys/{key_id}", response_model=ApiResponse)
+def delete_ai_key(
+    key_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """删除一把 key；最后一把被删 = 整份配置一并清掉（避免半死状态）。"""
+    uaicfg.delete_key(db, current_user.id, key_id)
+    return ApiResponse()

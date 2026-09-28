@@ -47,7 +47,7 @@ from app.models.letter import Letter
 from app.repositories import ai_generation_repo
 from app.services import ai_stream_registry
 from app.services.letter_service import is_locked_future
-from app.services.llm_client import LlmError, llm
+from app.services.llm_client import LlmError, llm  # noqa: F401 —— llm 作常量/回落保留
 from app.services.safety_service import check_output_safety_detail, merge_risk_levels
 from app.services.sse import stream_with_heartbeat
 from app.services.structured_stream import StructuredStreamSplitter
@@ -328,6 +328,8 @@ def stream_generation_events(prepared: Dict[str, Any]) -> Iterator[Dict[str, Any
     thinking_parts: List[str] = []
     structuring_notified = False
     completed = False
+    # v5.0 D1：按触发用户解析的客户端（prepare_* 阶段塞入）；缺省回落全局单例
+    active_client = prepared.get("client") or llm
 
     try:
         for item in stream_with_heartbeat(
@@ -336,6 +338,7 @@ def stream_generation_events(prepared: Dict[str, Any]) -> Iterator[Dict[str, Any
             temperature=prepared.get("temperature", 0.7),
             max_tokens=prepared.get("max_tokens", 2000),
             cancel_event=cancel_event,
+            client=active_client,
         ):
             if item is None:
                 # 兜底保活：模型连思考都不吐时，用注释帧证明连接还活着
@@ -387,7 +390,7 @@ def stream_generation_events(prepared: Dict[str, Any]) -> Iterator[Dict[str, Any
             thinking=thinking,
             structured_output=structured,
             risk_level=risk,
-            model=llm.model,
+            model=getattr(active_client, "model", llm.model),
         )
         _notify_saved(
             prepared,

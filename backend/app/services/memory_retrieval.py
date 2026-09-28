@@ -235,22 +235,44 @@ def _route_by_memory_need(
     return "empty"
 
 
-def _embed_query_fast(text: str, timeout: float = QUERY_EMBED_TIMEOUT) -> Optional[List[float]]:
-    """query 向量化，硬超时 timeout 秒；失败返回 None（约束④）。"""
-    from app.services.embedding import EMBEDDING_MODEL, embeddings
+def _embed_query_fast(
+    text: str, timeout: float = QUERY_EMBED_TIMEOUT, user_id: Optional[int] = None
+) -> Optional[List[float]]:
+    """query 向量化，硬超时 timeout 秒；失败返回 None（约束④）。
 
-    if not embeddings.api_key:
-        return None
+    v5.0 D1/D5：`user_id` 给定时按该用户配置解析 embedding 客户端
+    （强制配置，缺失即返回 None → 向量通道置空、关键词照跑）。
+    """
+    emb = None
+    if user_id is not None:
+        try:
+            from app.core.database import SessionLocal
+            from app.services import user_ai_config_service as uaicfg
+
+            _db = SessionLocal()
+            try:
+                emb = uaicfg.build_embeddings(_db, user_id)
+            finally:
+                _db.close()
+        except Exception:
+            return None
+    if emb is None:
+        from app.services.embedding import embeddings
+
+        if not embeddings.api_key:
+            return None
+        emb = embeddings
+
     payload = {
-        "model": EMBEDDING_MODEL,
+        "model": emb.model,
         "input": [text],
-        "dimensions": embeddings.dim,
+        "dimensions": emb.dim,
     }
     headers = {
-        "Authorization": "Bearer %s" % embeddings.api_key,
+        "Authorization": "Bearer %s" % emb.api_key,
         "Content-Type": "application/json",
     }
-    url = "%s/embeddings" % embeddings.base_url
+    url = "%s/embeddings" % emb.base_url
     try:
         with httpx.Client(timeout=timeout) as client:
             resp = client.post(url, headers=headers, json=payload)
@@ -334,22 +356,28 @@ def vectorize_memory_async(memory: Dict[str, Any]) -> None:
             existing = col.get(ids=[mid])
             if existing and existing.get("ids"):
                 return  # 幂等
-            # 与 delete_memory 的竞态：异步 embed 期间行可能已被删——
-            # 落向量前再查一次 DB，行不在则放弃（否则删完又冒出孤儿向量）
+            # v5.0 D1/D5：按记忆归属用户解析 embedding 客户端（强制配置，
+            # 不回落全局）；配置缺失/查库失败 → 标 pending 留给清扫恢复
             try:
                 from app.core.database import SessionLocal
                 from app.models.ai import AiMemory as _M
+                from app.services import user_ai_config_service as uaicfg
 
                 _db = SessionLocal()
                 try:
                     if _db.get(_M, int(memory["id"])) is None:
                         logger.info("[MEM-RET] 行已删除，跳过向量化 id=%s", mid)
                         return
+                    emb = uaicfg.build_embeddings(
+                        _db, int(memory.get("user_id") or 0)
+                    )
                 finally:
                     _db.close()
-            except Exception:
-                pass  # 查库失败不阻断写入（以幂等 get 为准）
-            from app.services.embedding import embeddings as emb
+            except Exception as exc:
+                _mark_index_pending(
+                    memory["id"], "embed client unavailable: %s" % exc
+                )
+                return
 
             vec = emb.embed_documents([text])[0]
             metadata = {
@@ -850,7 +878,7 @@ def retrieve_memory_items(
                 have_vectors = False
             if not have_vectors:
                 return  # 库空：通道成功但无候选
-            query_vec = _embed_query_fast(q, QUERY_EMBED_TIMEOUT)
+            query_vec = _embed_query_fast(q, QUERY_EMBED_TIMEOUT, user_id=user_id)
             if query_vec is None:
                 vec_box["ok"] = False  # 失败/超时 → 置空本通道，关键词照跑
                 return

@@ -23,7 +23,7 @@ from app.core.database import SessionLocal
 from app.repositories import profile_repo, questionnaire_repo
 from app.schemas.ai_output import QuestionnaireAnalysisOutput
 from app.services import ai_generation_service
-from app.services.llm_client import llm
+from app.services import user_ai_config_service as uaicfg
 from app.services.prompt_builder import build_structured_stream_prompt
 
 logger = logging.getLogger("couple.ai.questionnaire")
@@ -88,7 +88,12 @@ ANALYSIS_PROMPT = """你是一位专业的亲密关系心理咨询师。请根�
 
 
 def analyze_for_user(db: Session, user_id: int) -> dict:
-    """Look up user profile and run AI analysis. Raises ValueError('40004') if no profile."""
+    """Look up user profile and run AI analysis. Raises ValueError('40004') if no profile.
+
+    v5.0 D1/D4：按交卷用户解析客户端；未配置 → AiConfigMissingError（30010 引导配置）。
+    """
+    from app.services import user_ai_config_service as uaicfg
+
     profile = profile_repo.get_latest_profile(db, user_id)
     if not profile:
         raise ValueError("40004")
@@ -96,11 +101,12 @@ def analyze_for_user(db: Session, user_id: int) -> dict:
     scores = profile_repo.get_dimension_scores(db, profile.id)
     dimension_scores = {s.dimension_key: s.score for s in scores}
 
-    return analyze_questionnaire(
-        profile_type=profile.profile_type,
+    client = uaicfg.build_chat_client(db, user_id)
+    return analyze_questionnaire(        profile_type=profile.profile_type,
         confidence=profile.confidence,
         dimension_scores=dimension_scores,
         summary=profile.summary or "",
+        client=client,
     )
 
 
@@ -109,33 +115,37 @@ def analyze_questionnaire(
     confidence: float,
     dimension_scores: Dict[str, float],
     summary: str,
+    client=None,
 ) -> dict:
     """Call AI to generate structured analysis with per-dimension insights."""
     profile_label = PROFILE_TYPE_LABELS.get(profile_type, profile_type)
     prompt = _build_prompt(profile_label, confidence, dimension_scores, summary)
 
-    try:
-        result = llm.invoke_structured(
-            [
-                {"role": "system", "content": ANALYSIS_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            QuestionnaireAnalysisOutput,
-            scene=GENERATION_KIND_ANALYSIS,
-            temperature=0.7,
-            max_tokens=3000,
-        )
-        return _normalize_analysis(
-            result.model_dump(mode="json"),
-            profile_type=profile_type,
-            profile_label=profile_label,
-            confidence=confidence,
-            dimension_scores=dimension_scores,
-        )
-    except Exception:
-        # 交卷路径上不能因为模型抖动就让整个提交失败，降级成基础版解读。
-        logger.exception("[AI] 量表分析生成失败 user=%s，降级为基础解读", profile_type)
-        return _generate_fallback(profile_type, profile_label, confidence, dimension_scores)
+    if client is not None:
+        try:
+            result = client.invoke_structured(
+                [
+                    {"role": "system", "content": ANALYSIS_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                QuestionnaireAnalysisOutput,
+                scene=GENERATION_KIND_ANALYSIS,
+                temperature=0.7,
+                max_tokens=3000,
+            )
+            return _normalize_analysis(
+                result.model_dump(mode="json"),
+                profile_type=profile_type,
+                profile_label=profile_label,
+                confidence=confidence,
+                dimension_scores=dimension_scores,
+            )
+        except Exception:
+            # 交卷路径上不能因为模型抖动就让整个提交失败，降级成基础版解读。
+            logger.exception("[AI] 量表分析生成失败 user=%s，降级为基础解读", profile_type)
+            return _generate_fallback(profile_type, profile_label, confidence, dimension_scores)
+    # 无客户端（测试桩路径）→ 基础解读
+    return _generate_fallback(profile_type, profile_label, confidence, dimension_scores)
 
 
 def prepare_analysis(db: Session, user_id: int, questionnaire_id: int) -> dict:
@@ -203,6 +213,7 @@ def prepare_analysis(db: Session, user_id: int, questionnaire_id: int) -> dict:
         "prompt": prompt,
         "output_model": QuestionnaireAnalysisOutput,
         "temperature": 0.7,
+        "client": uaicfg.build_chat_client(db, user_id),
         # 双出口协议下要容纳「思考 + 正文 + JSON」，与信件解读同规格
         "max_tokens": 4000,
         "finalize_structured": _finalize,

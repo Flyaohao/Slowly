@@ -51,6 +51,8 @@ from app.services import relationship_review_service
 from app.services.memory_service import get_memory_context, distill_in_background
 from app.services.memory_retrieval import build_profile_keywords, retrieve_memory_items
 from app.services.llm_client import llm, LlmError, get_client_for_mode
+from app.services import user_ai_config_service as uaicfg
+from app.services.user_ai_config_service import AiConfigMissingError
 from app.services.sse import HEARTBEAT_INTERVAL, stream_with_heartbeat
 
 logger = logging.getLogger("couple.ai")
@@ -275,7 +277,7 @@ def _preprocess(
 
     # P-B §1.2：理论 RAG 条数按档位取（quick 0=关闭 / deep 3 / expert 5）
     _rk = mode_cfg["rag_top_k"]
-    rag_chunks = retrieve_chunks(db, user_input, top_k=_rk) if _rk else []
+    rag_chunks = retrieve_chunks(db, user_input, top_k=_rk, user_id=user_id) if _rk else []
 
     # P0-4：召回一次、两处使用（约束③）——prompt 注入与 evidence 展示
     # 必须是同一份结果，否则面板显示近因 10 条、prompt 用相关性 5 条
@@ -491,7 +493,9 @@ def chat(
     session = ctx["session"]
     session_id = ctx["session_id"]
 
-    ai_response = _call_llm(ctx["messages"], scene_key)
+    # v5.0 D1/D2：按触发用户解析军师客户端（未配置 → AiConfigMissingError → 30010）
+    _client = uaicfg.build_chat_client(db, user_id, mode=chat_mode)
+    ai_response = _call_llm(ctx["messages"], scene_key, client=_client)
 
     # `_call_llm` 已经过 `llm.invoke_structured()` 的 Pydantic 强校验
     # （字段名、类型、枚举都在那里定死），因此这里直接落库即可。
@@ -545,6 +549,7 @@ def chat(
             assistant_text=assistant_msg.content,
             scene_name=scene.name,
             scene_key=scene_key,
+            user_id=user_id,
         )
 
     # 记忆沉淀：由模型判断本轮是否含值得长期记住的信息，写进 AiMemory。
@@ -605,6 +610,10 @@ def prepare_chat(
             "chat_mode": ctx.get("chat_mode", "deep"),
         }
 
+    # v5.0 D1/D2：按触发用户解析军师客户端（强制配置 D4：未配置即 30010）。
+    # 流式响应体阶段请求级 db 已销毁，客户端必须在 prepare 阶段构造好带走。
+    _llm_client = uaicfg.build_chat_client(db, user_id, mode=chat_mode)
+
     return {
         "blocked": False,
         "session_id": ctx["session_id"],
@@ -620,6 +629,8 @@ def prepare_chat(
         "user_id": user_id,
         "relation_id": relation_id,
         "user_input": user_input,
+        # v5.0：按用户解析好的 LLM 客户端（stream_chat_events / 结构化提取共用）
+        "_llm_client": _llm_client,
     }
 
 
@@ -663,6 +674,7 @@ def _extract_stream_structured(
     user_input: str,
     full_text: str,
     cancel_event: Optional[threading.Event] = None,
+    client=None,
 ) -> Optional[Dict[str, Any]]:
     """从已生成的回答文本提取场景结构化字段（整改契约 §8.2）。
 
@@ -682,7 +694,7 @@ def _extract_stream_structured(
 
     if scene_key in TEXT_ONLY_SCENES:
         return None
-    if not llm.api_key:
+    if client is None:
         return None
 
     model_cls = get_output_model(scene_key)
@@ -712,7 +724,7 @@ def _extract_stream_structured(
         },
     ]
     try:
-        result = llm.invoke_structured(
+        result = client.invoke_structured(
             messages,
             scene=scene_key,
             temperature=0.2,
@@ -752,6 +764,7 @@ def _extract_structured_with_keepalive(
     full_text: str,
     box: Dict[str, Any],
     cancel_event: Optional[threading.Event] = None,
+    client=None,
 ) -> Iterator[Dict[str, Any]]:
     """生成器：后台线程跑结构化提取，主线程边等边发 SSE 注释保活帧。
 
@@ -775,7 +788,7 @@ def _extract_structured_with_keepalive(
     def _run() -> None:
         try:
             box["extracted"] = _extract_stream_structured(
-                scene_key, user_input, full_text, cancel_event
+                scene_key, user_input, full_text, cancel_event, client=client
             )
         except Exception as exc:  # noqa: BLE001 —— 线程内兜底，绝不外抛
             logger.warning("[AI] 结构化提取线程异常 scene=%s: %s", scene_key, exc)
@@ -849,15 +862,14 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
 
     buffer: List[str] = []
     thinking_buffer: List[str] = []
-    # P-B §1.3：按档位取正文上限与客户端实例（deep 即既有行为）
-    _mode = resolve_chat_mode(prepared.get("chat_mode"))
-    _mode_cfg = CHAT_MODE_CONFIG[_mode]
+    # P-B §1.3 + v5.0：客户端在 prepare 阶段按用户解析好（含 chat_mode 档位）
+    _client = prepared.get("_llm_client") or get_client_for_mode(prepared.get("chat_mode"))
     try:
         for item in _stream_with_heartbeat(
             prepared["stream_messages"],
             prepared["scene_key"],
-            max_tokens=_mode_cfg["max_tokens"],
-            client=get_client_for_mode(_mode),
+            max_tokens=CHAT_MODE_CONFIG[resolve_chat_mode(prepared.get("chat_mode"))]["max_tokens"],
+            client=_client,
         ):
             if item is None:
                 # 兜底保活：模型连推理都不吐时，用注释帧证明连接还活着
@@ -865,7 +877,7 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
                 continue
 
             kind, text = item
-            if kind == llm.KIND_THINKING:
+            if kind == _client.KIND_THINKING:
                 thinking_buffer.append(text)
                 yield {"event": "thinking", "data": {"content": text}}
                 continue
@@ -915,6 +927,7 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
         full_text,
         extract_box,
         extract_cancel,
+        client=_client,
     ):
         yield keepalive_frame
     structured = merge_stream_structured(structured, extract_box.get("extracted"))
@@ -1055,6 +1068,7 @@ def _persist_streamed_message(
                 assistant_text=content,
                 scene_name=scene.name if scene else scene_key,
                 scene_key=scene_key,
+                user_id=user_id,
             )
         # 记忆沉淀：flag 开 → 后台 worker 从队列取（D2，与非流式一致）；
         # flag 关 → 旧后台线程 + 独立会话（本函数所在阶段请求级 db 已经销毁，
@@ -1136,7 +1150,10 @@ def rewrite_expression(
 - risk_level: normal/heated_conflict/manipulation_risk/abuse_risk/self_harm_risk
 """
 
-    ai_response = _call_llm(prompt, "expression_rewrite")
+    ai_response = _call_llm(
+        prompt, "expression_rewrite",
+        client=uaicfg.build_chat_client(db, user_id, mode="deep"),
+    )
 
     # 模型按 RewriteOutput schema 返回的字段是 rewrites（每项含 style / content），
     # 而不是 prompt 里口头描述的 versions。此前读 versions 永远命中不到，
@@ -1227,18 +1244,20 @@ def _schedule_session_title(
     assistant_text: str,
     scene_name: str,
     scene_key: str,
+    user_id: Optional[int] = None,
 ) -> None:
     """P0-10A 改动六：第 1 轮回答后异步生成 ≤12 字标题。
 
     只在 title 仍为场景名/空时覆盖；LLM 失败回退用户输入前 12 字；
     异常只记日志。测试隔离开关与记忆抽取共用（避免测试真调模型）。
+
+    v5.0：按 user_id 解析军师客户端（D2）；未配置或解析失败直接用回退标题。
     """
     if os.getenv("COUPLE_DISABLE_MEMORY_DISTILL") == "1":
         return None
 
     def _worker():
         from app.core.database import SessionLocal
-        from app.services.memory_service import distill_llm
 
         db = SessionLocal()
         try:
@@ -1252,8 +1271,11 @@ def _schedule_session_title(
             fallback = (user_text or "").strip()[:12]
             title = fallback
             try:
-                if distill_llm.api_key:
-                    raw = distill_llm.invoke(
+                if user_id:
+                    _client = uaicfg.build_chat_client(
+                        db, user_id, enable_thinking=False
+                    )
+                    raw = _client.invoke(
                         [
                             {
                                 "role": "system",
@@ -1454,7 +1476,7 @@ def generate_profile_report(db: Session, user_id: int) -> str:
 
     # 画像报告是长文本 Markdown，不适用结构化输出，直接取原始文本
     try:
-        return llm.invoke(
+        return uaicfg.build_chat_client(db, user_id).invoke(
             [{"role": "system", "content": prompt}],
             temperature=0.6,
             max_tokens=2500,
@@ -1631,11 +1653,23 @@ def _build_partner_section(
     return partner_card
 
 
-def _call_llm(prompt: Any, scene_key: str) -> dict:
+def _user_chat_client(db: Session, user_id: int):
+    """prepare_* 专用：按触发用户解析聊天客户端。
+
+    未配置抛 AiConfigMissingError（全局处理器翻译成 30010 引导设置），
+    这里不做任何回落——D4 强制配置。
+    """
+    return uaicfg.build_chat_client(db, user_id)
+
+
+def _call_llm(prompt: Any, scene_key: str, client=None) -> dict:
     """调用真实大模型，返回结构化结果字典。
 
     函数签名与返回值结构保持与旧版占位实现完全一致，
     因此 `letter_ai_service` / `mediation_service` 无需改动即可受益。
+
+    v5.0：``client`` 必传——由调用方按触发用户经
+    `user_ai_config_service.build_chat_client` 解析（D1/D2）。
 
     `prompt` 兼容两种入参：
 
@@ -1645,15 +1679,15 @@ def _call_llm(prompt: Any, scene_key: str) -> dict:
       内部包成一条 system 消息——与该函数此前的行为逐字节一致。
 
     实现路径：
-        messages → llm.invoke_structured()（Function Calling 承载 Pydantic Schema）
+        messages → client.invoke_structured()（Function Calling 承载 Pydantic Schema）
                  → 拿到强校验后的输出模型
                  → model_dump() 展平成 dict，并补一个人类可读的 raw_text 供会话历史展示
 
     任何异常都不会向上抛，而是返回降级文案，保证对话不中断。
     """
-    if not llm.api_key:
-        logger.warning("[AI] 未配置 AI_API_KEY，返回降级回复 scene=%s", scene_key)
-        return _degraded_response("AI 服务尚未配置，请联系管理员")
+    if client is None:
+        logger.warning("[AI] 未传入用户级 LLM 客户端，返回降级回复 scene=%s", scene_key)
+        return _degraded_response("AI 服务尚未配置，请在设置中配置你的模型 API")
 
     messages = (
         [{"role": "system", "content": prompt}]
@@ -1661,7 +1695,7 @@ def _call_llm(prompt: Any, scene_key: str) -> dict:
         else list(prompt)
     )
     try:
-        result = llm.invoke_structured(messages, scene=scene_key)
+        result = client.invoke_structured(messages, scene=scene_key)
     except LlmError as exc:
         logger.error("[AI] 大模型调用失败 scene=%s: %s", scene_key, exc)
         return _degraded_response("AI 服务暂时不可用，请稍后重试")
@@ -1885,6 +1919,7 @@ def prepare_rewrite_expression(
         "prompt": prompt,
         "output_model": RewriteOutput,
         "temperature": 0.7,
+        "client": _user_chat_client(db, user_id),
         "max_tokens": 4000,
     }
 
@@ -1954,6 +1989,7 @@ def prepare_profile_report(db: Session, user_id: int) -> dict:
         "prompt": prompt,
         "output_model": None,
         "temperature": 0.6,
+        "client": _user_chat_client(db, user_id),
         "max_tokens": 2500,
     }
 
@@ -2017,6 +2053,7 @@ def prepare_dual_summary(db: Session, user_id: int, event_id: int) -> dict:
         "prompt": prompt,
         "output_model": None,
         "temperature": 0.6,
+        "client": _user_chat_client(db, user_id),
         "max_tokens": 2000,
     }
 
@@ -2095,6 +2132,7 @@ def prepare_memory_card(db: Session, user_id: int, target_type: str, target_id: 
         "prompt": prompt,
         "output_model": None,
         "temperature": 0.7,
+        "client": _user_chat_client(db, user_id),
         "max_tokens": 1500,
     }
 
@@ -2207,7 +2245,7 @@ def prepare_relationship_review(
         partner_profile, partner_scores, db, partner_id
     )
 
-    rag_chunks = retrieve_chunks(db, description)
+    rag_chunks = retrieve_chunks(db, description, user_id=user_id)
     rag_context = build_rag_context(rag_chunks)
     memory_context = get_memory_context(db, user_id, relation_id, query=description)
 
@@ -2265,6 +2303,7 @@ def prepare_relationship_review(
         "prompt": prompt,
         "output_model": ReviewOutput,
         "temperature": 0.7,
+        "client": _user_chat_client(db, user_id),
         "max_tokens": 4000,
         "review_id": review.id,
         "on_saved": _review_mirror(review.id, db.get_bind()),
@@ -2355,5 +2394,6 @@ def prepare_viewpoint_analysis(db: Session, user_id: int, viewpoint_id: int) -> 
         "output_model": ViewpointAnalysisOutput,
         # 温度偏低：这是在给画像提供证据，不是在写文案。稳定性优先于文采。
         "temperature": 0.4,
+        "client": _user_chat_client(db, user_id),
         "max_tokens": 2000,
     }

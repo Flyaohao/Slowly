@@ -67,27 +67,57 @@ def _get_vectorstore():
     return _vectorstore
 
 
-def retrieve_chunks(db: Session, query_text: str, top_k: int = 3) -> List[dict]:
+def retrieve_chunks(
+    db: Session, query_text: str, top_k: int = 3, user_id: Optional[int] = None
+) -> List[dict]:
     """检索与用户输入相关的理论片段。
+
+    `user_id` 给定时用该用户的 embedding 配置算查询向量（v5.0 D1/D5）；
+    配置缺失/调用失败自动降级关键词检索，不阻断主链路。
 
     返回结构（与旧版保持一致）::
 
         [{"chunk_id", "doc_title", "chunk_text", "metadata", "score"}]
     """
-    results = _vector_search(query_text, top_k)
+    results = _vector_search(query_text, top_k, user_id=user_id)
     if results:
         return results
     return _keyword_search(db, query_text, top_k)
 
 
-def _vector_search(query_text: str, top_k: int = 3) -> List[dict]:
+def _user_query_vector(user_id: int, query_text: str) -> Optional[List[float]]:
+    """按用户配置算 query 向量；任何失败返回 None（由上层降级）。"""
+    try:
+        from app.core.database import SessionLocal
+        from app.services import user_ai_config_service as uaicfg
+
+        _db = SessionLocal()
+        try:
+            emb = uaicfg.build_embeddings(_db, user_id)
+        finally:
+            _db.close()
+        return emb.embed_query(query_text)
+    except Exception as exc:
+        logger.warning("[RAG] 用户 embedding 不可用 user=%s: %s", user_id, exc)
+        return None
+
+
+def _vector_search(
+    query_text: str, top_k: int = 3, user_id: Optional[int] = None
+) -> List[dict]:
     """向量相似度检索。"""
     store = _get_vectorstore()
     if store is None or not query_text or not query_text.strip():
         return []
 
     try:
-        hits = store.similarity_search_with_score(query_text, k=top_k)
+        if user_id is not None:
+            vec = _user_query_vector(user_id, query_text)
+            if vec is None:
+                return []
+            hits = store.similarity_search_by_vector_with_score(vec, k=top_k)
+        else:
+            hits = store.similarity_search_with_score(query_text, k=top_k)
     except Exception as exc:
         logger.warning("[RAG] 向量检索失败: %s", exc)
         return []

@@ -58,8 +58,23 @@ def _collection():
     return _get_collection()
 
 
-def _embed(text: str):
-    """embedding（测试注入位：patch `memory_index_worker._embed`）。"""
+def _embed(text: str, user_id: Optional[int] = None):
+    """embedding（测试注入位：patch `memory_index_worker._embed`）。
+
+    v5.0 D1/D5：`user_id` 给定时按记忆归属用户解析 embedding 配置
+    （强制配置，缺失抛 AiConfigMissingError → 走索引失败退避）。
+    """
+    from app.services import user_ai_config_service as uaicfg
+
+    if user_id is not None:
+        from app.core.database import SessionLocal
+
+        _db = SessionLocal()
+        try:
+            return uaicfg.build_embeddings(_db, user_id).embed_documents([text])[0]
+        finally:
+            _db.close()
+
     from app.services.embedding import embeddings
 
     return embeddings.embed_documents([text])[0]
@@ -228,7 +243,7 @@ def _run_upsert(db: Session, work: Dict) -> None:
 
     # ---- 事务外 embed + upsert（长操作不持行锁）----
     try:
-        vec = _embed(text)
+        vec = _embed(text, user_id=row.user_id)
         col = _collection()
         if col is None:
             raise RuntimeError("chroma collection unavailable")

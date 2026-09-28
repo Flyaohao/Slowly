@@ -2,6 +2,7 @@ package com.couple.translator.core.network
 
 import com.couple.translator.core.data.model.HomeDto
 import com.couple.translator.core.data.model.AdvisorDto
+import com.couple.translator.core.data.model.AiConfigDto
 import com.couple.translator.core.data.model.AiDto
 import com.couple.translator.core.data.model.AuthDto
 import com.couple.translator.core.data.model.ProfileDto
@@ -14,6 +15,7 @@ import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
+import retrofit2.http.PATCH
 import retrofit2.http.Path
 import retrofit2.http.Query
 import retrofit2.http.Streaming
@@ -238,6 +240,31 @@ interface SharedApiService {
     // Advisor settings（契约 §3.3，common 前缀，单双模式通用）
     @GET("api/v1/advisor/settings")
     suspend fun getAdvisorSettings(): ApiResponse<AdvisorDto.AdvisorSettings>
+
+    // v5.0 用户级 AI 服务配置（设置页「AI 服务配置」）
+    @GET("api/v1/users/me/ai-config")
+    suspend fun getAiConfig(): ApiResponse<AiConfigDto.AiConfig>
+
+    @PUT("api/v1/users/me/ai-config")
+    suspend fun saveAiConfig(@Body body: AiConfigDto.SaveRequest): ApiResponse<AiConfigDto.AiConfig>
+
+    @DELETE("api/v1/users/me/ai-config")
+    suspend fun clearAiConfig(): ApiResponse<Unit>
+
+    @POST("api/v1/users/me/ai-config/test")
+    suspend fun testAiConfig(@Body body: AiConfigDto.TestRequest): ApiResponse<AiConfigDto.TestResponse>
+
+    @POST("api/v1/users/me/ai-config/keys")
+    suspend fun addAiKey(@Body body: AiConfigDto.KeyAddRequest): ApiResponse<AiConfigDto.KeyAddResponse>
+
+    @PATCH("api/v1/users/me/ai-config/keys/{keyId}")
+    suspend fun toggleAiKey(
+        @Path("keyId") keyId: Long,
+        @Body body: AiConfigDto.KeyToggleRequest,
+    ): ApiResponse<Unit>
+
+    @DELETE("api/v1/users/me/ai-config/keys/{keyId}")
+    suspend fun deleteAiKey(@Path("keyId") keyId: Long): ApiResponse<Unit>
 
     @PUT("api/v1/advisor/settings")
     suspend fun updateAdvisorSettings(

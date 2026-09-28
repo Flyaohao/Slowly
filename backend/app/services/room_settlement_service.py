@@ -37,7 +37,9 @@ from app.models.mediation_room import (
     RoomMessage,
 )
 from app.repositories import mediation_room_repo as room_repo
-from app.services.llm_client import llm
+from app.services.llm_client import LlmError
+from app.services import user_ai_config_service as uaicfg
+from app.services.user_ai_config_service import AiConfigMissingError
 
 logger = logging.getLogger("couple.room.settlement")
 
@@ -128,7 +130,9 @@ def _run_settlement(room_id: int) -> None:
             .first()
         )
         transcript = _transcript(db, room_id, party_labels(db, relation))
-        output = _invoke_settlement(room, transcript)
+        # v5.0 D2：军师只有一位，用**房间创建者**的配置承担结算调用
+        _client = uaicfg.build_chat_client(db, room.creator_user_id)
+        output = _invoke_settlement(room, transcript, client=_client)
 
         now = datetime.utcnow()
         settlement_json = json.dumps(
@@ -190,7 +194,9 @@ def _run_settlement(room_id: int) -> None:
         db.close()
 
 
-def _invoke_settlement(room: MediationRoom, transcript: str) -> SettlementOutput:
+def _invoke_settlement(
+    room: MediationRoom, transcript: str, client=None
+) -> SettlementOutput:
     system = (
         "你是情侣双人调解室的军师。双方点击了「结束调解」，现在请你收拢全程对话，"
         "生成一份调解书。你必须中立方：判定结果、共同约定、双方各自责任，"
@@ -211,7 +217,7 @@ def _invoke_settlement(room: MediationRoom, transcript: str) -> SettlementOutput
             "content": "请生成调解书（结果判定 + 共同约定 + 双方责任 + 双方观点压缩）。",
         },
     ]
-    return llm.invoke_structured(
+    return client.invoke_structured(
         messages, output_model=SettlementOutput, scene=SCENE_SETTLE, max_tokens=2400
     )
 
@@ -299,7 +305,13 @@ def _run_summary(room: MediationRoom) -> None:
                if old_summary else "")
             + "新对话：\n" + new_text
         )
-        summary = llm.invoke(
+        # v5.0 D2：滚动摘要同样由房间创建者的配置承担；未配置则跳过本轮
+        try:
+            _client = uaicfg.build_chat_client(db, fresh.creator_user_id)
+        except AiConfigMissingError:
+            logger.info("[ROOM] 创建者未配置 AI，跳过摘要压缩 room=%s", fresh.id)
+            return
+        summary = _client.invoke(
             [{"role": "user", "content": prompt}],
             scene=SCENE_SUMMARY,
             max_tokens=800,

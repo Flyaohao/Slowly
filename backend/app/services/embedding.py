@@ -58,7 +58,6 @@ class DashScopeEmbeddings(_LangChainEmbeddings):
         self.model = model
         self.dim = dim
         self.batch_size = batch_size
-
     # ------------------------------------------------------------------ #
     # LangChain Embeddings 接口
     # ------------------------------------------------------------------ #
@@ -83,36 +82,55 @@ class DashScopeEmbeddings(_LangChainEmbeddings):
         if not self.api_key:
             raise RuntimeError("未配置 AI_API_KEY，无法进行向量化")
 
-        payload = {"model": self.model, "input": texts, "dimensions": self.dim}
-        headers = {
-            "Authorization": "Bearer %s" % self.api_key,
-            "Content-Type": "application/json",
-        }
-        url = "%s/embeddings" % self.base_url
-
+        # v5.0：dimensions 是 DashScope/text-embedding 系专有参数，第三方端点
+        # 可能 400——失败时自动降级为不带 dimensions 重试，并实测校验维度。
         last_error = None
-        for attempt in range(_MAX_RETRIES + 1):
-            try:
-                started = time.time()
-                with httpx.Client(timeout=_TIMEOUT) as client:
-                    resp = client.post(url, headers=headers, json=payload)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    logger.info(
-                        "[EMBED] model=%s n=%d tokens=%s cost=%.2fs",
-                        self.model, len(texts),
-                        (data.get("usage") or {}).get("total_tokens"),
-                        time.time() - started,
-                    )
-                    # 按 index 排序，保证与入参顺序一致
-                    items = sorted(data["data"], key=lambda x: x.get("index", 0))
-                    return [item["embedding"] for item in items]
+        for send_dimensions in (True, False):
+            payload = {"model": self.model, "input": texts}
+            if send_dimensions:
+                payload["dimensions"] = self.dim
+            headers = {
+                "Authorization": "Bearer %s" % self.api_key,
+                "Content-Type": "application/json",
+            }
+            url = "%s/embeddings" % self.base_url
 
-                last_error = "HTTP %s: %s" % (resp.status_code, resp.text[:200])
-                logger.warning("[EMBED] 第 %d 次失败: %s", attempt + 1, last_error)
-            except httpx.HTTPError as exc:
-                last_error = str(exc)
-                logger.warning("[EMBED] 第 %d 次请求异常: %s", attempt + 1, exc)
+            retryable = False
+            for attempt in range(_MAX_RETRIES + 1):
+                try:
+                    started = time.time()
+                    with httpx.Client(timeout=_TIMEOUT) as client:
+                        resp = client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        logger.info(
+                            "[EMBED] model=%s n=%d tokens=%s cost=%.2fs",
+                            self.model, len(texts),
+                            (data.get("usage") or {}).get("total_tokens"),
+                            time.time() - started,
+                        )
+                        # 按 index 排序，保证与入参顺序一致
+                        items = sorted(data["data"], key=lambda x: x.get("index", 0))
+                        vectors = [item["embedding"] for item in items]
+                        if vectors and len(vectors[0]) != self.dim:
+                            raise RuntimeError(
+                                "embedding 维度不匹配：端点返回 %d 维，需要 %d 维"
+                                "（ Chroma 集合已按 %d 维构建，请更换 embedding 模型）"
+                                % (len(vectors[0]), self.dim, self.dim)
+                            )
+                        return vectors
+
+                    last_error = "HTTP %s: %s" % (resp.status_code, resp.text[:200])
+                    logger.warning("[EMBED] 第 %d 次失败: %s", attempt + 1, last_error)
+                    # 400 多半是 dimensions 参数不被支持 → 降级重试一次
+                    if resp.status_code == 400 and send_dimensions:
+                        retryable = True
+                        break
+                except httpx.HTTPError as exc:
+                    last_error = str(exc)
+                    logger.warning("[EMBED] 第 %d 次请求异常: %s", attempt + 1, exc)
+            if not retryable:
+                break
 
         raise RuntimeError("向量化失败: %s" % last_error)
 

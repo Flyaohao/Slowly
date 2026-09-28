@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional
+from typing import List, Optional
 from datetime import date
 
 from app.services.astrology_service import MBTI_TYPES
@@ -77,3 +77,40 @@ class PrivatePasswordRequest(BaseModel):
 
 class PrivateVerifyRequest(BaseModel):
     password: str
+
+
+# --------------------------------------------------------------------------- #
+# v5.0 用户级 AI 服务配置（设置页「AI 服务配置」分组）
+# --------------------------------------------------------------------------- #
+class AiConfigSaveRequest(BaseModel):
+    """保存（含修改）AI 服务配置。保存前服务端强制连通性测试（D10）。"""
+
+    provider_type: str = Field(..., description="openai / anthropic")
+    base_url: str = Field(..., min_length=1)
+    model_name: str = Field(..., min_length=1)
+    embedding_base_url: str = ""
+    embedding_model: str = ""
+    embedding_api_key: str = Field("", description="留空则与聊天共用同一组 key")
+    enable_rate_limit: bool = Field(True, description="D6：用户自选是否参与限流")
+    new_keys: List[str] = Field(default_factory=list, description="本次新增的明文 key")
+
+
+class AiConfigTestRequest(BaseModel):
+    """只测不存（设置页「测试连接」按钮）。"""
+
+    provider_type: str
+    base_url: str
+    model_name: str
+    embedding_base_url: str = ""
+    embedding_model: str = ""
+    embedding_api_key: str = ""
+    keys: List[str] = Field(default_factory=list, description="临时测试用明文 key")
+
+
+class AiKeyAddRequest(BaseModel):
+    key: str = Field(..., min_length=1)
+    label: str = Field("", max_length=50)
+
+
+class AiKeyToggleRequest(BaseModel):
+    enabled: bool

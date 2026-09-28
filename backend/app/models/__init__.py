@@ -48,6 +48,7 @@ from app.models.presence import PresenceMoment
 from app.models.safety_event import SafetyEvent
 from app.models.notification_email_log import NotificationEmailLog
 from app.models.relationship_event import RelationshipEvent
+from app.models.user_ai_config import UserAiConfig, UserAiKey
 
 __all__ = [
     "User",
@@ -99,4 +100,6 @@ __all__ = [
     "SafetyEvent",
     "NotificationEmailLog",
     "RelationshipEvent",
+    "UserAiConfig",
+    "UserAiKey",
 ]

@@ -595,6 +595,7 @@ def distill_and_save(
     source: Optional[str] = None,
     source_id: Optional[int] = None,
     importance: int = 0,
+    llm_client=None,
 ) -> Optional[dict]:
     """从一轮对话/一个事件里抽取一条长期记忆并落库。返回新记忆，未写库则返回 None。
 
@@ -604,10 +605,24 @@ def distill_and_save(
     `focus` / `context` 为可选（P0-3 改动四）：为空时行为与旧版逐字节一致。
     P-C1 §3：事件四要素透传（可选 kwargs，默认 None → 旧调用逐字节不变；
     1200 字截断与 max_tokens=300 不动）。
+
+    v5.0 D1/D2：``llm_client`` 为空时按 user_id 解析用户级客户端（关思考，
+    蒸馏只要结论）；用户未配置 AI → 返回 None（蒸馏是静默增强，不能炸主链路）。
     """
     text = (user_input or "").strip()
     if len(text) < _MIN_INPUT_LEN:
         return None
+
+    if llm_client is None:
+        from app.services import user_ai_config_service as uaicfg
+
+        try:
+            llm_client = uaicfg.build_chat_client(
+                db, user_id, enable_thinking=False
+            )
+        except uaicfg.AiConfigMissingError:
+            logger.info("[MEMORY] 用户未配置 AI，跳过蒸馏 user=%s", user_id)
+            return None
 
     # 军师记忆沉淀总开关（P0④）：关闭时在 distill 入口阻断，连模型调用都不发
     if not memory_distill_enabled(db, relation_id):
@@ -618,7 +633,7 @@ def distill_and_save(
         return None
 
     try:
-        result = distill_llm.invoke_structured(
+        result = llm_client.invoke_structured(
             [
                 {"role": "system", "content": MEMORY_DISTILL_PROMPT},
                 {
@@ -687,8 +702,16 @@ def distill_in_background(
     """
     if os.getenv("COUPLE_DISABLE_MEMORY_DISTILL") == "1":
         return None
-    if not llm.api_key:
+    # v5.0 D4：用户未配置 AI → 静默跳过（后台线程路径，无需引导弹窗）
+    from app.services import user_ai_config_service as uaicfg
+
+    _probe_db = SessionLocal()
+    try:
+        uaicfg.resolve(_probe_db, user_id)
+    except uaicfg.AiConfigMissingError:
         return None
+    finally:
+        _probe_db.close()
     if len((user_input or "").strip()) < _MIN_INPUT_LEN:
         return None
 
@@ -730,8 +753,16 @@ def distill_session_summary_in_background(
     """
     if os.getenv("COUPLE_DISABLE_MEMORY_DISTILL") == "1":
         return None
-    if not distill_llm.api_key:
+    # v5.0 D4：按 user_id 判定配置；未配置直接跳过
+    from app.services import user_ai_config_service as uaicfg
+
+    _probe_db = SessionLocal()
+    try:
+        uaicfg.resolve(_probe_db, user_id)
+    except uaicfg.AiConfigMissingError:
         return None
+    finally:
+        _probe_db.close()
 
     def _worker():
         from app.core.database import SessionLocal
@@ -753,19 +784,24 @@ def distill_session_summary_in_background(
             conversation = "\n".join(
                 "%s: %s" % (m.role, (m.content or "")[:500]) for m in msgs
             )[:6000]
-            raw = distill_llm.invoke(
-                [
-                    {
-                        "role": "user",
-                        "content": SESSION_SUMMARY_PROMPT.format(
-                            conversation=conversation
-                        ),
-                    }
-                ],
-                scene="session_summary",
-                temperature=0.3,
-                max_tokens=200,
-            )
+            try:
+                _client = uaicfg.build_chat_client(db, user_id, enable_thinking=False)
+                raw = _client.invoke(
+                    [
+                        {
+                            "role": "user",
+                            "content": SESSION_SUMMARY_PROMPT.format(
+                                conversation=conversation
+                            ),
+                        }
+                    ],
+                    scene="session_summary",
+                    temperature=0.3,
+                    max_tokens=200,
+                )
+            except Exception:
+                logger.exception("[MEMORY] 会话摘要生成失败 session=%s", session_id)
+                return
             summary = (raw or "").strip()
             if not summary:
                 return

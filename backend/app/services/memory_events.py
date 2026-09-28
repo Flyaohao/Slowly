@@ -36,7 +36,8 @@ from app.services.memory_service import (
     distill_and_save,
     save_structured_memory,
 )
-from app.services.llm_client import llm
+from app.services.user_ai_config_service import AiConfigMissingError
+from app.services.user_ai_config_service import resolve as resolve_user_ai_config
 
 logger = logging.getLogger("couple.memory_events")
 
@@ -250,25 +251,33 @@ def distill_event_in_background(event: MemoryEvent) -> None:
     """
     if not (event.content or "").strip():
         return None
-    if event.source not in STRUCTURED_SOURCES and not llm.api_key:
-        # P-C1 §4：事件行不依赖模型——无 key 只写事件行，跳过蒸馏
-        def _row_only():
-            from app.core.database import SessionLocal
+    # v5.0 D1/D2：AI 源按事件归属用户判定配置；未配置只写事件行（不依赖模型）
+    if event.source not in STRUCTURED_SOURCES:
+        from app.core.database import SessionLocal
 
-            db = SessionLocal()
-            try:
-                _write_event_row(event, (event.content or "")[:CONTENT_MAX_LEN], db)
-            except Exception:
-                logger.exception(
-                    "[MEMORY_EVENTS] 事件行后台写入失败 source=%s", event.source
-                )
-            finally:
-                db.close()
+        _probe_db = SessionLocal()
+        try:
+            resolve_user_ai_config(_probe_db, event.user_id)
+        except AiConfigMissingError:
+            def _row_only():
+                from app.core.database import SessionLocal
 
-        threading.Thread(
-            target=_row_only, name="memory-event-row-%s" % event.source, daemon=True
-        ).start()
-        return None
+                db = SessionLocal()
+                try:
+                    _write_event_row(event, (event.content or "")[:CONTENT_MAX_LEN], db)
+                except Exception:
+                    logger.exception(
+                        "[MEMORY_EVENTS] 事件行后台写入失败 source=%s", event.source
+                    )
+                finally:
+                    db.close()
+
+            threading.Thread(
+                target=_row_only, name="memory-event-row-%s" % event.source, daemon=True
+            ).start()
+            return None
+        finally:
+            _probe_db.close()
 
     def _worker():
         try:

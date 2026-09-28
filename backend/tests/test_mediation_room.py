@@ -147,6 +147,11 @@ def main():
         check("settling 后不可再投票", str(e) == svc.ERR_BAD_STATE)
 
     # ---- 6. 结算 worker（伪造 LLM）----
+    # v5.0：结算客户端按房间创建者解析（D2），先给 creator 补种配置
+    from ai_config_seed import ensure_ai_config
+
+    ensure_ai_config(db, ua.id, real=False)
+
     class FakeOut:
         result = "reconciled"
         summary_text = "双方已互相理解：加班沟通不足是核心。"
@@ -156,14 +161,15 @@ def main():
         viewpoint_a = "我需要被优先考虑的感受被看见了。"
         viewpoint_b = "我意识到临时加班也要先沟通。"
 
-    orig_invoke = settle_svc.llm.invoke_structured
-    settle_svc.llm.invoke_structured = lambda *a, **kw: FakeOut()
+    # v5.0：桩在 _invoke_settlement 接缝上（原全局 llm 已改为按用户解析的客户端）
+    orig_invoke_settlement = settle_svc._invoke_settlement
+    settle_svc._invoke_settlement = lambda room, transcript, client=None: FakeOut()
     orig_sl = settle_svc.SessionLocal
     settle_svc.SessionLocal = TestSession  # 测试库会话工厂
     try:
         handled = settle_svc.run_due_settlements(db, "w1")
     finally:
-        settle_svc.llm.invoke_structured = orig_invoke
+        settle_svc._invoke_settlement = orig_invoke_settlement
         settle_svc.SessionLocal = orig_sl
 
     fresh = room_repo.get_room(db, rid)

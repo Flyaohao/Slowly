@@ -19,6 +19,10 @@ from starlette.staticfiles import StaticFiles
 from app.core import config
 from app.core.limiter import limiter
 from app.api.v1.router import router as v1_router
+from app.services.user_ai_config_service import (
+    AiConfigInvalidError,
+    AiConfigMissingError,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -290,6 +294,27 @@ async def unified_rate_limit_handler(request: Request, exc: RateLimitExceeded):
     """
     return _respond_business_error(
         request, 429, 10029, "请求太频繁啦，请休息一会儿再试", None
+    )
+
+
+@app.exception_handler(AiConfigMissingError)
+async def ai_config_missing_handler(request: Request, exc: AiConfigMissingError):
+    """v5.0 D4：用户未配置 AI 服务（强制配置）。
+
+    全局统一翻译为 HTTP 200 + 业务码 30010，客户端据此弹窗引导去设置页。
+    注册成全局处理器的原因：AI 端点有 10+ 处 prepare_* 调用，逐个加
+    except 既会抄漏也会抄散。
+    """
+    return _respond_business_error(
+        request, 200, 30010, "请先在「设置 → AI 服务配置」中填入你的 API 信息", None
+    )
+
+
+@app.exception_handler(AiConfigInvalidError)
+async def ai_config_invalid_handler(request: Request, exc: AiConfigInvalidError):
+    """v5.0 D10：AI 配置非法/连通性测试未通过 → 业务码 30011，消息透传原因。"""
+    return _respond_business_error(
+        request, 200, 30011, exc.message or "AI 配置无效", None
     )
 
 

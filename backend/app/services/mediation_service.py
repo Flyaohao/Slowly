@@ -1274,7 +1274,14 @@ def process_rewrite(db: Session, session_id: int) -> dict:
         partner_input="\n".join(partner_inputs) or "（未填写）",
     )
 
-    ai_response = _call_llm(prompt, "mediation_rewrite")
+    # v5.0 D2：调解由发起人（session.user_id）承担本次调用的配置与费用
+    from app.services import user_ai_config_service as uaicfg
+
+    ai_response = _call_llm(
+        prompt,
+        "mediation_rewrite",
+        client=uaicfg.build_chat_client(db, session.user_id),
+    )
     _raise_if_degraded(ai_response, "mediation_rewrite")
     return ai_response
 
@@ -1302,7 +1309,14 @@ def generate_summary(db: Session, session_id: int) -> dict:
         all_text=all_text,
     )
 
-    ai_response = _call_llm(prompt, "mediation_summary")
+    # v5.0 D2：调解由发起人（session.user_id）承担本次调用的配置与费用
+    from app.services import user_ai_config_service as uaicfg
+
+    ai_response = _call_llm(
+        prompt,
+        "mediation_summary",
+        client=uaicfg.build_chat_client(db, session.user_id),
+    )
     _raise_if_degraded(ai_response, "mediation_summary")
     return ai_response
 

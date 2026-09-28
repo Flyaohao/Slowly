@@ -8,6 +8,7 @@ from app.schemas.ai_output import (
     LetterRewriteOutput,
 )
 from app.services import ai_generation_service
+from app.services import user_ai_config_service as uaicfg
 from app.services.ai_service import _call_llm, _format_profile, _get_partner_id
 from app.services.letter_service import is_locked_future
 from app.services.prompt_builder import build_structured_stream_prompt
@@ -129,7 +130,9 @@ def understand_letter(db: Session, user_id: int, letter_id: int) -> dict:
         letter_content=letter.content,
     )
 
-    ai_response = _call_llm(prompt, "letter_analysis")
+    ai_response = _call_llm(
+        prompt, "letter_analysis", client=uaicfg.build_chat_client(db, user_id)
+    )
     return {
         "letter_id": letter_id,
         "analysis": {
@@ -218,6 +221,8 @@ def prepare_understand_letter(
         "prompt": prompt,
         "output_model": LetterAnalysisOutput,
         "temperature": 0.7,
+        # v5.0 D1/D4：按用户解析客户端（未配置抛 AiConfigMissingError → 30010）
+        "client": uaicfg.build_chat_client(db, user_id),
         # 双出口协议下，这条上限要同时容纳「思考 + 正文 + 结构化 JSON」。
         # 实测推理模型的思考能到 1.1 万字，若上限卡在 2000，正文之后的 JSON
         # 会被截断，结构化字段整批丢失（2026-09-16 实测）。留足额度。
@@ -255,7 +260,9 @@ def rewrite_letter(
         style=style,
     )
 
-    ai_response = _call_llm(prompt, "letter_rewrite")
+    ai_response = _call_llm(
+        prompt, "letter_rewrite", client=uaicfg.build_chat_client(db, user_id)
+    )
     return {
         "letter_id": letter_id,
         "rewrite": {
@@ -295,7 +302,9 @@ def generate_reply(db: Session, user_id: int, letter_id: int) -> dict:
         letter_content=letter.content,
     )
 
-    ai_response = _call_llm(prompt, "letter_reply")
+    ai_response = _call_llm(
+        prompt, "letter_reply", client=uaicfg.build_chat_client(db, user_id)
+    )
     return {
         "letter_id": letter_id,
         "reply": {
@@ -366,6 +375,7 @@ def prepare_rewrite_letter(
         "prompt": prompt,
         "output_model": LetterRewriteOutput,
         "temperature": 0.7,
+        "client": uaicfg.build_chat_client(db, user_id),
         # 双出口协议下要容纳「思考 + 正文 + JSON」，理由同 prepare_understand_letter
         "max_tokens": 4000,
     }
@@ -415,5 +425,6 @@ def prepare_generate_reply(
         "prompt": prompt,
         "output_model": LetterReplyOutput,
         "temperature": 0.7,
+        "client": uaicfg.build_chat_client(db, user_id),
         "max_tokens": 4000,
     }

@@ -64,6 +64,8 @@ enum class Screen(val route: String) {
     /** 画像历史版本：看 / 比 / 撤回（用户需求 #5）。 */
     ProfileVersions("profile_versions"),
     AdvisorSettings("advisor_settings"),
+    /** v5.0：用户级 AI 服务配置（api-key/模型/端点，强制配置 D4）。 */
+    AiConfig("ai_config"),
 
     // 整改 §8.3：AI 建议采用后回填结果的待反馈页（首页 feedback_outcome 任务卡入口）
     // sessionId 可空：从首页任务卡进（只知会话）；带 messageId 时直接定位到那条建议

@@ -103,6 +103,11 @@ def _run_body(h):
         db.commit()
         uid, entry_id = u.id, entry.id
 
+        # v5.0 强制配置（D4）：真调模型，用全局真实配置补种
+        from ai_config_seed import ensure_ai_config
+
+        ensure_ai_config(db, uid, real=True)
+
         # ---- 1) 观点分析（真调模型）----
         prepared = ai_service.prepare_viewpoint_analysis(db, uid, entry_id)
         check("prepare 返回结构化模型",

@@ -5,11 +5,16 @@
 **所有大模型调用必须经过这一层，业务代码不得直接发起 HTTP 请求。**
 
 集中在这一层处理的事情：
-1. 鉴权与端点拼接（DashScope OpenAI 兼容模式）
-2. 超时、重试、模型降级（额度耗尽/限流时自动切换备用模型）
-3. 三种调用形态：阻塞 invoke / 流式 stream / 工具调用 invoke_with_tools
-4. 结构化输出：通过 Function Calling 承载 Pydantic Schema
-5. Token 计量与耗时日志（成本可观测）
+1. 双协议：OpenAI 兼容（DashScope/各类中转）与 Anthropic Messages（v5.0，
+   用户级配置 D7）；两种客户端公开接口完全一致，业务层无感知
+2. 鉴权与端点拼接；**多 key 轮换**（D8：配额/鉴权失败自动切下一把）
+3. 超时、重试、模型降级（仅全局配置启用；用户级配置只用自选模型）
+4. 三种调用形态：阻塞 invoke / 流式 stream / 工具调用 invoke_with_tools
+5. 结构化输出：通过 Function Calling 承载 Pydantic Schema
+6. Token 计量与耗时日志（成本可观测）
+
+用户级配置（v5.0）：业务代码通过 `user_ai_config_service.build_chat_client`
+按当前用户取客户端实例；模块单例 `llm` 仅作为全局配置兜底与测试基线。
 """
 
 from __future__ import annotations
@@ -36,7 +41,7 @@ from app.schemas.ai_output import build_tool_schema, get_output_model
 
 logger = logging.getLogger("couple.llm")
 
-#: 主模型额度耗尽或限流时，依次尝试的备用模型
+#: 主模型额度耗尽或限流时，依次尝试的备用模型（仅全局配置；用户级配置禁用）
 FALLBACK_MODELS: List[str] = ["qwen-plus", "deepseek-v3", "qwen-turbo"]
 
 #: 单次请求超时。qwen3.7-flash 这类推理模型会先产出思考内容，
@@ -58,9 +63,25 @@ _MODEL_UNAVAILABLE_CODES = (
     "InvalidParameter.Model",
 )
 
+#: 命中这些错误码/状态应**轮换到下一把 key**（D8 key 轮换）
+_KEY_ROTATE_CODES = _MODEL_UNAVAILABLE_CODES + (
+    "InvalidApiKey",
+    "InvalidApiKeyFormat",
+    "AccessDenied",
+    "Unauthorized",
+    "authentication_error",
+    "permission_error",
+    "rate_limit_error",
+    "overloaded_error",
+    "billing_error",
+    "insufficient_quota",
+)
+_KEY_ROTATE_STATUS = (401, 403, 429, 503, 529)
 
-class LlmError(RuntimeError):
-    """LLM 调用异常（已完成重试与降级仍然失败）"""
+
+def _is_key_retryable(status_code: int, code: str) -> bool:
+    """该错误是否值得换一把 key 重试（多 key 场景）。"""
+    return code in _KEY_ROTATE_CODES or status_code in _KEY_ROTATE_STATUS
 
 
 @contextlib.contextmanager
@@ -98,8 +119,18 @@ def _cancel_scope(
         finished.set()
 
 
+class LlmError(RuntimeError):
+    """LLM 调用失败（网络/HTTP/取消/结构化解析）。业务层据此降级或提示。"""
+
+
 class LlmClient:
-    """大模型统一客户端。模块级单例见文件底部 `llm`。"""
+    """大模型统一客户端（OpenAI 兼容协议）。模块级单例见文件底部 `llm`。
+
+    v5.0 新增：
+    - ``api_keys``：多把 key 轮换（D8）。传入后 `_candidates()` 只返回主模型
+      （用户自选模型不做降级），配额/鉴权类错误自动切下一把 key。
+    - Anthropic 协议见子类 `AnthropicClient`，公开接口与本类一致。
+    """
 
     #: 流式增量类型标签，方便调用方写 `llm.KIND_THINKING`
     KIND_THINKING = _KIND_THINKING
@@ -113,11 +144,25 @@ class LlmClient:
         fallbacks: Optional[List[str]] = None,
         enable_thinking: Optional[bool] = None,
         thinking_budget: Optional[int] = None,
+        api_keys: Optional[List[str]] = None,
+        send_thinking_params: Optional[bool] = None,
     ) -> None:
-        self.api_key = api_key or AI_API_KEY
+        # 多 key 轮换：api_keys 优先；未传时退化单 key（显式 api_key 或全局
+        # AI_API_KEY）——全局单例/`get_client_for_mode` 依赖这一回落
+        self._key_lock = threading.Lock()
+        self._key_cursor = 0
+        if api_keys:
+            self._keys: List[str] = [k for k in api_keys if k]
+        else:
+            effective = api_key or AI_API_KEY
+            self._keys = [effective] if effective else []
+        self.api_key = self._keys[0] if self._keys else ""
         self.base_url = (base_url or AI_BASE_URL).rstrip("/")
         self.model = model or AI_MODEL
-        self.fallbacks = fallbacks if fallbacks is not None else FALLBACK_MODELS
+        #: 用户级配置：禁用模型降级（只用用户自选模型）
+        self.fallbacks = [] if api_keys else (
+            fallbacks if fallbacks is not None else FALLBACK_MODELS
+        )
         #: 思考控制。默认值来自环境变量，构造时显式传入可覆盖（测试用）
         self.enable_thinking = (
             AI_ENABLE_THINKING if enable_thinking is None else enable_thinking
@@ -125,9 +170,27 @@ class LlmClient:
         self.thinking_budget = (
             AI_THINKING_BUDGET if thinking_budget is None else thinking_budget
         )
+        #: 是否下发思考参数（enable_thinking/thinking_budget 是 DashScope 专有）。
+        #: None = 自动：仅 base_url 为 DashScope 时下发；显式 True/False 强制。
+        self.send_thinking_params = send_thinking_params
 
         if not self.api_key:
             logger.warning("未配置 AI_API_KEY，AI 功能将不可用")
+
+    # ------------------------------------------------------------------ #
+    # key 轮换（D8）
+    # ------------------------------------------------------------------ #
+    def _advance_key(self) -> bool:
+        """游标前进到下一把 key。返回 True 表示有下一把可试。"""
+        if len(self._keys) <= 1:
+            return False
+        with self._key_lock:
+            self._key_cursor = (self._key_cursor + 1) % len(self._keys)
+            self.api_key = self._keys[self._key_cursor]
+        logger.warning(
+            "[LLM] key 轮换 → 第 %d 把（尾号 %s）", self._key_cursor + 1, self.api_key[-4:]
+        )
+        return True
 
     # ------------------------------------------------------------------ #
     # 公开接口
@@ -197,10 +260,10 @@ class LlmClient:
 
         与 `invoke()` 的差异：
         - 走 `client.stream()`，无法复用 `_request()` 的请求封装，
-          因此**模型降级逻辑必须在这里再实现一遍**（曾经漏掉 `model` 字段，
-          线上会直接 400 "you must provide a model parameter"）。
-        - 只有在**尚未吐出任何增量**时才允许切换模型；一旦有内容发给前端了，
-          再换模型会导致前缀重复，此时只能报错。
+          因此**模型降级与 key 轮换逻辑必须在这里再实现一遍**（曾经漏掉
+          `model` 字段，线上会直接 400 "you must provide a model parameter"）。
+        - 只有在**尚未吐出任何增量**时才允许切换模型/key；一旦有内容发给前端了，
+          再换会导致前缀重复，此时只能报错。
           注意判据是"推理或正文任一已下发"，推理也算已下发。
         """
         last_error: Optional[str] = None
@@ -217,61 +280,74 @@ class LlmClient:
             started = time.time()
             thinking_chunks = 0
             content_chunks = 0
-            try:
-                with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:
-                    with client.stream(
-                        "POST", self._url(), headers=self._headers(), json=payload
-                    ) as resp:
-                        if resp.status_code != 200:
-                            body = resp.read().decode("utf-8", errors="replace")
-                            code = self._stream_error_code(body)
-                            last_error = "HTTP %s: %s" % (resp.status_code, body[:200])
-                            if code in _MODEL_UNAVAILABLE_CODES or resp.status_code in (429, 503):
-                                logger.warning(
-                                    "[LLM] 流式模型 %s 不可用[%s]，降级到下一个模型", model, code
+            while True:
+                try:
+                    with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:
+                        with client.stream(
+                            "POST", self._url(), headers=self._headers(), json=payload
+                        ) as resp:
+                            if resp.status_code != 200:
+                                body = resp.read().decode("utf-8", errors="replace")
+                                code = self._stream_error_code(body)
+                                last_error = "HTTP %s: %s" % (resp.status_code, body[:200])
+                                if _is_key_retryable(resp.status_code, code):
+                                    if self._advance_key():
+                                        continue
+                                    if code in _MODEL_UNAVAILABLE_CODES or resp.status_code in (429, 503):
+                                        logger.warning(
+                                            "[LLM] 流式模型 %s 不可用[%s]，降级到下一个模型", model, code
+                                        )
+                                        break
+                                    raise LlmError(
+                                        "流式调用失败 HTTP %s: %s" % (resp.status_code, last_error)
+                                    )
+                                raise LlmError(
+                                    "流式调用失败 HTTP %s: %s" % (resp.status_code, last_error)
                                 )
-                                continue
-                            raise LlmError("流式调用失败 HTTP %s: %s" % (resp.status_code, last_error))
 
-                        with _cancel_scope(cancel_event, resp):
-                            for line in resp.iter_lines():
-                                if not line:
-                                    continue
-                                if line.startswith("data:"):
-                                    line = line[5:].strip()
-                                if line == "[DONE]":
-                                    break
-                                try:
-                                    event = json.loads(line)
-                                except ValueError:
-                                    continue
+                            with _cancel_scope(cancel_event, resp):
+                                for line in resp.iter_lines():
+                                    if not line:
+                                        continue
+                                    if line.startswith("data:"):
+                                        line = line[5:].strip()
+                                    if line == "[DONE]":
+                                        break
+                                    try:
+                                        event = json.loads(line)
+                                    except ValueError:
+                                        continue
 
-                                reasoning = self._extract_reasoning(event)
-                                if reasoning:
-                                    thinking_chunks += 1
-                                    yield self.KIND_THINKING, reasoning
+                                    reasoning = self._extract_reasoning(event)
+                                    if reasoning:
+                                        thinking_chunks += 1
+                                        yield self.KIND_THINKING, reasoning
 
-                                delta = self._extract_delta(event)
-                                if delta:
-                                    content_chunks += 1
-                                    yield self.KIND_CONTENT, delta
-            except httpx.HTTPError as exc:
-                if cancel_event is not None and cancel_event.is_set():
-                    # 调用方主动取消：连接是我们自己关掉的，不是故障。
-                    # 安静收尾，不要把「取消」当成异常抛给上层。
-                    logger.info("[LLM] 流式已被调用方取消 scene=%s model=%s", scene, model)
-                    return
-                last_error = "网络异常: %s" % exc
-                if thinking_chunks == 0 and content_chunks == 0:
-                    logger.warning("[LLM] 流式 %s 请求异常，尝试下一个模型: %s", model, exc)
-                    continue
-                raise LlmError("流式中断且已推送部分内容: %s" % exc) from exc
-            finally:
-                logger.info(
-                    "[LLM-STREAM] scene=%s model=%s thinking=%d content=%d cost=%.2fs",
-                    scene, model, thinking_chunks, content_chunks, time.time() - started,
-                )
-            return
+                                    delta = self._extract_delta(event)
+                                    if delta:
+                                        content_chunks += 1
+                                        yield self.KIND_CONTENT, delta
+                    break  # 正常完成
+                except httpx.HTTPError as exc:
+                    if cancel_event is not None and cancel_event.is_set():
+                        # 调用方主动取消：连接是我们自己关掉的，不是故障。
+                        # 安静收尾，不要把「取消」当成异常抛给上层。
+                        logger.info("[LLM] 流式已被调用方取消 scene=%s model=%s", scene, model)
+                        return
+                    last_error = "网络异常: %s" % exc
+                    if thinking_chunks == 0 and content_chunks == 0:
+                        if self._advance_key():
+                            continue
+                        logger.warning("[LLM] 流式 %s 请求异常，尝试下一个模型: %s", model, exc)
+                        break
+                    raise LlmError("流式中断且已推送部分内容: %s" % exc) from exc
+                finally:
+                    logger.info(
+                        "[LLM-STREAM] scene=%s model=%s thinking=%d content=%d cost=%.2fs",
+                        scene, model, thinking_chunks, content_chunks, time.time() - started,
+                    )
+            if thinking_chunks or content_chunks:
+                return
 
         raise LlmError("所有候选模型均不可用(流式): %s" % last_error)
 
@@ -384,7 +460,7 @@ class LlmClient:
         raise LlmError("结构化输出解析失败（已尝试 tool_calls → 重试 → JSON 兜底）")
 
     # ------------------------------------------------------------------ #
-    # 内部实现
+    # 内部实现（子类按协议覆写 _url/_headers/_request/_thinking_params 等）
     # ------------------------------------------------------------------ #
     def _url(self) -> str:
         return "%s/chat/completions" % self.base_url
@@ -408,8 +484,17 @@ class LlmClient:
         | enable_thinking=false | 不产生 | 0.9s | 6.1s |
 
         默认值在 `config.AI_THINKING_BUDGET`，改环境变量即可调，不必改代码。
-        备选模型实测会忽略这两个字段（不会 400），所以无条件下发。
+
+        **v5.0 协议边界**：这两个字段是 DashScope 专有扩展，发往第三方
+        OpenAI 兼容端点可能 400（严格校验未知字段）。`send_thinking_params`
+        为 None 时自动判断：仅 DashScope 端点下发；显式传值可强制。
+        备选模型实测会忽略这两个字段（不会 400），DashScope 场景无条件下发。
         """
+        send = self.send_thinking_params
+        if send is None:
+            send = "dashscope" in self.base_url.lower()
+        if not send:
+            return {}
         if not self.enable_thinking:
             return {"enable_thinking": False}
         if self.thinking_budget > 0:
@@ -417,7 +502,11 @@ class LlmClient:
         return {}
 
     def _candidates(self) -> List[str]:
-        """待尝试的模型序列：主模型优先，备用模型去重后依次跟上。"""
+        """待尝试的模型序列：主模型优先，备用模型去重后依次跟上。
+
+        用户级配置（多 key 模式）禁用备用模型——用户自选模型降级到
+        DashScope 模型在第三方端点上必然 400，且违背「自己的 key 自己负责」。
+        """
         models = [self.model]
         for name in self.fallbacks:
             if name not in models:
@@ -431,9 +520,9 @@ class LlmClient:
         cancel_event: Optional[threading.Event] = None,
         no_thinking: bool = False,
     ) -> Dict[str, Any]:
-        """带模型降级与重试的底层请求。
+        """带 key 轮换、模型降级与重试的底层请求。
 
-        ``cancel_event`` 置位时在**候选模型之间**提前退出：非流式 POST 本身
+        ``cancel_event`` 置位时在**候选之间**提前退出：非流式 POST 本身
         无法中断，但可以避免「主模型失败 → 再试 3 个备用模型」把已经无人在等的
         请求继续烧下去（单次超时 120s × 候选数）。
 
@@ -441,6 +530,9 @@ class LlmClient:
         路径（invoke_structured / invoke_with_tools）的产出是工具参数或结构化
         字段，没有「思考面板」可展示——留着思考只会拖慢每一次重试（主模型
         实测单次多花 ~19s）。主聊天流式链路**不受影响**，照常带思考。
+
+        重试顺序（v5.0）：**key 轮换优先于模型降级**——同一模型换一把 key
+        是最常见的自愈方式（配额/限流），key 全部试完才换模型。
         """
         last_error: Optional[str] = None
 
@@ -452,31 +544,37 @@ class LlmClient:
                 body["enable_thinking"] = False
                 body.pop("thinking_budget", None)
             started = time.time()
-            try:
-                with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:
-                    resp = client.post(self._url(), headers=self._headers(), json=body)
-            except httpx.HTTPError as exc:
-                last_error = "网络异常: %s" % exc
-                logger.warning("[LLM] %s 请求异常，尝试下一个模型: %s", model, exc)
-                continue
+            while True:
+                try:
+                    with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:
+                        resp = client.post(self._url(), headers=self._headers(), json=body)
+                except httpx.HTTPError as exc:
+                    last_error = "网络异常: %s" % exc
+                    if self._advance_key():
+                        continue
+                    logger.warning("[LLM] %s 请求异常，尝试下一个模型: %s", model, exc)
+                    break
 
-            elapsed = time.time() - started
+                elapsed = time.time() - started
 
-            if resp.status_code == 200:
-                data = resp.json()
-                self._log_usage(scene, model, data, elapsed)
-                return data
+                if resp.status_code == 200:
+                    data = resp.json()
+                    self._log_usage(scene, model, data, elapsed)
+                    return data
 
-            # 解析错误体，判断是否值得换模型
-            code, message = self._parse_error(resp)
-            last_error = "%s (%s)" % (message, code)
+                # 解析错误体，判断是否值得换 key / 换模型
+                code, message = self._parse_error(resp)
+                last_error = "%s (%s)" % (message, code)
 
-            if code in _MODEL_UNAVAILABLE_CODES or resp.status_code in (429, 503):
-                logger.warning("[LLM] 模型 %s 不可用[%s]，降级到下一个模型", model, code)
-                continue
+                if _is_key_retryable(resp.status_code, code):
+                    if self._advance_key():
+                        continue
+                    if code in _MODEL_UNAVAILABLE_CODES or resp.status_code in (429, 503):
+                        logger.warning("[LLM] 模型 %s 不可用[%s]，降级到下一个模型", model, code)
+                        break
 
-            # 其它错误（参数错误、鉴权失败等）直接抛出，换模型也没用
-            raise LlmError("LLM 调用失败 HTTP %s: %s" % (resp.status_code, last_error))
+                # 其它错误（参数错误、鉴权失败等）直接抛出，换模型也没用
+                raise LlmError("LLM 调用失败 HTTP %s: %s" % (resp.status_code, last_error))
 
         raise LlmError("所有候选模型均不可用: %s" % last_error)
 
@@ -505,7 +603,7 @@ class LlmClient:
             "[LLM] scene=%s model=%s prompt_tokens=%s completion_tokens=%s total_tokens=%s cost=%.2fs",
             scene, model,
             usage.get("prompt_tokens"), usage.get("completion_tokens"),
-            usage.get("total_tokens"), elapsed,
+            usage.get("total_tokens", usage.get("output_tokens")), elapsed,
         )
 
     @staticmethod
@@ -615,6 +713,328 @@ class LlmClient:
             raise
 
 
+class AnthropicClient(LlmClient):
+    """Anthropic Messages 协议客户端（v5.0 D7）。
+
+    公开接口（invoke / stream_events / invoke_with_tools / invoke_structured）
+    与 `LlmClient` 完全一致——差异全部收敛在协议翻译层：
+
+    - 端点 ``{base}/v1/messages``，鉴权 ``x-api-key`` 头；
+    - system 消息提升为顶层 ``system`` 参数；
+    - assistant.tool_calls ↔ tool_use 块、role=tool ↔ tool_result 块的双向翻译；
+    - 响应统一翻译回 OpenAI 形状（``choices[0].message``），基类的
+      invoke/invoke_structured/invoke_with_tools **零改动继承**；
+    - 流式解析 anthropic SSE 事件（text_delta / thinking_delta）；
+    - 思考控制用 ``thinking: {"type":"enabled","budget_tokens":N}``；
+    - max_tokens 为必填（OpenAI 可选）。
+    """
+
+    _ANTHROPIC_VERSION = "2023-06-01"
+
+    def _api_url(self) -> str:
+        base = self.base_url.rstrip("/")
+        if base.endswith("/v1"):
+            return "%s/messages" % base
+        return "%s/v1/messages" % base
+
+    def _url(self) -> str:
+        return self._api_url()
+
+    def _headers(self) -> Dict[str, str]:
+        return {
+            "x-api-key": self.api_key,
+            "anthropic-version": self._ANTHROPIC_VERSION,
+            "Content-Type": "application/json",
+        }
+
+    def _thinking_params(self) -> Dict[str, Any]:
+        """anthropic 思考控制不进通用 payload，由 _request/_thinking_block 处理。"""
+        return {}
+
+    def _thinking_block(self, max_tokens: int) -> Dict[str, Any]:
+        """构造 anthropic thinking 参数。quick 档（enable_thinking=False）不思考。"""
+        if not self.enable_thinking:
+            return {}
+        budget = self.thinking_budget if self.thinking_budget > 0 else 1024
+        # anthropic 硬约束：budget_tokens < max_tokens，留 1000 给正文
+        budget = max(1024, min(budget, max_tokens - 1000))
+        if budget >= max_tokens:
+            return {}
+        return {"thinking": {"type": "enabled", "budget_tokens": budget}}
+
+    # ---- 消息双向翻译 -------------------------------------------------- #
+    @staticmethod
+    def _split_system(messages: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:
+        """system 消息抽出拼接；其余消息转为 anthropic 块结构。"""
+        system_parts: List[str] = []
+        rest: List[Dict[str, Any]] = []
+        for msg in messages:
+            role = msg.get("role")
+            if role == "system":
+                content = msg.get("content")
+                if isinstance(content, str):
+                    system_parts.append(content)
+                continue
+            if role == "tool":
+                # OpenAI 工具结果 → user 消息里的 tool_result 块
+                rest.append({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": msg.get("tool_call_id") or "",
+                        "content": str(msg.get("content") or ""),
+                    }],
+                })
+                continue
+            if role == "assistant":
+                blocks: List[Dict[str, Any]] = []
+                text = msg.get("content")
+                if isinstance(text, str) and text:
+                    blocks.append({"type": "text", "text": text})
+                for call in (msg.get("tool_calls") or []):
+                    fn = call.get("function") or {}
+                    raw_args = fn.get("arguments")
+                    if isinstance(raw_args, str):
+                        try:
+                            args = json.loads(raw_args)
+                        except ValueError:
+                            args = {}
+                    else:
+                        args = raw_args or {}
+                    blocks.append({
+                        "type": "tool_use",
+                        "id": call.get("id") or "toolu_%d" % len(blocks),
+                        "name": fn.get("name") or "",
+                        "input": args,
+                    })
+                rest.append({
+                    "role": "assistant",
+                    "content": blocks or [{"type": "text", "text": ""}],
+                })
+                continue
+            # user：content 可能是字符串或块列表，原样兼容
+            rest.append({"role": "user", "content": msg.get("content") or ""})
+        return "\n\n".join(system_parts), rest
+
+    @staticmethod
+    def _translate_tools(tools: Optional[List[Dict[str, Any]]]) -> Optional[List[Dict[str, Any]]]:
+        """OpenAI tools schema → anthropic tools schema。"""
+        if not tools:
+            return None
+        out = []
+        for tool in tools:
+            fn = tool.get("function") or tool
+            out.append({
+                "name": fn.get("name") or "",
+                "description": fn.get("description") or "",
+                "input_schema": fn.get("parameters") or {"type": "object", "properties": {}},
+            })
+        return out
+
+    @staticmethod
+    def _translate_tool_choice(choice: Any) -> Any:
+        if isinstance(choice, dict) and choice.get("type") == "function":
+            name = (choice.get("function") or {}).get("name")
+            if name:
+                return {"type": "tool", "name": name}
+        return {"type": "auto"}
+
+    # ---- 请求与响应翻译 ------------------------------------------------ #
+    def _request(
+        self,
+        payload: Dict[str, Any],
+        scene: str = "unknown",
+        cancel_event: Optional[threading.Event] = None,
+        no_thinking: bool = False,
+    ) -> Dict[str, Any]:
+        """anthropic 版底层请求：翻译 → POST → 翻译回 OpenAI 形状。"""
+        messages = payload.get("messages") or []
+        system, anthro_messages = self._split_system(messages)
+        req_max_tokens = int(payload.get("max_tokens") or 2000)
+        body: Dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": req_max_tokens,
+            "messages": anthro_messages,
+            "temperature": payload.get("temperature", 0.7),
+        }
+        if system:
+            body["system"] = system
+        tools = self._translate_tools(payload.get("tools"))
+        if tools:
+            body["tools"] = tools
+            body["tool_choice"] = self._translate_tool_choice(payload.get("tool_choice"))
+        if not no_thinking:
+            body.update(self._thinking_block(req_max_tokens))
+
+        if cancel_event is not None and cancel_event.is_set():
+            raise LlmError("LLM 调用已被调用方取消")
+        last_error: Optional[str] = None
+        while True:
+            started = time.time()
+            try:
+                with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:
+                    resp = client.post(self._api_url(), headers=self._headers(), json=body)
+            except httpx.HTTPError as exc:
+                last_error = "网络异常: %s" % exc
+                if self._advance_key():
+                    continue
+                raise LlmError("LLM 调用失败: %s" % last_error) from exc
+
+            elapsed = time.time() - started
+            if resp.status_code == 200:
+                data = resp.json()
+                shaped = self._to_openai_shape(data)
+                self._log_usage(scene, self.model, shaped, elapsed)
+                return shaped
+
+            code, message = self._parse_error(resp)
+            last_error = "%s (%s)" % (message, code)
+            if _is_key_retryable(resp.status_code, code) and self._advance_key():
+                continue
+            raise LlmError("LLM 调用失败 HTTP %s: %s" % (resp.status_code, last_error))
+
+    @staticmethod
+    def _to_openai_shape(data: Dict[str, Any]) -> Dict[str, Any]:
+        """anthropic 响应 → OpenAI chat.completion 形状（基类解析器直接可用）。"""
+        content_text = ""
+        tool_calls = []
+        for block in data.get("content") or []:
+            btype = block.get("type")
+            if btype == "text":
+                content_text += block.get("text") or ""
+            elif btype == "tool_use":
+                tool_calls.append({
+                    "id": block.get("id") or "",
+                    "type": "function",
+                    "function": {
+                        "name": block.get("name") or "",
+                        "arguments": json.dumps(block.get("input") or {}, ensure_ascii=False),
+                    },
+                })
+        usage = data.get("usage") or {}
+        return {
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": content_text,
+                    **({"tool_calls": tool_calls} if tool_calls else {}),
+                },
+            }],
+            "usage": {
+                "prompt_tokens": usage.get("input_tokens"),
+                "completion_tokens": usage.get("output_tokens"),
+                "total_tokens": (usage.get("input_tokens") or 0) + (usage.get("output_tokens") or 0),
+            },
+        }
+
+    def stream_events(
+        self,
+        messages: List[Dict[str, Any]],
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+        scene: str = "unknown",
+        cancel_event: Optional[threading.Event] = None,
+    ) -> Iterator[Tuple[str, str]]:
+        """anthropic SSE 流式：text_delta → 正文，thinking_delta → 思考。
+
+        与 OpenAI 版同一条纪律：只在**尚未吐出任何增量**时才允许换 key
+        （key 数量有限，递归重试不会深）。
+        """
+        system, anthro_messages = self._split_system(messages)
+        body: Dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": anthro_messages,
+            "temperature": temperature,
+            "stream": True,
+        }
+        if system:
+            body["system"] = system
+        body.update(self._thinking_block(max_tokens))
+
+        started = time.time()
+        thinking_chunks = 0
+        content_chunks = 0
+        try:
+            with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:
+                with client.stream(
+                    "POST", self._api_url(), headers=self._headers(), json=body
+                ) as resp:
+                    if resp.status_code != 200:
+                        raw = resp.read().decode("utf-8", errors="replace")
+                        code, message = self._parse_error_offline(raw)
+                        if _is_key_retryable(resp.status_code, code) and self._advance_key():
+                            yield from self.stream_events(
+                                messages, temperature=temperature,
+                                max_tokens=max_tokens, scene=scene,
+                                cancel_event=cancel_event,
+                            )
+                            return
+                        raise LlmError(
+                            "流式调用失败 HTTP %s: %s" % (resp.status_code, message)
+                        )
+                    with _cancel_scope(cancel_event, resp):
+                        for line in resp.iter_lines():
+                            if not line:
+                                continue
+                            if line.startswith("data:"):
+                                line = line[5:].strip()
+                            if not line or line == "[DONE]":
+                                continue
+                            try:
+                                event = json.loads(line)
+                            except ValueError:
+                                continue
+                            etype = event.get("type")
+                            if etype == "content_block_delta":
+                                delta = event.get("delta") or {}
+                                dtype = delta.get("type")
+                                if dtype == "thinking_delta":
+                                    text = delta.get("thinking") or ""
+                                    if text:
+                                        thinking_chunks += 1
+                                        yield self.KIND_THINKING, text
+                                elif dtype == "text_delta":
+                                    text = delta.get("text") or ""
+                                    if text:
+                                        content_chunks += 1
+                                        yield self.KIND_CONTENT, text
+                            elif etype == "error":
+                                err = event.get("error") or {}
+                                raise LlmError(
+                                    "流式调用失败: %s" % (err.get("message") or str(event)[:200])
+                                )
+                            elif etype == "message_stop":
+                                break
+        except httpx.HTTPError as exc:
+            if cancel_event is not None and cancel_event.is_set():
+                logger.info("[LLM] 流式已被调用方取消 scene=%s model=%s", scene, self.model)
+                return
+            if thinking_chunks == 0 and content_chunks == 0:
+                if self._advance_key():
+                    yield from self.stream_events(
+                        messages, temperature=temperature,
+                        max_tokens=max_tokens, scene=scene,
+                        cancel_event=cancel_event,
+                    )
+                    return
+                raise LlmError("流式调用失败(anthropic): %s" % exc) from exc
+            raise LlmError("流式中断且已推送部分内容: %s" % exc) from exc
+        finally:
+            logger.info(
+                "[LLM-STREAM] scene=%s model=%s(anthropic) thinking=%d content=%d cost=%.2fs",
+                scene, self.model, thinking_chunks, content_chunks, time.time() - started,
+            )
+
+    @staticmethod
+    def _parse_error_offline(body: str) -> Tuple[str, str]:
+        try:
+            err = (json.loads(body).get("error") or {})
+            return err.get("type") or "", err.get("message") or body[:200]
+        except Exception:
+            return "", body[:200]
+
+
 #: 模块级单例，业务代码 `from app.services.llm_client import llm` 即可使用
 llm = LlmClient()
 
@@ -633,5 +1053,9 @@ _CLIENTS: Dict[str, LlmClient] = {
 
 
 def get_client_for_mode(mode: Optional[str]) -> LlmClient:
-    """按 chat_mode 取客户端；未知值回落 deep 单例（与 resolve_chat_mode 同口径）。"""
+    """按 chat_mode 取客户端；未知值回落 deep 单例（与 resolve_chat_mode 同口径）。
+
+    v5.0：全局配置兜底路径。用户已配置自有 API 时，业务层应改用
+    `user_ai_config_service.build_chat_client(db, user_id, mode)`。
+    """
     return _CLIENTS.get((mode or "").strip().lower(), llm)

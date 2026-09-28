@@ -374,6 +374,13 @@ fun NavGraph(
             )
         }
 
+        // v5.0 用户级 AI 服务配置（设置页「AI 服务配置」入口）
+        composable(Screen.AiConfig.route) {
+            com.couple.translator.core.ui.aiconfig.AiConfigScreen(
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
         composable(Screen.AiSessionList.route) {
             AiSessionListScreen(
                 onNavigateBack = { navController.popBackStack() },
@@ -1018,6 +1025,9 @@ fun NavGraph(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToProfile = {
                     navController.navigate(Screen.Profile.route)
+                },
+                onNavigateToAiConfig = {
+                    navController.navigate(Screen.AiConfig.route)
                 },
                 onLogout = {
                     navController.navigate(Screen.Login.route) {

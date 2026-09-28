@@ -336,16 +336,27 @@ def run_distill(
         return
 
     if llm_client is None:
-        from app.services.memory_service import distill_llm
+        # v5.0 D1/D2：按任务归属用户解析客户端；未配置 → 任务按 skipped 收尾
+        from app.services import user_ai_config_service as uaicfg
 
-        if not distill_llm.api_key:
+        _uid = task.requested_by_user_id or (ctx["user_msg"].user_id if ctx.get("user_msg") else None)
+        if not _uid:
             _finish(
                 db, task, "failed",
-                error_code="LLM_NOT_CONFIGURED",
-                error_message="AI_API_KEY missing",
+                error_code="AI_CONFIG_MISSING",
+                error_message="task has no owner user for ai config resolution",
             )
             return
-        llm_client = distill_llm
+        try:
+            llm_client = uaicfg.build_chat_client(db, int(_uid), enable_thinking=False)
+        except uaicfg.AiConfigMissingError:
+            _finish(
+                db, task, "completed_skipped",
+            )
+            logger.info(
+                "[MEM-PIPE] 用户未配置 AI，跳过蒸馏 task=%s user=%s", task.id, _uid
+            )
+            return
 
     from app.services.memory_service import build_distill_user_message
     from app.services.prompt_builder import MEMORY_DISTILL_PROMPT
