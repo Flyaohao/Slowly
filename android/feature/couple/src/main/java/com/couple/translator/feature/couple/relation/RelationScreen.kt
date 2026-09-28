@@ -3,6 +3,7 @@ package com.couple.translator.feature.couple.relation
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,18 +23,24 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.ViewSidebar
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -108,9 +115,14 @@ fun RelationScreen(
     }
 
     // 观察卡每次进页重拉：ack 之后 has_new=false，三态自然回落安静态。
+    // ackIfNew=true：只有真正打开本页才算「已读」（决策⑥）。
     LaunchedEffect(Unit) {
-        observationViewModel.load()
+        observationViewModel.load(ackIfNew = true)
     }
+
+    // 观察详情弹窗：点卡片展开全文（用户裁决「弹窗或二级页都行」→ 弹窗，
+    // 影响面最小：不加路由、不加接口）。V2 正文变长后再升二级页。
+    var showObservationDetail by remember { mutableStateOf(false) }
 
     // 刷新失败（页面已有内容、不整页报错）只弹一次性提示，不动已渲染的数据。
     LaunchedEffect(Unit) {
@@ -142,7 +154,14 @@ fun RelationScreen(
             // loaded=false（首拉失败）时整块不渲染：不把「读不到」装成冷启动。
             if (observationState.loaded) {
                 SectionTitle("军师的观察")
-                ObservationCard(state = observationState)
+                ObservationCard(
+                    state = observationState,
+                    onClick = if (observationState.content != null) {
+                        { showObservationDetail = true }
+                    } else {
+                        null // 冷启动引导语不可点
+                    },
+                )
                 Spacer(modifier = Modifier.height(AppSpacing.block))
             }
 
@@ -177,6 +196,14 @@ fun RelationScreen(
 
             Spacer(modifier = Modifier.height(AppSpacing.block))
         }
+    }
+
+    if (showObservationDetail && observationState.content != null) {
+        ObservationDetailDialog(
+            state = observationState,
+            onOpened = { observationViewModel.markCardViewed() },
+            onDismiss = { showObservationDetail = false },
+        )
     }
 }
 
@@ -287,16 +314,24 @@ private fun BackgroundSection(
  *
  * - 高亮 = 浅强调底 + 强调描边 + NEW 角标（isNewForCard 只在本次进页有效，
  *   ack 后保留——见 [ObservationViewModel] 注释）；
+ * - 点击卡片 → 详情弹窗展开全文（[onClick]，仅正文态可点）；
+ * - 正文卡内截断 4 行（服务端 ≤120 字约束下长文必然触达），弹窗里看全文；
  * - 引用素材按 F-3 拍板只展示来源文字（「引用：调解书《xx》」），不跳转；
- * - 正文 ≤120 字是服务端约束，这里整段渲染不截断；
  * - 颜色全部走 App* getter（深色模式自动切换），无 Canvas/remember lambda。
  */
 @Composable
-private fun ObservationCard(state: ObservationUiState) {
+private fun ObservationCard(
+    state: ObservationUiState,
+    onClick: (() -> Unit)? = null,
+) {
     AppCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = AppSpacing.screenH),
+            // 先 padding 后 clickable：触控区 = 可见卡片，不含两侧留白
+            .padding(horizontal = AppSpacing.screenH)
+            .then(
+                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+            ),
         containerColor = if (state.isNewForCard) AppAccentFaint else AppSurface,
         borderColor = if (state.isNewForCard) AppAccentLight else AppBorderLight,
     ) {
@@ -360,6 +395,8 @@ private fun ObservationCard(state: ObservationUiState) {
                 fontSize = 13.sp,
                 lineHeight = 22.sp,
                 color = AppTextPrimary,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
             )
             state.citationTitle?.let { title ->
                 Spacer(modifier = Modifier.height(8.dp))
@@ -371,6 +408,61 @@ private fun ObservationCard(state: ObservationUiState) {
             }
         }
     }
+}
+
+/**
+ * 观察详情弹窗：完整军师建议 = 观察正文全文 + 观察时间 + 引用来源。
+ *
+ * - [onOpened] 在弹窗组合时回调一次：清卡片高亮/NEW（本地态）——
+ *   用户点开看了全文，NEW 再挂到下次进页只剩干扰；
+ * - 服务端 ack 不在这里做（决策⑥：进页即已读），纯展示。
+ */
+@Composable
+private fun ObservationDetailDialog(
+    state: ObservationUiState,
+    onOpened: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // 调用方已守卫 content != null，这里再收窄一次给编译器；
+    // 本函数非 inline composable，顶层 return 不触发 group 错位问题。
+    val body = state.content ?: return
+    LaunchedEffect(Unit) { onOpened() }
+    val timeText = state.observedAt?.let { observationRelativeTime(it) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("军师的观察") },
+        text = {
+            Column {
+                if (timeText != null) {
+                    Text(
+                        text = timeText,
+                        fontSize = 11.sp,
+                        color = AppTextTertiary,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                Text(
+                    text = body,
+                    fontSize = 14.sp,
+                    lineHeight = 24.sp,
+                    color = AppTextPrimary,
+                )
+                state.citationTitle?.let { title ->
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "引用：调解书《$title》",
+                        fontSize = 11.sp,
+                        color = AppTextTertiary,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("知道了", color = AppAccent)
+            }
+        },
+    )
 }
 
 /** 服务端时间 → 相对时间（「2 小时前」「昨天 21:04」）。解析失败返回 null，不显示。 */

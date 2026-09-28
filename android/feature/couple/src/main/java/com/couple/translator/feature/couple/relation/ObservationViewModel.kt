@@ -51,10 +51,14 @@ class ObservationViewModel @Inject constructor(
     val uiState: StateFlow<ObservationUiState> = _uiState.asStateFlow()
 
     /**
-     * 拉取一次观察。幂等：RelationScreen 每次进入组合都会调（返回本页
-     * 刷新），服务端 has_new=false 时三态自然回落到安静态。
+     * 拉取一次观察。幂等：每次进页/回前台都会调。
+     *
+     * [ackIfNew] 只有**用户真正打开关系页**时才传 true（RelationScreen）：
+     * ack 意味着「用户看到了」，壳层（CoupleShell）为亮角标做的后台拉取
+     * 绝不能 ack——否则用户停在军师 tab 时新观察就被静默已读，角标闪一下
+     * 就没了，「push」语义整个失效。
      */
-    fun load() {
+    fun load(ackIfNew: Boolean = false) {
         viewModelScope.launch {
             repository.getObservation().onSuccess { data ->
                 if (data == null) return@onSuccess
@@ -66,7 +70,7 @@ class ObservationViewModel @Inject constructor(
                     isNewForCard = data.has_new,
                     isNewForBadge = data.has_new,
                 )
-                if (data.has_new && data.signature != null) {
+                if (ackIfNew && data.has_new && data.signature != null) {
                     repository.ack(data.signature).onSuccess {
                         _uiState.update { it.copy(isNewForBadge = false) }
                     }
@@ -75,5 +79,16 @@ class ObservationViewModel @Inject constructor(
                 // 观察卡独立降级：维持现状，不整页报错
             }
         }
+    }
+
+    /**
+     * 用户点开观察详情弹窗 → 卡片高亮/NEW 立即回落（纯本地态，不发请求）。
+     *
+     * 服务端 ack 已在进页时完成（决策⑥），这里只收掉「本次进页」的高亮：
+     * 用户既然点开看了全文，NEW 再挂到下次进页就只剩干扰（用户裁决：
+     * 「点击以后对应的新消息通知也会消失」）。
+     */
+    fun markCardViewed() {
+        _uiState.update { it.copy(isNewForCard = false) }
     }
 }
