@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.couple.translator.feature.couple.data.model.MemoryDto
 import com.couple.translator.feature.couple.data.repository.MemoryRepository
+import com.couple.translator.core.data.repository.UiNoticeStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +28,9 @@ data class MemoryUiState(
     val daysFilter: Int? = null,
     /** 重要度：null = 全部，2 = 只看标星 */
     val importanceFilter: Int? = null,
+    // ---- 顶部提示条「不再显示」（跨启动记住；默认 true=先不显示，等 store 确认未关再亮，
+    //      避免「用户已关但每次进来还闪一下」）----
+    val bannerDismissed: Boolean = true,
 )
 
 sealed class MemoryUiEvent {
@@ -34,9 +38,13 @@ sealed class MemoryUiEvent {
     data object DeleteSuccess : MemoryUiEvent()
 }
 
+/** 记忆页顶部提示条的稳定 id（UiNoticeStore 持久化用） */
+private const val MEMORY_BANNER_ID = "memory_privacy_notice"
+
 @HiltViewModel
 class MemoryViewModel @Inject constructor(
     private val memoryRepository: MemoryRepository,
+    private val uiNoticeStore: UiNoticeStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MemoryUiState())
@@ -47,6 +55,20 @@ class MemoryViewModel @Inject constructor(
 
     init {
         loadMemories()
+        // 顶部提示条关闭状态（跨启动记住）
+        viewModelScope.launch {
+            uiNoticeStore.dismissed(MEMORY_BANNER_ID).collect { dismissed ->
+                _uiState.update { it.copy(bannerDismissed = dismissed) }
+            }
+        }
+    }
+
+    /** 用户点提示条 ×：立即收起并持久化，之后不再出现 */
+    fun dismissBanner() {
+        _uiState.update { it.copy(bannerDismissed = true) }
+        viewModelScope.launch {
+            uiNoticeStore.setDismissed(MEMORY_BANNER_ID, true)
+        }
     }
 
     fun refresh() = fetch(isRefresh = true)

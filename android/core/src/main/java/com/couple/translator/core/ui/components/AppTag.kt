@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -89,6 +92,9 @@ fun AppTag(
  * 取代各页「一段 bodySmall 灰字裸飘在页头/卡内」的写法 —— 说明文字没有容器，
  * 看起来就像忘了排版的占位。用 Banner 给它一个安静的底，页面立刻「完成」了。
  * 不承载可点击动作；需要动作时用 AppLinkRow。
+ *
+ * @param onDismiss 传非空时右侧出现 × 关闭按钮；是否记住关闭状态（跨启动）
+ *   由调用方决定（参考 UiNoticeStore），本组件只负责渲染与回调。
  */
 @Composable
 fun AppInfoBanner(
@@ -97,6 +103,7 @@ fun AppInfoBanner(
     tone: AppTagTone = AppTagTone.Neutral,
     icon: ImageVector? = null,
     title: String? = null,
+    onDismiss: (() -> Unit)? = null,
 ) {
     val (container, content) = tone.resolve()
     val textColor = if (tone == AppTagTone.Neutral) AppTextSecondary else content
@@ -104,7 +111,7 @@ fun AppInfoBanner(
         modifier = modifier
             .clip(RoundedCornerShape(AppRadius.md))
             .background(container)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(start = 12.dp, end = if (onDismiss != null) 4.dp else 12.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
         if (icon != null) {
@@ -116,7 +123,9 @@ fun AppInfoBanner(
             )
             Spacer(modifier = Modifier.size(8.dp))
         }
-        androidx.compose.foundation.layout.Column {
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier.weight(1f),
+        ) {
             if (title != null) {
                 Text(
                     text = title,
@@ -131,6 +140,19 @@ fun AppInfoBanner(
                 style = MaterialTheme.typography.bodySmall,
                 color = textColor,
             )
+        }
+        if (onDismiss != null) {
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(24.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = "关闭提示",
+                    tint = content,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
         }
     }
 }

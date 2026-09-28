@@ -19,5 +19,7 @@ object Constants {
     const val USAGE_HINT_SESSION_KEY = "usage_hint_session_id"
     /** 上次成功获取的模式 couple/unbinding/single——情侣状态刷新失败时的本地兜底 */
     const val LAST_MODE_KEY = "last_app_mode"
+    /** 页面级提示条「不再显示」开关的 key 前缀，实际 key = 前缀 + 提示条 id */
+    const val UI_NOTICE_DISMISSED_PREFIX = "ui_notice_dismissed_"
     const val PASSWORD_MIN_LENGTH = 8
 }
