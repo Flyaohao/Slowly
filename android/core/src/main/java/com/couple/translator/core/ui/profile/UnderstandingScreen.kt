@@ -1,6 +1,7 @@
 package com.couple.translator.core.ui.profile
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +26,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -406,6 +410,10 @@ private fun DimensionScoreRow(dimension: ProfileDto.DimensionScoreResponse) {
 /**
  * 一个人的性格辅助两栏：MBTI 一栏、星盘一栏（2026-09-28 用户反馈，不再挤成一坨）。
  *
+ * 2026-09-28 二次反馈：一句话形容不了一个人的性格，且 AppListItem 副行只有
+ * 单行省略号——改为「抽屉式」：标题行点击展开/收起，完整解读自绘 Text，
+ * 不限行数；默认展开（信息要全）。
+ *
  * 数据全部由服务端算好下发；缺哪段就显示对应引导，不占位、不编数据——
  * 与后端 astrology_service「缺失如实为 null」的口径一致。
  * [onFillProfile] 仅自己有（跳资料页补充）；伴侣的资料只能本人改，传 null。
@@ -429,32 +437,71 @@ private fun PersonalityRows(
             onClick = onFillProfile,
         )
     } else {
-        val mbtiTitle = entry.mbti?.let { code ->
-            buildString {
+        if (entry.mbti != null) {
+            val mbtiTitle = buildString {
                 append(label)
                 append("MBTI：")
-                append(code)
+                append(entry.mbti)
                 entry.mbtiName?.let {
                     append(" · ")
                     append(it)
                 }
             }
-        } ?: "${label}MBTI"
-        AppListItem(
-            title = mbtiTitle,
-            subtitle = entry.mbtiDescription
-                ?: if (entry.mbti == null) "还没填 MBTI，可在个人资料页补充" else null,
-        )
+            ExpandablePersonalityRow(
+                title = mbtiTitle,
+                detail = entry.mbtiDescription ?: "暂无更多解读",
+            )
+        } else {
+            AppListItem(
+                title = "${label}MBTI",
+                subtitle = "还没填 MBTI，可在个人资料页补充",
+            )
+        }
 
         AppListItemDivider()
-        val zodiacLine = buildString {
+        val signSummary = buildString {
             entry.zodiac?.let { append("太阳 ${it}座") }
             entry.moonSign?.let { if (isNotEmpty()) append(" · "); append("月亮 ${it}座") }
             entry.risingSign?.let { if (isNotEmpty()) append(" · "); append("上升 ${it}座") }
         }
-        AppListItem(
+        val zodiacDetail = buildString {
+            append(signSummary)
+            entry.zodiacInterpretation?.takeIf { it.isNotBlank() }?.let {
+                append("\n")
+                append(it)
+            }
+        }
+        ExpandablePersonalityRow(
             title = "${label}星盘",
-            subtitle = zodiacLine.ifBlank { "填了生日（含出生时辰更准）后自动推算" },
+            detail = zodiacDetail.ifBlank { "填了生日（含出生时辰更准）后自动推算" },
+        )
+    }
+}
+
+/**
+ * 抽屉式信息行：标题行 + 可展开的完整解读。
+ *
+ * 刻意不走 AppListItem.subtitle——它是 maxLines=1 + Ellipsis，长解读必然被
+ * 截断（用户反馈的原问题）。完整文本放在展开区自绘，不限行数。
+ * 默认展开：用户明确要求「信息一定要全」，折叠只是收起手段，不是隐藏手段。
+ */
+@Composable
+private fun ExpandablePersonalityRow(
+    title: String,
+    detail: String,
+) {
+    var expanded by rememberSaveable { mutableStateOf(true) }
+    AppListItem(
+        title = title,
+        showChevron = true,
+        onClick = { expanded = !expanded },
+    )
+    AnimatedVisibility(visible = expanded) {
+        Text(
+            text = detail,
+            style = MaterialTheme.typography.bodySmall,
+            color = AppTextSecondary,
+            modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
         )
     }
 }

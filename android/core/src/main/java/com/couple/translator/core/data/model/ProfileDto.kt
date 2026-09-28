@@ -167,10 +167,13 @@ object ProfileDto {
     data class PersonalityEntryResponse(
         @Json(name = "mbti") val mbti: String? = null,
         @Json(name = "mbti_name") val mbtiName: String? = null,
+        /** MBTI 的多句行为化解读（2026-09-28 扩写，一/三句量级）。 */
         @Json(name = "mbti_description") val mbtiDescription: String? = null,
         @Json(name = "zodiac") val zodiac: String? = null,
         @Json(name = "moon_sign") val moonSign: String? = null,
         @Json(name = "rising_sign") val risingSign: String? = null,
+        /** 星座分角色解读（太阳/月亮/上升各一行），由服务端组装。 */
+        @Json(name = "zodiac_interpretation") val zodiacInterpretation: String? = null,
         @Json(name = "filled") val filled: Boolean = false,
     )
 

@@ -13,6 +13,7 @@ from typing import Optional
 
 from app.repositories import couple_repo, user_repo
 from app.services.astrology_service import (
+    SIGN_TRAITS,
     get_mbti_label,
     get_moon_sign,
     get_rising_sign,
@@ -25,6 +26,27 @@ from app.services.astrology_service import (
 REFERENCE_NOTE_DISPLAY = (
     "性格参考说明：军师的判断以问卷画像为主，这里的 MBTI 与星座/星盘仅作辅助参考。"
 )
+
+
+def _zodiac_interpretation(
+    zodiac: Optional[str],
+    moon_sign: Optional[str],
+    rising_sign: Optional[str],
+) -> Optional[str]:
+    """星座 → 分角色解读（太阳=做事风格 / 月亮=情绪需求 / 上升=第一印象）。
+
+    2026-09-28 用户反馈：只列三个星座名「不够全面」，每个角色补一句行为化
+    解读（astrology_service.SIGN_TRAITS）。缺哪个角色就不写哪行，不编数据。
+    """
+    lines = []
+    for role, key, sign in (
+        ("太阳", "sun", zodiac),
+        ("月亮", "moon", moon_sign),
+        ("上升", "rising", rising_sign),
+    ):
+        if sign and sign in SIGN_TRAITS:
+            lines.append(f"{role} {sign}座——{SIGN_TRAITS[sign][key]}。")
+    return "\n".join(lines) if lines else None
 
 
 def build_personality_entry(
@@ -41,13 +63,16 @@ def build_personality_entry(
     label = get_mbti_label(mbti)
     mbti_upper = mbti.strip().upper() if mbti and label else None
     zodiac = get_zodiac(birthday)
+    moon_sign = get_moon_sign(birthday) if zodiac else None
+    rising_sign = get_rising_sign(birthday, birth_hour, birth_place)
     return {
         "mbti": mbti_upper,
         "mbti_name": label[0] if label else None,
         "mbti_description": label[1] if label else None,
         "zodiac": zodiac,
-        "moon_sign": get_moon_sign(birthday) if zodiac else None,
-        "rising_sign": get_rising_sign(birthday, birth_hour, birth_place),
+        "moon_sign": moon_sign,
+        "rising_sign": rising_sign,
+        "zodiac_interpretation": _zodiac_interpretation(zodiac, moon_sign, rising_sign),
         "filled": bool(label or birthday is not None),
     }
 
