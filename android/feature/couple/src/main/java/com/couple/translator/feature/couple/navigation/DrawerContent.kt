@@ -20,13 +20,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.Archive
-import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.EventNote
 import androidx.compose.material.icons.outlined.Lightbulb
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.People
@@ -102,43 +100,11 @@ fun DrawerContent(
         // [W4.3 合并] 我的画像 + 了解自己 + 关系画像 三入口 → 单一页。
         // 2026-09-27 用户裁决：名称由「军师如何理解我们」改为「人格画像」。
         // 旧路由 ProfileResult / QuestionnaireIntro / CoupleProfile 全部保留（隐藏 ≠ 删除）。
-        DrawerNavItem(
-            icon = Icons.Outlined.Person,
-            label = "人格画像",
-            onClick = { onNavigateToRoute(Screen.Understanding.route) },
-                route = Screen.Understanding.route,
-                currentRoute = currentRoute,
-        )
-        // 整改 §8.8：正式「记忆与隐私」入口。
-        // 记忆此前只能从「人格画像 → 我要纠正军师」绕进去，用户找不到；
-        // 而契约把「AI 记忆必须可查看、可删除」定为隐私硬规则，入口就不该是暗门。
-        DrawerNavItem(
-            icon = Icons.Outlined.Lock,
-            label = "记忆与隐私",
-            onClick = { onNavigateToRoute(Screen.Memory.route) },
-                route = Screen.Memory.route,
-                currentRoute = currentRoute,
-        )
-        // [W4.3 合并] 了解自己入口并入上方「人格画像」
-        // DrawerNavItem(
-        //     icon = Icons.Outlined.Analytics,
-        //     label = "了解自己",
-        //     onClick = { onNavigateToRoute(Screen.QuestionnaireIntro.route) },
-        // )
-
-        // 以下功能仅情侣模式可用
+        // 2026-09-28 用户裁决：抽屉条目顺序调整为
+        // 共同调解室 → 人格画像 → 深度表达 → 纪念事件 → 愿望 → 观点 → 待办；
+        // 「记忆与隐私」移出抽屉（军师页顶部已有入口，不再重复）；
+        // 「军师设置」迁入设置页军师模块，更名「军师对话设置」。
         if (isCoupleMode) {
-            // 2026-09-27 关系页改版（用户裁决 ①A）：调解邀请 / 双视角 / 解绑确认
-            // 三类低频通知从关系页迁出，收敛为抽屉「待办」条目 + 红点角标；
-            // 无待办时条目仍显示、不显示角标（②A，入口稳定）。
-            DrawerNavItem(
-                icon = Icons.Outlined.FavoriteBorder,
-                label = "待办",
-                onClick = { onNavigateToRoute(Screen.TodoList.route) },
-                route = Screen.TodoList.route,
-                currentRoute = currentRoute,
-                badgeCount = pendingCount,
-            )
             // 2026-09-28 共同调解室（设计 §一）：抽屉入口（三处入口之一）
             DrawerNavItem(
                 icon = Icons.Outlined.Forum,
@@ -147,50 +113,16 @@ fun DrawerContent(
                 route = Screen.MediationRoomList.route,
                 currentRoute = currentRoute,
             )
-            // [W4.3 合并] 关系画像入口并入「人格画像」
-            // DrawerNavItem(
-            //     icon = Icons.Outlined.ViewSidebar,
-            //     label = "关系画像",
-            //     onClick = { onNavigateToRoute(Screen.CoupleProfile.route) },
-            // )
-            // [W1 隐藏] 纪念馆入口（收敛期冻结 10006，隐藏 ≠ 删除：路由与页面保留）
-            // DrawerNavItem(
-            //     icon = Icons.Outlined.Archive,
-            //     label = "纪念馆",
-            //     onClick = { onNavigateToRoute(Screen.Museum.route) },
-            // )
-            // 整改 §8.8：抽屉一级入口移除——纪念日改由「关系页 → 关系背景」进入，
-            // 并作为 AI 可引用的数据（军师聊天里「附上一个纪念日」仍在）。
-            // 「愿望与纪念日」这个命名同时作废：愿望清单已冻结 10006，不得再宣传。
-            // DrawerNavItem(
-            //     icon = Icons.Outlined.StarOutline,
-            //     label = "愿望与纪念日",
-            //     onClick = { onNavigateToRoute(Screen.AnniversaryList.route) },
-            // )
-            // [W1 隐藏] 双视角记录入口（机制保留，由军师推荐触发）
-            // DrawerNavItem(
-            //     icon = Icons.Outlined.FavoriteBorder,
-            //     label = "双视角记录",
-            //     onClick = { onNavigateToRoute(Screen.DualPerspectiveList.route) },
-            // )
-            // [W4.4] AI 形象入口保留，但指向页改造为「军师设置」（见 AdvisorSettingsScreen）
-            DrawerNavItem(
-                icon = Icons.Outlined.AutoAwesome,
-                label = "军师设置",
-                onClick = { onNavigateToRoute(Screen.AdvisorSettings.route) },
-                route = Screen.AdvisorSettings.route,
-                currentRoute = currentRoute,
-            )
-            // 2026-09-27 用户裁决：抽屉补齐关系内容入口。
-            // 观点 = 日记（同一份数据、同一批页面）。用户主动写下的看法比 AI 推断更可信，
-            // 所以它既是内容入口，也是画像里「价值取向」那一维的证据来源。
-            DrawerNavItem(
-                icon = Icons.Outlined.Lightbulb,
-                label = "观点",
-                onClick = { onNavigateToRoute(Screen.DiaryList.route) },
-                route = Screen.DiaryList.route,
-                currentRoute = currentRoute,
-            )
+        }
+        DrawerNavItem(
+            icon = Icons.Outlined.Person,
+            label = "人格画像",
+            onClick = { onNavigateToRoute(Screen.Understanding.route) },
+            route = Screen.Understanding.route,
+            currentRoute = currentRoute,
+        )
+        // 以下功能仅情侣模式可用
+        if (isCoupleMode) {
             DrawerNavItem(
                 icon = Icons.Outlined.MailOutline,
                 label = "深度表达",
@@ -213,6 +145,27 @@ fun DrawerContent(
                 onClick = { onNavigateToRoute(Screen.Wishlist.route) },
                 route = Screen.Wishlist.route,
                 currentRoute = currentRoute,
+            )
+            // 2026-09-27 用户裁决：抽屉补齐关系内容入口。
+            // 观点 = 日记（同一份数据、同一批页面）。用户主动写下的看法比 AI 推断更可信，
+            // 所以它既是内容入口，也是画像里「价值取向」那一维的证据来源。
+            DrawerNavItem(
+                icon = Icons.Outlined.Lightbulb,
+                label = "观点",
+                onClick = { onNavigateToRoute(Screen.DiaryList.route) },
+                route = Screen.DiaryList.route,
+                currentRoute = currentRoute,
+            )
+            // 2026-09-27 关系页改版（用户裁决 ①A）：调解邀请 / 双视角 / 解绑确认
+            // 三类低频通知从关系页迁出，收敛为抽屉「待办」条目 + 红点角标；
+            // 无待办时条目仍显示、不显示角标（②A，入口稳定）。
+            DrawerNavItem(
+                icon = Icons.Outlined.FavoriteBorder,
+                label = "待办",
+                onClick = { onNavigateToRoute(Screen.TodoList.route) },
+                route = Screen.TodoList.route,
+                currentRoute = currentRoute,
+                badgeCount = pendingCount,
             )
         }
 
@@ -260,9 +213,9 @@ fun DrawerContent(
                 currentRoute = currentRoute,
         )
 
-        // 整改 §8.8：抽屉底部的两个「设置」必须一眼分得清——
-        // 「军师设置」在上方功能区（军师怎么说话、怎么称呼、给不给看依据），
-        // 这里是账号与 App 自身（个人信息、主题、通知、关于、退出登录）。
+        // 整改 §8.8：抽屉底部这里是账号与 App 自身的设置
+        // （个人信息、主题、通知、关于、退出登录）。
+        // 「军师对话设置」已于 2026-09-28 迁入设置页的军师模块，抽屉不再单列。
         HorizontalDivider(color = AppBorderLight)
         Spacer(modifier = Modifier.height(8.dp))
         Text(

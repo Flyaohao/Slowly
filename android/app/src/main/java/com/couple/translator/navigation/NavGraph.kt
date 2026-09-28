@@ -367,7 +367,7 @@ fun NavGraph(
             )
         }
 
-        // [W4.4] 军师设置页（契约 §3.3）；抽屉「军师设置」入口指向此处
+        // [W4.4] 军师设置页（契约 §3.3）；2026-09-28 起入口在设置页军师模块「军师对话设置」
         composable(Screen.AdvisorSettings.route) {
             AdvisorSettingsScreen(
                 onNavigateBack = { navController.popBackStack() },
@@ -1028,6 +1028,9 @@ fun NavGraph(
                 },
                 onNavigateToAiConfig = {
                     navController.navigate(Screen.AiConfig.route)
+                },
+                onNavigateToAdvisorSettings = {
+                    navController.navigate(Screen.AdvisorSettings.route)
                 },
                 onLogout = {
                     navController.navigate(Screen.Login.route) {

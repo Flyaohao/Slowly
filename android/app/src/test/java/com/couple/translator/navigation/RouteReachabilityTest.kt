@@ -83,9 +83,13 @@ class RouteReachabilityTest {
             Screen.MediationResult.route to setOf("NavGraph.kt"),
             Screen.MediationHistory.route to setOf("RelationScreen.kt"),
             // §8.8 记忆与隐私 / 画像
-            Screen.Memory.route to setOf("CoupleShell.kt", "UnderstandingScreen.kt", "DrawerContent.kt"),
+            // 2026-09-28 用户裁决：「记忆与隐私」移出抽屉（军师页顶部已有入口），
+            // 剩余入口在 CoupleShell / 使用指南 / 人格画像页。
+            Screen.Memory.route to setOf("CoupleShell.kt", "GuideScreen.kt", "UnderstandingScreen.kt"),
             Screen.Understanding.route to setOf("DrawerContent.kt"),
-            Screen.AdvisorSettings.route to setOf("DrawerContent.kt"),
+            // 2026-09-28 用户裁决：原抽屉「军师设置」迁入设置页军师模块「军师对话设置」，
+            // 入口引用移到 NavGraph（SettingsScreen 的回调接线处）。
+            Screen.AdvisorSettings.route to setOf("NavGraph.kt"),
             // 2026-09-27 关系页改版：待办是调解邀请 / 双视角 / 解绑确认的唯一列表入口，
             // 入口只在抽屉——误删抽屉条目就等于用户永远到不了待办。
             Screen.TodoList.route to setOf("DrawerContent.kt"),

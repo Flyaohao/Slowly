@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Info
@@ -79,6 +80,8 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToAiConfig: () -> Unit = {},
+    // 军师对话设置（原抽屉「军师设置」，2026-09-28 迁入本页军师模块并更名）
+    onNavigateToAdvisorSettings: () -> Unit = {},
     onLogout: () -> Unit,
     isCoupleMode: Boolean = true,
     themeMode: ThemeMode = ThemeMode.DEFAULT,
@@ -212,6 +215,15 @@ fun SettingsScreen(
                                 showDistillConfirm = true
                             }
                         },
+                    )
+                    // 2026-09-28 用户裁决：原抽屉「军师设置」迁入此处，放在
+                    // 军师记忆沉淀开关下面，更名为「军师对话设置」。
+                    HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsItem(
+                        icon = Icons.Outlined.AutoAwesome,
+                        title = "军师对话设置",
+                        subtitle = "军师怎么称呼你、回答的语气与方式",
+                        onClick = onNavigateToAdvisorSettings,
                     )
                 }
 
