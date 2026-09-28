@@ -100,9 +100,12 @@ fun CoupleShell(
     // 2026-09-28 军师主动观察（F-5 拍板：关系 tab 角标 = 新观察 + 待办合计）。
     // Activity 作用域：与 RelationScreen 的观察卡共用同一实例（见
     // ObservationViewModel 类注释），ack 后角标经 StateFlow 同步清零。
+    // 壳层必须自己拉一次（init + ON_RESUME）：用户停在军师 tab 时新观察
+    // 也要亮角标——但只读不 ack，「已读」只能发生在用户打开关系页时。
     val observationViewModel: ObservationViewModel =
         hiltViewModel(LocalContext.current as ComponentActivity)
     val observationState by observationViewModel.uiState.collectAsState()
+    LaunchedEffect(Unit) { observationViewModel.load() }
     val relationBadgeCount = todoState.pendingCount +
         if (observationState.isNewForBadge) 1 else 0
 
@@ -163,6 +166,7 @@ fun CoupleShell(
             if (event == Lifecycle.Event.ON_RESUME) {
                 scope.launch { coupleStateManager?.refresh() }
                 todoViewModel.load()
+                observationViewModel.load()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
