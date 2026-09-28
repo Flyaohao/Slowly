@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 /** 轮询间隔（D-REALTIME MVP：对方端 2s 短轮询；双端 SSE 归 P1） */
@@ -62,6 +64,13 @@ class MediationRoomChatViewModel @Inject constructor(
     private var pollJob: Job? = null
     private var streamJob: Job? = null
 
+    /**
+     * 轮询互斥：2s 轮询循环与事件驱动 pollNow（发消息/SSE done/投票后）会并发，
+     * 若不串行化，两次请求拿到同一个 afterId → 同一条消息 append 两次 →
+     * LazyColumn key 冲突（05:12 真机 FATAL：Key "5" was already used 的根因）。
+     */
+    private val pollMutex = Mutex()
+
     fun bind(roomId: Long) {
         if (_uiState.value.roomId == roomId && pollJob != null) return
         _uiState.update { it.copy(roomId = roomId) }
@@ -90,42 +99,46 @@ class MediationRoomChatViewModel @Inject constructor(
         val roomId = _uiState.value.roomId
         if (roomId == 0L) return
         viewModelScope.launch {
-            val afterId = _uiState.value.messages.lastOrNull()?.id ?: 0L
-            repository.getMessages(roomId, afterId).fold(
-                onSuccess = { data ->
-                    if (data == null) return@launch
-                    _uiState.update { cur ->
-                        val myRole = data.state?.myRole ?: cur.state?.myRole
-                        val arrived = data.messages
-                            .filter { myRole == null || it.senderType == myRole }
-                            .map { it.content }
-                            .toSet()
-                        val now = System.currentTimeMillis()
-                        // 对账：同内容已从服务端回来 → 移除乐观条目；
-                        // 超过 15s 仍未对账的也丢弃（防内容被服务端改写后永久滞留）
-                        val remaining = cur.pendingSends.filter { p ->
-                            p.content !in arrived && now - p.createdAtMs < 15_000L
+            pollMutex.withLock {
+                val afterId = _uiState.value.messages.lastOrNull()?.id ?: 0L
+                repository.getMessages(roomId, afterId).fold(
+                    onSuccess = { data ->
+                        if (data == null) return@withLock
+                        _uiState.update { cur ->
+                            val myRole = data.state?.myRole ?: cur.state?.myRole
+                            val arrived = data.messages
+                                .filter { myRole == null || it.senderType == myRole }
+                                .map { it.content }
+                                .toSet()
+                            val now = System.currentTimeMillis()
+                            // 对账：同内容已从服务端回来 → 移除乐观条目；
+                            // 超过 15s 仍未对账的也丢弃（防内容被服务端改写后永久滞留）
+                            val remaining = cur.pendingSends.filter { p ->
+                                p.content !in arrived && now - p.createdAtMs < 15_000L
+                            }
+                            // distinctBy 兜底：即使上游再出现重复 id，也绝不让
+                            // LazyColumn 因 key 冲突整页崩溃（05:12 FATAL 同源）
+                            val merged = if (data.messages.isEmpty()) cur.messages
+                            else (cur.messages + data.messages).distinctBy { it.id }
+                            cur.copy(
+                                loading = false,
+                                messages = merged,
+                                pendingSends = remaining,
+                                state = data.state ?: cur.state,
+                                advisorInputPending = data.state?.advisorGenerating == true &&
+                                    !cur.advisorStreaming,
+                            )
                         }
-                        val merged = if (data.messages.isEmpty()) cur.messages
-                        else cur.messages + data.messages
-                        cur.copy(
-                            loading = false,
-                            messages = merged,
-                            pendingSends = remaining,
-                            state = data.state ?: cur.state,
-                            advisorInputPending = data.state?.advisorGenerating == true &&
-                                !cur.advisorStreaming,
-                        )
-                    }
-                },
-                onFailure = { e ->
-                    if (!silent) {
-                        _uiState.update { it.copy(loading = false, error = e.message ?: "加载失败") }
-                    } else {
-                        _uiState.update { it.copy(loading = false) }
-                    }
-                },
-            )
+                    },
+                    onFailure = { e ->
+                        if (!silent) {
+                            _uiState.update { it.copy(loading = false, error = e.message ?: "加载失败") }
+                        } else {
+                            _uiState.update { it.copy(loading = false) }
+                        }
+                    },
+                )
+            }
         }
     }
 
