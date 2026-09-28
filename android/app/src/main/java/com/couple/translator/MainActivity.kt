@@ -6,13 +6,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.couple.translator.core.data.repository.GuideStore
+import com.couple.translator.core.data.repository.HapticsStore
 import com.couple.translator.core.data.repository.NotificationPermissionStore
 import com.couple.translator.core.data.repository.ThemeStore
 import com.couple.translator.core.data.repository.TokenStore
 import com.couple.translator.core.notification.AppNotifications
+import com.couple.translator.core.ui.components.LocalHapticsEnabled
 import com.couple.translator.core.ui.theme.CoupleTranslatorTheme
 import com.couple.translator.core.ui.theme.ThemeMode
 import com.couple.translator.core.ui.theme.resolveDarkTheme
@@ -44,6 +47,10 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var notificationPermissionStore: NotificationPermissionStore
 
+    // 全局 UI/UX 方案 G2/D5：触感总开关（设置页开关行读写的就是它）
+    @Inject
+    lateinit var hapticsStore: HapticsStore
+
     /**
      * 点击通知栏带来的目标路由。Activity 只有这一个，通知点开时走 onNewIntent
      * （Intent 里带了 SINGLE_TOP），所以用 StateFlow 承接而不是只在 onCreate 读一次。
@@ -61,17 +68,22 @@ class MainActivity : ComponentActivity() {
             val themeMode by themeStore.themeMode.collectAsState(initial = ThemeMode.DEFAULT)
             val systemInDarkTheme = isSystemInDarkTheme()
             val pendingRoute by deepLinkRoute.collectAsState()
+            // 触感总开关：冷流首帧取 true（与 store 默认值一致），读到位后跟随
+            val hapticsEnabled by hapticsStore.enabled.collectAsState(initial = true)
             CoupleTranslatorTheme(darkTheme = themeMode.resolveDarkTheme(systemInDarkTheme)) {
-                NavGraph(
-                    tokenStore = tokenStore,
-                    coupleStateManager = coupleStateManager,
-                    realtimeSocketManager = realtimeSocketManager,
-                    guideStore = guideStore,
-                    themeStore = themeStore,
-                    notificationPermissionStore = notificationPermissionStore,
-                    deepLinkRoute = pendingRoute,
-                    onDeepLinkConsumed = { deepLinkRoute.value = null },
-                )
+                CompositionLocalProvider(LocalHapticsEnabled provides hapticsEnabled) {
+                    NavGraph(
+                        tokenStore = tokenStore,
+                        coupleStateManager = coupleStateManager,
+                        realtimeSocketManager = realtimeSocketManager,
+                        guideStore = guideStore,
+                        themeStore = themeStore,
+                        notificationPermissionStore = notificationPermissionStore,
+                        hapticsStore = hapticsStore,
+                        deepLinkRoute = pendingRoute,
+                        onDeepLinkConsumed = { deepLinkRoute.value = null },
+                    )
+                }
             }
         }
     }

@@ -45,6 +45,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -88,6 +89,7 @@ import com.couple.translator.core.ui.components.AppTopBar
 import com.couple.translator.core.ui.components.AppTopBarAction
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.TopBarIdentity
+import com.couple.translator.core.ui.components.rememberAppHaptics
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentFaint
 import com.couple.translator.core.ui.theme.AppAccentLight
@@ -142,6 +144,14 @@ fun NewAiChatScreen(
     // 场景 chip 文案：口语化 chipLabel，未知 key 回退正式 label
     val currentSceneLabel = scenes.firstOrNull { it.key == uiState.sceneKey }?.chipLabel
         ?: AiSceneCatalog.labelOf(uiState.sceneKey)
+
+    // A1（全局 UI/UX 方案）：军师流式结束来一次轻震——「答完了」指尖可感知
+    val haptics = rememberAppHaptics()
+    var wasBusyForHaptic by remember { mutableStateOf(false) }
+    LaunchedEffect(uiState.isBusy) {
+        if (wasBusyForHaptic && !uiState.isBusy) haptics.tick()
+        wasBusyForHaptic = uiState.isBusy
+    }
 
     LaunchedEffect(uiState.messages.size, uiState.streamingContent, uiState.thinkingContent) {
         val extra = if (uiState.streamingContent.isNotEmpty() || uiState.thinkingContent.isNotEmpty()) 1 else 0
@@ -995,6 +1005,24 @@ private fun AiInputBar(
         // P-C4：场景 chip（原空会话顶部那排下移）与「更多」（原「＋」）同排——
         // 场景/档位/引用来源对话中随时可重选；三枚 chip 左对齐，右侧留白。
         val option = chatModeOptionOf(chatMode)
+        // A3：沉浸模式一次性引导气泡——首次隐藏底栏时提示去哪恢复，点过一次不再出现
+        var immersiveGuideShown by rememberSaveable { mutableStateOf(false) }
+        if (!tabBarVisible && !immersiveGuideShown) {
+            Surface(
+                color = AppAccent,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .align(Alignment.CenterHorizontally),
+            ) {
+                Text(
+                    text = "已进入沉浸模式，点下方「显示Tab栏」恢复底栏",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AppSurface,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                )
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1014,7 +1042,10 @@ private fun AiInputBar(
             // 沉浸模式开关：隐藏底部 Tab 栏给军师腾空间；开关常驻，随时显示回来
             InputOptionChip(
                 label = if (tabBarVisible) "隐藏Tab栏" else "显示Tab栏",
-                onClick = onToggleTabBar,
+                onClick = {
+                    immersiveGuideShown = true
+                    onToggleTabBar()
+                },
                 showChevron = false,
             )
         }

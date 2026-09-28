@@ -57,6 +57,8 @@ fun ChatInputBar(
     onPrefixClick: (() -> Unit)? = null,
 ) {
     val canSend = enabled && !isLoading && value.isNotBlank()
+    // A1：军师页与调解室共用的发送触感（D5：只在关键动作触发）
+    val haptics = rememberAppHaptics()
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -119,7 +121,12 @@ fun ChatInputBar(
             label = "sendButtonColor",
         )
         IconButton(
-            onClick = onSend,
+            onClick = {
+                // A1（全局 UI/UX 方案）：发送=关键动作，confirm 档触感；
+                // 总开关在 rememberAppHaptics 内统一短路
+                haptics.confirm()
+                onSend()
+            },
             enabled = canSend,
             modifier = Modifier
                 .size(40.dp)

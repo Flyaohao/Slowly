@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -61,6 +62,7 @@ import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.SectionTitle
 import com.couple.translator.core.ui.components.pressFeedback
+import com.couple.translator.core.ui.components.rememberAppHaptics
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
@@ -86,9 +88,14 @@ fun SettingsScreen(
     distillSwitch: DistillSwitchUiState = DistillSwitchUiState(),
     onDistillToggle: (Boolean) -> Unit = {},
     onDistillErrorShown: () -> Unit = {},
+    // 触感反馈总开关（全局 UI/UX 方案 G2/D5；本地偏好，与外观模式同一模式）
+    hapticsEnabled: Boolean = true,
+    onHapticsChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    // 本页开关切换的 tick 触感（D5：开关属于 tick 档）
+    val haptics = rememberAppHaptics()
     var showAbout by remember { mutableStateOf(false) }
     // 开→关 的二次确认弹窗（决策点①：双人资产单方关闭影响对方，防误触）
     var showDistillConfirm by remember { mutableStateOf(false) }
@@ -190,6 +197,7 @@ fun SettingsScreen(
                         checked = distillSwitch.distillEnabled,
                         enabled = !distillSwitch.distillLoading,
                         onCheckedChange = { want ->
+                            haptics.tick()
                             if (want) {
                                 onDistillToggle(true)
                             } else {
@@ -251,7 +259,10 @@ fun SettingsScreen(
                             subtitle = emailNotifySubtitle(notificationPref),
                             checked = notificationPref.emailNotifyEnabled,
                             enabled = notificationPref.emailReady && !notificationPref.isLoading,
-                            onCheckedChange = onEmailNotifyChange,
+                            onCheckedChange = { want ->
+                                haptics.tick()
+                                onEmailNotifyChange(want)
+                            },
                         )
                         HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(horizontal = 16.dp))
                         SettingsItem(
@@ -292,6 +303,20 @@ fun SettingsScreen(
                 contentPadding = PaddingValues(0.dp),
             ) {
                 Column {
+                    // 触感反馈总开关（G2/D5）：本地偏好，单身/情侣模式都显示
+                    SwitchItem(
+                        icon = Icons.Outlined.Vibration,
+                        title = "触感反馈",
+                        subtitle = if (hapticsEnabled) "发送、确认等关键操作会有振动" else "已关闭",
+                        checked = hapticsEnabled,
+                        enabled = true,
+                        onCheckedChange = { want ->
+                            // 关掉自己时的最后一下震不震无所谓——直接切
+                            if (want) haptics.tick()
+                            onHapticsChange(want)
+                        },
+                    )
+                    HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsItem(
                         icon = Icons.Outlined.Info,
                         title = "关于应用",

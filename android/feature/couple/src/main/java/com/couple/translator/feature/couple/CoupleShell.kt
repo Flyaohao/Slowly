@@ -6,11 +6,14 @@ import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.DrawerValue
@@ -190,6 +193,8 @@ fun CoupleShell(
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = AppBackground) {
                 DrawerContent(
+                    // R 系列：抽屉当前项高亮（route 对得上才亮，navigate 后打开抽屉可见）
+                    currentRoute = currentRoute,
                     onNavigateToRoute = { route ->
                         closeDrawer()
                         // 深度表达等全部路由统一走根导航：深度表达二级页（Screen.Mailbox）
@@ -215,7 +220,18 @@ fun CoupleShell(
             containerColor = AppBackground,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
-                if (!isTabBarHidden) {
+                // A3（全局 UI/UX 方案）：沉浸模式底栏滑出/滑入，不再瞬间消失/出现
+                AnimatedVisibility(
+                    visible = !isTabBarHidden,
+                    enter = slideInVertically(
+                        animationSpec = tween(durationMillis = AppMotion.slow, easing = AppMotion.EaseOut),
+                        initialOffsetY = { it },
+                    ) + fadeIn(animationSpec = tween(AppMotion.normal)),
+                    exit = slideOutVertically(
+                        animationSpec = tween(durationMillis = AppMotion.slow, easing = AppMotion.EaseOut),
+                        targetOffsetY = { it },
+                    ) + fadeOut(animationSpec = tween(AppMotion.fast)),
+                ) {
                     BottomTabBar(
                         currentRoute = currentRoute,
                         tabs = tabs,

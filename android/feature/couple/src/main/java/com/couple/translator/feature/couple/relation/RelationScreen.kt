@@ -2,6 +2,11 @@ package com.couple.translator.feature.couple.relation
 
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -37,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -54,12 +60,14 @@ import com.couple.translator.core.ui.components.AppPrimaryButton
 import com.couple.translator.core.ui.components.AppTopBar
 import com.couple.translator.core.ui.components.SectionTitle
 import com.couple.translator.core.ui.components.TopBarIdentity
+import com.couple.translator.core.ui.components.pressFeedback
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentFaint
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppMotion
 import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
@@ -143,8 +151,18 @@ fun RelationScreen(
         ) {
             // 2026-09-27 改版：页头第一眼 = 「在一起 N 天」（③A 页头大字 + 绑定日期副行）。
             // loveDays 还没读到时降级为「我们的关系」，不闪空标题。
+            // R 系列：数字用 animateIntAsState 从 0 滚动入场（读到位才开始滚，不闪跳）。
+            val targetDays = uiState.loveDays
+            val animatedDays by animateIntAsState(
+                targetValue = targetDays ?: 0,
+                animationSpec = tween(
+                    durationMillis = AppMotion.slow,
+                    easing = AppMotion.EaseOut,
+                ),
+                label = "loveDays",
+            )
             AppPageHeader(
-                title = uiState.loveDays?.let { "在一起 $it 天" } ?: "我们的关系",
+                title = targetDays?.let { "在一起 $animatedDays 天" } ?: "我们的关系",
                 subtitle = uiState.bindTime?.take(10)?.let { "绑定于 $it" },
             )
 
@@ -327,10 +345,15 @@ private fun ObservationCard(
     AppCard(
         modifier = Modifier
             .fillMaxWidth()
-            // 先 padding 后 clickable：触控区 = 可见卡片，不含两侧留白
-            .padding(horizontal = AppSpacing.screenH)
+            // R 系列：pressFeedback 必须在链最前；先 padding 后点击区=可见卡片
             .then(
-                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+                if (onClick != null) {
+                    Modifier
+                        .padding(horizontal = AppSpacing.screenH)
+                        .pressFeedback(onClick = onClick)
+                } else {
+                    Modifier.padding(horizontal = AppSpacing.screenH)
+                }
             ),
         containerColor = if (state.isNewForCard) AppAccentFaint else AppSurface,
         borderColor = if (state.isNewForCard) AppAccentLight else AppBorderLight,
@@ -373,11 +396,25 @@ private fun ObservationCard(
                 }
                 if (state.isNewForCard) {
                     Spacer(modifier = Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier.background(
-                            AppErrorRed,
-                            RoundedCornerShape(50),
+                    // R 系列：NEW 角标缩放入场（0→1 spring），出现不是「啪一下」
+                    val badgeScale by animateFloatAsState(
+                        targetValue = 1f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium,
                         ),
+                        label = "newBadgeScale",
+                    )
+                    Box(
+                        modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = badgeScale
+                                scaleY = badgeScale
+                            }
+                            .background(
+                                AppErrorRed,
+                                RoundedCornerShape(50),
+                            ),
                     ) {
                         Text(
                             text = "NEW",

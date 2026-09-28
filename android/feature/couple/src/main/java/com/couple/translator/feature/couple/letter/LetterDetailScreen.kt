@@ -1,6 +1,8 @@
 package com.couple.translator.feature.couple.letter
 
 import android.content.Intent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -46,6 +49,7 @@ import com.couple.translator.core.ui.components.SkeletonDetailPage
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppMotion
 import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
@@ -164,12 +168,26 @@ fun LetterDetailScreen(
             return@Scaffold
         }
 
+        // 开信入场：骨架屏消失后内容一次性淡入上移（AppMotion 令牌）
+        val entrance = remember { Animatable(0f) }
+        LaunchedEffect(Unit) {
+            entrance.animateTo(
+                1f,
+                tween(durationMillis = AppMotion.normal, easing = AppMotion.EaseOut),
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = AppSpacing.screenH)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                // R 系列·信箱：开信「信封开启」感——内容淡入 + 轻微上移一次
+                .graphicsLayer {
+                    alpha = entrance.value
+                    translationY = (1f - entrance.value) * 24.dp.toPx()
+                },
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 

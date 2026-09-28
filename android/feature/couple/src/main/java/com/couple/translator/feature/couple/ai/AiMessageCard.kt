@@ -1,6 +1,10 @@
 package com.couple.translator.feature.couple.ai
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,7 +23,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -34,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,6 +49,7 @@ import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
+import com.couple.translator.core.ui.theme.AppMotion
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -352,8 +357,27 @@ private fun CollapsibleSection(
     content: @Composable () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(defaultExpanded) }
+    // A2（全局 UI/UX 方案）：展开箭头单图标旋转（比两图标切换顺滑），spring 统一阻尼
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = spring(
+            dampingRatio = AppMotion.SpringDamping,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "sectionArrow",
+    )
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            // 展开高度变化走 animateContentSize，内容长也不会「啪一下」顶开
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = AppMotion.SpringDamping,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+            ),
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -369,10 +393,12 @@ private fun CollapsibleSection(
                 fontWeight = FontWeight.Bold,
             )
             Icon(
-                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                imageVector = Icons.Default.KeyboardArrowDown,
                 contentDescription = if (expanded) "收起" else "展开",
                 tint = AppTextTertiary,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier
+                    .size(20.dp)
+                    .graphicsLayer { rotationZ = arrowRotation },
             )
         }
 

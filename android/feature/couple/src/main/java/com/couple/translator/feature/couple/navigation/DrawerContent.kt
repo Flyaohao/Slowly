@@ -46,10 +46,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.couple.translator.core.navigation.Screen
+import com.couple.translator.core.ui.components.pressFeedback
 import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentFaint
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
@@ -69,6 +73,8 @@ fun DrawerContent(
     coupleStateManager: CoupleStateManager? = null,
     /** 待办数（调解邀请 + 未提交双视角 + 解绑确认），> 0 时「待办」条目显示红点角标。 */
     pendingCount: Int = 0,
+    /** 当前壳内 tab 路由：对得上的条目高亮（R 系列抽屉项「当前项高亮态」）。 */
+    currentRoute: String? = null,
 ) {
     val defaultState = androidx.compose.runtime.remember { CoupleState() }
     val coupleState = coupleStateManager?.state?.collectAsState()?.value ?: defaultState
@@ -100,6 +106,8 @@ fun DrawerContent(
             icon = Icons.Outlined.Person,
             label = "人格画像",
             onClick = { onNavigateToRoute(Screen.Understanding.route) },
+                route = Screen.Understanding.route,
+                currentRoute = currentRoute,
         )
         // 整改 §8.8：正式「记忆与隐私」入口。
         // 记忆此前只能从「人格画像 → 我要纠正军师」绕进去，用户找不到；
@@ -108,6 +116,8 @@ fun DrawerContent(
             icon = Icons.Outlined.Lock,
             label = "记忆与隐私",
             onClick = { onNavigateToRoute(Screen.Memory.route) },
+                route = Screen.Memory.route,
+                currentRoute = currentRoute,
         )
         // [W4.3 合并] 了解自己入口并入上方「人格画像」
         // DrawerNavItem(
@@ -125,6 +135,8 @@ fun DrawerContent(
                 icon = Icons.Outlined.FavoriteBorder,
                 label = "待办",
                 onClick = { onNavigateToRoute(Screen.TodoList.route) },
+                route = Screen.TodoList.route,
+                currentRoute = currentRoute,
                 badgeCount = pendingCount,
             )
             // 2026-09-28 共同调解室（设计 §一）：抽屉入口（三处入口之一）
@@ -132,6 +144,8 @@ fun DrawerContent(
                 icon = Icons.Outlined.Forum,
                 label = "共同调解室",
                 onClick = { onNavigateToRoute(Screen.MediationRoomList.route) },
+                route = Screen.MediationRoomList.route,
+                currentRoute = currentRoute,
             )
             // [W4.3 合并] 关系画像入口并入「人格画像」
             // DrawerNavItem(
@@ -164,6 +178,8 @@ fun DrawerContent(
                 icon = Icons.Outlined.AutoAwesome,
                 label = "军师设置",
                 onClick = { onNavigateToRoute(Screen.AdvisorSettings.route) },
+                route = Screen.AdvisorSettings.route,
+                currentRoute = currentRoute,
             )
             // 2026-09-27 用户裁决：抽屉补齐关系内容入口。
             // 观点 = 日记（同一份数据、同一批页面）。用户主动写下的看法比 AI 推断更可信，
@@ -172,6 +188,8 @@ fun DrawerContent(
                 icon = Icons.Outlined.Lightbulb,
                 label = "观点",
                 onClick = { onNavigateToRoute(Screen.DiaryList.route) },
+                route = Screen.DiaryList.route,
+                currentRoute = currentRoute,
             )
             DrawerNavItem(
                 icon = Icons.Outlined.MailOutline,
@@ -179,16 +197,22 @@ fun DrawerContent(
                 // 2026-09-28 用户裁决：走根导航的「深度表达」二级页（Screen.Mailbox，
                 // 压栈全屏、返回箭头顶栏）。此前进内层信箱 tab 的一级页形态已废弃。
                 onClick = { onNavigateToRoute(Screen.Mailbox.route) },
+                route = Screen.Mailbox.route,
+                currentRoute = currentRoute,
             )
             DrawerNavItem(
                 icon = Icons.Outlined.EventNote,
                 label = "纪念事件",
                 onClick = { onNavigateToRoute(Screen.RelationshipEvent.route) },
+                route = Screen.RelationshipEvent.route,
+                currentRoute = currentRoute,
             )
             DrawerNavItem(
                 icon = Icons.Outlined.StarOutline,
                 label = "愿望",
                 onClick = { onNavigateToRoute(Screen.Wishlist.route) },
+                route = Screen.Wishlist.route,
+                currentRoute = currentRoute,
             )
         }
 
@@ -214,6 +238,8 @@ fun DrawerContent(
                 icon = Icons.Outlined.SwitchAccount,
                 label = "绑定情侣",
                 onClick = { onNavigateToRoute(Screen.CoupleBind.route) },
+                route = Screen.CoupleBind.route,
+                currentRoute = currentRoute,
                 highlight = true,
             )
         } else {
@@ -221,6 +247,8 @@ fun DrawerContent(
                 icon = Icons.Outlined.SwitchAccount,
                 label = "关系管理",
                 onClick = { onNavigateToRoute(Screen.CoupleInfo.route) },
+                route = Screen.CoupleInfo.route,
+                currentRoute = currentRoute,
             )
         }
 
@@ -228,6 +256,8 @@ fun DrawerContent(
             icon = Icons.Outlined.Book,
             label = "使用指南",
             onClick = { onNavigateToRoute(Screen.Guide.route) },
+                route = Screen.Guide.route,
+                currentRoute = currentRoute,
         )
 
         // 整改 §8.8：抽屉底部的两个「设置」必须一眼分得清——
@@ -245,6 +275,8 @@ fun DrawerContent(
             icon = Icons.Outlined.Settings,
             label = "设置",
             onClick = { onNavigateToRoute("settings") },
+            route = "settings",
+            currentRoute = currentRoute,
         )
 
         Spacer(modifier = Modifier.height(34.dp))
@@ -301,26 +333,33 @@ private fun DrawerNavItem(
     onClick: () -> Unit,
     highlight: Boolean = false,
     badgeCount: Int = 0,
+    /** 条目对应的目标路由；与 currentRoute 相同时高亮为「当前所在」。 */
+    route: String? = null,
+    currentRoute: String? = null,
 ) {
+    val selected = route != null && route == currentRoute
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // R 系列：抽屉项按压反馈（缩放）替代默认涟漪，必须写在 clip 之前
+            .pressFeedback(onClick = onClick)
             .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
+            .background(if (selected) AppAccentFaint else Color.Transparent)
             .padding(vertical = 13.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (highlight) AppAccent else AppTextSecondary,
+            tint = if (highlight || selected) AppAccent else AppTextSecondary,
             modifier = Modifier.size(20.dp),
         )
         Spacer(modifier = Modifier.width(14.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = if (highlight) AppAccent else AppTextPrimary,
+            color = if (highlight || selected) AppAccent else AppTextPrimary,
+            fontWeight = if (selected) FontWeight.SemiBold else null,
         )
         if (badgeCount > 0) {
             Spacer(modifier = Modifier.weight(1f))

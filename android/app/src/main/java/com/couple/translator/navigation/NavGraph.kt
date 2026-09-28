@@ -1,10 +1,11 @@
 package com.couple.translator.navigation
 
 import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -22,11 +23,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.couple.translator.core.data.repository.GuideStore
+import com.couple.translator.core.data.repository.HapticsStore
 import com.couple.translator.core.data.repository.NotificationPermissionStore
 import com.couple.translator.core.data.repository.ThemeStore
 import com.couple.translator.core.data.repository.TokenStore
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.ui.settings.SettingsViewModel
+import com.couple.translator.core.ui.theme.AppMotion
 import com.couple.translator.core.ui.theme.ThemeMode
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
 import com.couple.translator.feature.couple.network.RealtimeSocketManager
@@ -102,6 +105,8 @@ fun NavGraph(
     guideStore: GuideStore? = null,
     themeStore: ThemeStore? = null,
     notificationPermissionStore: NotificationPermissionStore? = null,
+    // 触感总开关（设置页「触感反馈」开关行的数据源，P1 接入）
+    hapticsStore: HapticsStore? = null,
     deepLinkRoute: String? = null,
     onDeepLinkConsumed: () -> Unit = {},
 ) {
@@ -120,38 +125,40 @@ fun NavGraph(
 
     if (startDest == null) return
 
-    // 动画参数：300ms。
-    // 用 Material 的 emphasized 缓动曲线而不是 FastOutSlowIn —— 前者起步更快、收尾更匀，
-    // 观感上就是"页面滑进来然后稳稳停住"，FastOutSlowIn 会显得尾巴拖沓。
-    val animDuration = 300
-    val enterEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
-    val exitEasing = CubicBezierEasing(0.4f, 0f, 1f, 1f)
+    // 动画参数：全局 UI/UX 方案 G5 —— 压栈转场统一走 AppMotion 令牌。
+    // 推入 = 新页从右侧 12% 处滑入 + 淡入（iOS push 手感：位移小、以淡为主，
+    // 全屏横移在窄屏上显得「翻页」而不是「进入」）；返回反向对称。
+    // 曲线统一 AppMotion.EaseOut（起速快收速匀），时长 300ms。
+    val animDuration = AppMotion.slow
+    val enterEasing = AppMotion.EaseOut
+    val exitEasing = AppMotion.EaseInOut
 
     NavHost(
         navController = navController,
         startDestination = startDest!!,
         enterTransition = {
-            slideIntoContainer(
-                towards = AnimatedContentTransitionScope.SlideDirection.Left,
-                animationSpec = tween(animDuration, easing = enterEasing)
+            slideInHorizontally(
+                animationSpec = tween(animDuration, easing = enterEasing),
+                initialOffsetX = { width -> (width * 0.12f).toInt() },
             ) + fadeIn(animationSpec = tween(animDuration / 2))
         },
         exitTransition = {
-            slideOutOfContainer(
-                towards = AnimatedContentTransitionScope.SlideDirection.Left,
-                animationSpec = tween(animDuration, easing = exitEasing)
+            // 被压住的旧页：轻微向左让位 + 淡出，制造「推深一层」的纵深
+            slideOutHorizontally(
+                animationSpec = tween(animDuration, easing = exitEasing),
+                targetOffsetX = { width -> -(width * 0.06f).toInt() },
             ) + fadeOut(animationSpec = tween(animDuration / 3))
         },
         popEnterTransition = {
-            slideIntoContainer(
-                towards = AnimatedContentTransitionScope.SlideDirection.Right,
-                animationSpec = tween(animDuration, easing = enterEasing)
+            slideInHorizontally(
+                animationSpec = tween(animDuration, easing = enterEasing),
+                initialOffsetX = { width -> -(width * 0.06f).toInt() },
             ) + fadeIn(animationSpec = tween(animDuration / 2))
         },
         popExitTransition = {
-            slideOutOfContainer(
-                towards = AnimatedContentTransitionScope.SlideDirection.Right,
-                animationSpec = tween(animDuration, easing = exitEasing)
+            slideOutHorizontally(
+                animationSpec = tween(animDuration, easing = exitEasing),
+                targetOffsetX = { width -> (width * 0.12f).toInt() },
             ) + fadeOut(animationSpec = tween(animDuration / 3))
         },
     ) {
@@ -993,6 +1000,9 @@ fun NavGraph(
             val settingsViewModel: SettingsViewModel = hiltViewModel()
             val notificationPref by settingsViewModel.state.collectAsState()
             val distillSwitch by settingsViewModel.distillState.collectAsState()
+            // 触感反馈：纯本地偏好（与外观模式同一模式），不进 ViewModel
+            val hapticsEnabled by (hapticsStore?.enabled ?: flowOf(true))
+                .collectAsState(initial = true)
             com.couple.translator.core.ui.settings.SettingsScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToProfile = {
@@ -1018,6 +1028,10 @@ fun NavGraph(
                     settingsViewModel.toggleDistill(enabled)
                 },
                 onDistillErrorShown = { settingsViewModel.clearDistillError() },
+                hapticsEnabled = hapticsEnabled,
+                onHapticsChange = { enabled ->
+                    scope.launch { hapticsStore?.setEnabled(enabled) }
+                },
             )
         }
     }
