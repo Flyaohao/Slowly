@@ -48,6 +48,8 @@ import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.AppFilterChip
 import com.couple.translator.core.ui.components.AppInfoBanner
+import com.couple.translator.core.ui.components.AppTag
+import com.couple.translator.core.ui.components.AppTagTone
 import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.SkeletonListCard
 import com.couple.translator.core.ui.theme.AppAccent
@@ -320,11 +322,12 @@ private fun MemoryItemCard(
                 text = memory.memoryText,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = memory.memoryType,
-                style = MaterialTheme.typography.labelSmall,
-                color = AppAccent,
+            Spacer(modifier = Modifier.height(8.dp))
+            // 去AI味 P-3d：类型从「accent 小灰字裸排」升级为 AppTag 分色徽章，
+            // 并把后端直写路径的裸英文 session_summary 映射成中文（表外类型原样兜底）。
+            AppTag(
+                text = memoryTypeLabel(memory.memoryType),
+                tone = memoryTypeTone(memory.memoryType),
             )
             // P-C3 §4.3：「来源 · 发生时间」（occurred_at 为空回退 created_at）
             val meta = listOfNotNull(
@@ -354,6 +357,27 @@ private fun sourceLabel(source: String?): String? = when (source) {
     "chat_summary" -> "会话摘要"
     "museum" -> "纪念册"
     else -> source
+}
+
+// ------------------------------------------------------------------ #
+// 去AI味 P-3d：记忆类型徽章（中文映射 + tone 分色）
+// ------------------------------------------------------------------ #
+
+/**
+ * memory_type 原始值 → 展示名。
+ * 萃取四类 + 事件后端本就是中文（MEMORY_TYPES / EVENT_MEMORY_TYPE）原样展示；
+ * 直写路径的 session_summary 是唯一裸英文（memory_service.py L32 登记项），映射为中文。
+ */
+private fun memoryTypeLabel(type: String): String = when (type) {
+    "session_summary" -> "会话摘要"
+    else -> type
+}
+
+/** 类型 → 徽章色调：雷区警示用 Warm，偏好/诉求用 Accent，其余中性。 */
+private fun memoryTypeTone(type: String): AppTagTone = when (type) {
+    "沟通雷区" -> AppTagTone.Warm
+    "偏好", "核心诉求" -> AppTagTone.Accent
+    else -> AppTagTone.Neutral
 }
 
 /**
