@@ -12,11 +12,11 @@ AI 链路全部接入真实大模型，已容器化部署在线运行。
 
 | | 实测值 |
 |---|---|
-| 客户端 | 231 个 Kotlin 文件 / 48,000 行 |
-| 后端 | 183 个 Python 文件 / 31,700 行 |
-| 接口 | 165 个 REST 端点 + SSE 流式 + WebSocket |
-| 数据模型 | 53 个 ORM 模型，36 个 Alembic 迁移，单 head，可从空库一键重建 |
-| 测试 | 78 个后端验证脚本 + 15 个 Android JVM 测试文件 |
+| 客户端 | 245 个 Kotlin 文件 / 51,700 行 |
+| 后端 | 237 个 Python 文件 / 38,700 行（含迁移与脚本） |
+| 接口 | 173 个 REST 端点 + SSE 流式 + WebSocket |
+| 数据模型 | 55 个 ORM 模型，37 个 Alembic 迁移，单 head，可从空库一键重建 |
+| 测试 | 79 个后端验证脚本 + 15 个 Android JVM 测试文件 |
 
 ---
 
@@ -41,7 +41,7 @@ AI 链路全部接入真实大模型，已容器化部署在线运行。
 
 ## 界面速览
 
-| 共同调解室：吵架后开一间房，双方与军师三方同聊 | 房间内 @军师：流式回复，结束后双方投票生成调解书 |
+| 共同调解室：吵架后开一间房，双方与军师三方同聊 | 房间内 @军师流式建议，结束后生成调解书留档（和解 + 共同约定） |
 |---|---|
 | <img src="docs/screenshots/07-mediation-room-list.png" width="280"/> | <img src="docs/screenshots/08-mediation-room-advisor.png" width="280"/> |
 
@@ -49,17 +49,21 @@ AI 链路全部接入真实大模型，已容器化部署在线运行。
 |---|---|
 | <img src="docs/screenshots/09-observation-card.png" width="280"/> | <img src="docs/screenshots/10-observation-detail.png" width="280"/> |
 
-| 军师对话：结构化建议 + 可展开的判断依据 | 记忆与隐私：AI 记住的一切可查、可控、可删 |
+| 军师对话：结构化建议卡片，各节可展开 | 抽屉：全部功能入口，按使用频率排序 |
 |---|---|
-| <img src="docs/screenshots/01-advisor-evidence.jpg" width="280"/> | <img src="docs/screenshots/05-memory-privacy.jpg" width="280"/> |
+| <img src="docs/screenshots/01-advisor-evidence.png" width="280"/> | <img src="docs/screenshots/11-drawer.png" width="280"/> |
 
 | 人格画像：依恋类型 + 置信度 + 逐维解读 | 画像治理：记忆入口 / 问卷历史 / 版本回撤 |
 |---|---|
 | <img src="docs/screenshots/03-persona-profile.jpg" width="280"/> | <img src="docs/screenshots/04-persona-correction.jpg" width="280"/> |
 
-| 关系主页：纪念日、在一起第 96 天 | 写信 AI 辅助：按语气改写，不代笔 |
+| 记忆与隐私：AI 记住的一切可查、可控、可删 | 写信 AI 辅助：按语气改写，不代笔 |
 |---|---|
-| <img src="docs/screenshots/02-relation-hub.jpg" width="280"/> | <img src="docs/screenshots/06-letter-ai-assist.jpg" width="280"/> |
+| <img src="docs/screenshots/05-memory-privacy.jpg" width="280"/> | <img src="docs/screenshots/06-letter-ai-assist.jpg" width="280"/> |
+
+| 关系主页：在一起 N 天渐变页头 + 观察卡 + 关系背景 | AI 服务配置：绑定自己的模型 API，Key 加密存储 |
+|---|---|
+| <img src="docs/screenshots/02-relation-hub.png" width="280"/> | <img src="docs/screenshots/12-ai-config.png" width="280"/> |
 
 ---
 
@@ -312,8 +316,32 @@ AI 的判断错了，用户能纠正，纠正过程本身可追溯。
 业务错误一律 `HTTP 200 + {code, message, data}`，`message` 是可直接展示给用户的中文；
 只有认证/权限失败才用 401 / 403，收口在 `main.py` 的异常处理器里，业务代码不写 try/except 样板。
 
-36 个迁移全部写成**幂等**的（建表 / 加列前先判断存在性）——MySQL 不支持事务性 DDL，
+37 个迁移全部写成**幂等**的（建表 / 加列前先判断存在性）——MySQL 不支持事务性 DDL，
 所以幂等性比任何回滚机制都重要。`scripts/verify_migrations.py` 校验迁移链与 ORM 模型的差异应为 0。
+
+### 8. 用户级 AI 配置：军师用你自己的 Key 干活
+
+平台默认模型开箱即用；用户也可以在设置页绑定**自己的**模型服务：
+
+- 支持 **OpenAI 兼容**与 **Anthropic** 两种协议，绑定 base_url + 模型名 + API Key；
+- Key 用 Fernet **加密落库**（密钥独立于数据库存放），接口读取时只回 `sk-****` 尾 4 位打码——只写不读；
+- 全 App 的 LLM/Embedding 调用（军师对话、共同调解室、记忆蒸馏、画像解析等 8 处调用方，
+  含独立 worker 进程）统一走「按用户解析」这一层：用户自定义优先，未配置回落平台默认，
+  零配置体验无回归；
+- 自定义 base_url 时自动禁用 DashScope 专有参数（enable_thinking / thinking_budget）
+  与 DashScope 降级模型链——对第三方中转这些参数无意义且会 400；
+- 内置连通性测试：用用户给的配置真实发一次最小调用，失败给出原因。
+
+### 9. 视觉与交互：一套统一的设计语言
+
+客户端做过一轮整体翻新，纯样式、零后端改动：
+
+- **主题**：暖白 / 暖黑双底色 + 品牌品红 accent + 渐变语义色（主按钮、关系页「在一起 N 天」大字页头、底栏滑块），
+  Inter 字体四档内嵌（OFL 许可证随源码归档）；
+- **动效与触感**：统一动效系统——根导航 12% 滑入 + fade、结构化卡片展开、关系页数字滚动、信件入场；
+  触感反馈带总开关，设置页一键闭环；
+- **信息架构**：抽屉按使用频率重排（共同调解室置顶），「军师设置」并入系统设置页与记忆沉淀同卡，
+  个人资料页查看态改为昵称大字 + 签名 + 信息卡。
 
 ---
 
@@ -327,7 +355,7 @@ AI 的判断错了，用户能纠正，纠正过程本身可追溯。
 
 **AI**：阿里云百炼 DashScope（OpenAI 兼容端点）。主模型 `qwen3.7-flash`（推理模型，先产出思考再落笔正文），
 降级链 `qwen-plus → deepseek-v3 → qwen-turbo`，记忆蒸馏等后台轻量任务专用 `qwen-turbo`，
-embedding 用 `text-embedding-v4`（1024 维）。
+embedding 用 `text-embedding-v4`（1024 维）。用户可在 App 内绑定自己的模型服务（见「几个值得一看的设计」第 8 条）。
 
 ---
 
@@ -337,7 +365,7 @@ embedding 用 `text-embedding-v4`（1024 维）。
 |----|------|
 | 基础 | 用户认证、个人资料、情侣绑定 / 解绑 |
 | 画像 | 心理问卷（11 维度）、依恋类型判定、个人画像、情侣组合画像、画像版本化 |
-| AI 军师 | 7 场景对话、混合记忆召回、记忆蒸馏管线、判断依据面板、记忆与隐私管理、军师主动观察（观察卡 + 已读 ack） |
+| AI 军师 | 7 场景对话、混合记忆召回、记忆蒸馏管线、判断依据面板、记忆与隐私管理、军师主动观察（观察卡 + 已读 ack）、用户级 AI 配置（自带 Key，加密落库） |
 | 沟通 | 情侣邮箱（写信 / 收信 / 草稿 / AI 辅助）、各自的看法（单人调解）、共同调解室（双方 + 军师同房） |
 | 沉淀 | 双视角记录、关系纪念馆、关系练习、纪念日、愿望清单、观点（日记） |
 | 体验 | AI 形象（捏脸 / 换装）、远程陪伴、情侣空间首页 |
@@ -420,8 +448,8 @@ backend/
     repositories/    数据访问；service 不直接碰 db.query()
     models/ schemas/ ORM 模型与 Pydantic 出入参（含 AI 输出模型）
     tasks/           后台任务（解绑冷静期巡检）
-  alembic/versions/  36 个迁移，单 head
-  tests/             78 个可执行验证脚本
+  alembic/versions/  37 个迁移，单 head
+  tests/             79 个可执行验证脚本
   scripts/           seed_* / build_vectorstore / build_memory_index / verify_migrations
 
 android/
@@ -437,7 +465,7 @@ android/
 
 ## 测试
 
-后端是**可执行脚本**而非 pytest（便于单跑、便于留档），78 个脚本按主题分片：
+后端是**可执行脚本**而非 pytest（便于单跑、便于留档），79 个脚本按主题分片：
 
 ```bash
 cd backend
