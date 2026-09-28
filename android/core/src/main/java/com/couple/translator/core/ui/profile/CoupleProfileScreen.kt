@@ -37,6 +37,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.ProfileDto
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppScoreBar
 import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PullToRefreshLayout
@@ -244,22 +245,28 @@ private fun ProfileMiniCard(
                     "conflict_withdraw" -> "退缩"
                     else -> dim.dimensionKey.take(4)
                 }
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                        .padding(vertical = 3.dp),
                 ) {
-                    Text(
-                        text = name,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTextSecondary,
-                    )
-                    Text(
-                        text = "${dim.score.toInt()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTextSecondary,
+                        )
+                        Text(
+                            text = "${dim.score.toInt()}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    AppScoreBar(score = dim.score, height = 4.dp)
                 }
             }
         }

@@ -287,13 +287,11 @@ private fun LetterRow(
     letter: LetterDto.LetterResponse,
     onClick: () -> Unit,
     icon: ImageVector? = null,
-    emoji: String? = null,
 ) {
     AppListItem(
         title = letter.title?.ifBlank { "无标题" } ?: "无标题",
         subtitle = letter.content?.take(60)?.replace('\n', ' ')?.ifBlank { null },
         leadingIcon = icon,
-        leadingEmoji = emoji,
         trailingText = formatDateShort(letter.sendTime ?: letter.createdAt),
         onClick = onClick,
     )

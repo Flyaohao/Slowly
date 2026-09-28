@@ -58,6 +58,7 @@ import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.AppPrimaryButton
+import com.couple.translator.core.ui.components.AppScoreBar
 import com.couple.translator.core.ui.components.AppSecondaryButton
 import com.couple.translator.core.ui.components.DimensionRadarChart
 import com.couple.translator.core.ui.components.PullToRefreshLayout
@@ -519,22 +520,13 @@ private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
 
         Spacer(modifier = Modifier.height(AppSpacing.sm))
 
-        // 分值条
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(AppBorderLight),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction = (dim.score / 100f).coerceIn(0f, 1f))
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(AppAccent),
-            )
-        }
+        // 分值条（AppScoreBar：进入动画 + 统一轨道/圆角，替代手写 Box 条）
+        AppScoreBar(
+            score = dim.score,
+            color = levelColor,
+            trackColor = AppBorderLight,
+            height = 6.dp,
+        )
 
         if (dim.analysis.isNotBlank()) {
             Spacer(modifier = Modifier.height(AppSpacing.md))
