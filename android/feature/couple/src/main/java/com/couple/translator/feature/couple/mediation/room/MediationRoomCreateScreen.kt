@@ -1,5 +1,7 @@
 package com.couple.translator.feature.couple.mediation.room
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,9 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,15 +20,27 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppInfoBanner
 import com.couple.translator.core.ui.components.AppPrimaryButton
+import com.couple.translator.core.ui.components.AppTagTone
 import com.couple.translator.core.ui.components.SectionTitle
 import com.couple.translator.core.ui.components.TextInputField
+import com.couple.translator.core.ui.components.pressFeedback
 import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentFaint
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppOnAccent
+import com.couple.translator.core.ui.theme.AppPrimaryGradient
+import com.couple.translator.core.ui.theme.AppRadius
+import com.couple.translator.core.ui.theme.AppSurfaceMuted
+import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.feature.couple.data.model.MediationRoomDto
 import com.couple.translator.feature.couple.data.repository.MediationRoomRepository
@@ -144,6 +157,37 @@ fun MediationRoomCreateScreen(
         ) {
             Spacer(modifier = Modifier.height(4.dp))
 
+            // 去AI味 P-3f：表单页也有第一眼——渐变 hero 与首页/关系页同一套语言，
+            // 先给「这是一场正式的对话」的仪式感，再进表单。
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(AppRadius.xl))
+                    .background(AppPrimaryGradient)
+                    .border(0.5.dp, AppOnAccent.copy(alpha = 0.25f), RoundedCornerShape(AppRadius.xl))
+                    .padding(horizontal = 16.dp, vertical = 20.dp),
+            ) {
+                Text(
+                    text = "共同调解室",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AppOnAccent.copy(alpha = 0.85f),
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "发起调解",
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = AppOnAccent,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "把事情讲清楚，军师在场，双方当面把话说开。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppOnAccent.copy(alpha = 0.8f),
+                )
+            }
+
             SectionTitle("这次要调解什么")
 
             TextInputField(
@@ -185,34 +229,27 @@ fun MediationRoomCreateScreen(
 
             SectionTitle("军师风格")
 
+            // 风格双卡：名称+描述一张卡说清，选中描边高亮，替代挤在一行的 FilterChip
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 uiState.styles.forEach { style ->
-                    FilterChip(
+                    StyleCard(
                         selected = uiState.styleKey == style.key,
+                        label = style.label,
+                        description = style.description,
                         onClick = { viewModel.update { it.copy(styleKey = style.key) } },
-                        label = { Text(style.label) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = AppAccent,
-                        ),
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
-            uiState.styles.firstOrNull { it.key == uiState.styleKey }?.let { style ->
-                Text(
-                    text = style.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppTextSecondary,
-                )
-            }
 
             if (uiState.error.isNotBlank()) {
-                Text(
+                AppInfoBanner(
                     text = uiState.error,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
+                    tone = AppTagTone.Warm,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
 
@@ -227,5 +264,40 @@ fun MediationRoomCreateScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+}
+
+/** 军师风格选择卡：选中=品牌色描边+浅底，未选中=静默底。 */
+@Composable
+private fun StyleCard(
+    selected: Boolean,
+    label: String,
+    description: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(AppRadius.lg))
+            .background(if (selected) AppAccentFaint else AppSurfaceMuted)
+            .border(
+                width = if (selected) 1.5.dp else 0.5.dp,
+                color = if (selected) AppAccent else AppBorderLight,
+                shape = RoundedCornerShape(AppRadius.lg),
+            )
+            .pressFeedback(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            color = if (selected) AppAccent else AppTextPrimary,
+        )
+        Spacer(modifier = Modifier.height(3.dp))
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall,
+            color = AppTextSecondary,
+        )
     }
 }
