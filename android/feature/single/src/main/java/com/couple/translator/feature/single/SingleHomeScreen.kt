@@ -1,28 +1,34 @@
 package com.couple.translator.feature.single
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.AppLinkRow
 import com.couple.translator.core.ui.components.AppLinkText
 import com.couple.translator.core.ui.components.AppListCard
 import com.couple.translator.core.ui.components.AppListItem
-import com.couple.translator.core.ui.components.AppPageHeader
 import com.couple.translator.core.ui.components.AppPrimaryButton
 import com.couple.translator.core.ui.components.AppTopBar
 import com.couple.translator.core.ui.components.PullToRefreshLayout
@@ -30,6 +36,9 @@ import com.couple.translator.core.ui.components.SectionTitle
 import com.couple.translator.core.ui.components.SkeletonListPage
 import com.couple.translator.core.ui.components.TopBarIdentity
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppOnAccent
+import com.couple.translator.core.ui.theme.AppPrimaryGradient
+import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.feature.single.data.model.DiaryDto
 
@@ -78,10 +87,38 @@ fun SingleHomeScreen(
                 ),
             )
 
-            AppPageHeader(
-                title = "你好，${uiState.nickname ?: "朋友"}",
-                subtitle = "记录生活，了解自己。",
-            )
+            // 去AI味 P-3a：问候升级为主视觉渐变卡（S5 白名单①），与情侣首页同一套语言
+            // ——单值聚焦 + 大字问候做首屏唯一重心，其余信息退到它下面。
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = AppSpacing.screenH)
+                    .padding(top = AppSpacing.md)
+                    .clip(RoundedCornerShape(AppRadius.xl))
+                    .background(AppPrimaryGradient)
+                    .border(0.5.dp, AppOnAccent.copy(alpha = 0.25f), RoundedCornerShape(AppRadius.xl))
+                    .padding(horizontal = AppSpacing.lg, vertical = AppSpacing.section),
+            ) {
+                Text(
+                    text = "你好",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AppOnAccent.copy(alpha = 0.85f),
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = uiState.nickname ?: "朋友",
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = AppOnAccent,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "记录生活，了解自己。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppOnAccent.copy(alpha = 0.8f),
+                )
+            }
 
             SectionTitle(text = "快捷入口")
             // [W4.3 合并] 「了解自己」+「我的画像」两格 → 单一「人格画像」
