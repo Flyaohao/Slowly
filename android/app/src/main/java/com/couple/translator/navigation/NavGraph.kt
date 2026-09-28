@@ -95,6 +95,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
 fun NavGraph(
@@ -115,10 +116,20 @@ fun NavGraph(
     val isCoupleMode = coupleState?.mode != com.couple.translator.feature.couple.data.repository.AppMode.SINGLE
 
     LaunchedEffect(Unit) {
-        val hasToken = tokenStore?.isLoggedIn() == true
+        // 🔴 白屏修复（2026-09-28）：此前 startDest 要等 isLoggedIn()+refresh() 全部
+        // 挂起返回才赋值，期间下方 `if (startDest == null) return` 渲染的是空组合。
+        // 真机两次复现：App 在后台期间 Activity 因 config change 重建后，启动协程
+        // 挂起不返回（连 /couples/me 请求都没发出）→ startDest 永远为 null →
+        // 无崩溃、无日志、语义树为空的整页白屏，只能杀进程。
+        // 现改为：
+        // ① token 读取限时 3s，超时按「已登录」放行 Main——若 token 真缺失，
+        //    接口 401 会走壳层既有 onLogout 自愈回登录页，比卡白屏可恢复；
+        // ② 情侣状态刷新改为子协程，不再阻塞启动。壳层对 mode 是响应式收集
+        //    （collectAsState），refresh 完成后自动纠正，首帧模式由
+        //    lastMode 缓存种子垫底（登录/每次 /couples/me 成功都会写入）。
+        val hasToken = withTimeoutOrNull(3_000) { tokenStore?.isLoggedIn() } ?: true
         if (hasToken) {
-            // 启动时立即刷新情侣状态，确保显示正确的模式
-            coupleStateManager?.refresh()
+            launch { coupleStateManager?.refresh() }
         }
         startDest = if (hasToken) Screen.Main.route else Screen.Login.route
     }
