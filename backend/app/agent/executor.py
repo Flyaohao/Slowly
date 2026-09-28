@@ -48,24 +48,41 @@ _agent_cache: Dict[Any, Any] = {}
 _CACHE_LIMIT = 32
 
 
-def build_model(temperature: float = 0.3) -> ChatOpenAI:
-    """构造指向 DashScope OpenAI 兼容端点的模型实例。"""
+def build_model(
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    model: Optional[str] = None,
+    temperature: float = 0.3,
+) -> ChatOpenAI:
+    """构造模型实例。
+
+    v5.0 安全口径：生产入口（/couple/ai/agent）必须显式传入用户级配置，
+    服务器 AI_API_KEY 不再为该端点兜底；参数缺省回落全局环境变量仅为
+    tests/test_agent.py 本地直跑保留。
+    """
     return ChatOpenAI(
-        model=AI_MODEL,
-        api_key=AI_API_KEY,
-        base_url=AI_BASE_URL,
+        model=model or AI_MODEL,
+        api_key=api_key or AI_API_KEY,
+        base_url=base_url or AI_BASE_URL,
         temperature=temperature,
         timeout=60,
     )
 
 
-def get_agent(user_id: int, relation_id: int):
-    """按 (user_id, relation_id) 构建并缓存 Agent。
+def get_agent(
+    user_id: int,
+    relation_id: int,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    model_name: Optional[str] = None,
+):
+    """按 (user_id, relation_id, 模型配置指纹) 构建并缓存 Agent。
 
     工具身份走 `build_agent_tools` 闭包（服务端注入，模型不可自报，§7.1），
-    因此必须按 (user_id, relation_id) 区分实例。
+    因此必须按 (user_id, relation_id) 区分实例；配置指纹（端点/模型/key）
+    进缓存键，用户改配置后不会命中旧 Agent。
     """
-    key = (user_id, relation_id)
+    key = (user_id, relation_id, api_key or "", base_url or "", model_name or "")
     if key in _agent_cache:
         return _agent_cache[key]
 
@@ -73,7 +90,7 @@ def get_agent(user_id: int, relation_id: int):
         _agent_cache.clear()
 
     _agent_cache[key] = create_agent(
-        build_model(),
+        build_model(api_key=api_key, base_url=base_url, model=model_name),
         build_agent_tools(user_id, relation_id),
         system_prompt=AGENT_SYSTEM_PROMPT,
     )
@@ -85,6 +102,9 @@ def run_agent(
     user_id: int,
     relation_id: int = 0,
     history: Optional[List[Dict[str, str]]] = None,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    model_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """执行一次 Agent 对话。
 
@@ -97,7 +117,13 @@ def run_agent(
           "reasoning":  各轮消息类型（便于前端展示"已查询画像/已检索理论"）
         }
     """
-    agent = get_agent(user_id, relation_id)
+    agent = get_agent(
+        user_id,
+        relation_id,
+        api_key=api_key,
+        base_url=base_url,
+        model_name=model_name,
+    )
 
     messages: List[Dict[str, str]] = list(history or [])
     messages.append({"role": "user", "content": user_input})

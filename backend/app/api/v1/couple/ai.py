@@ -33,6 +33,7 @@ from app.services import (
     letter_ai_service,
     relationship_review_service,
 )
+from app.services import user_ai_config_service as uaicfg
 from app.services.sse import sse_encode, SSE_HEADERS as _SSE_HEADERS
 from app.repositories import ai_generation_repo, couple_repo, ai_repo
 
@@ -630,6 +631,22 @@ def agent_chat(
 
     history = [item.model_dump() for item in (req.history or [])]
 
+    # v5.0 安全口径（与 chat/信/问卷同标准）：Agent 的模型调用必须使用触发用户
+    # 自己的 key，服务器 AI_API_KEY 不再兜底。未配置 → AiConfigMissingError →
+    # 全局处理器翻译成 30010 引导设置。
+    config, keys = uaicfg.resolve(db, current_user.id)
+    if config.provider_type != "openai":
+        # Agent 走 LangChain ChatOpenAI（OpenAI 兼容协议）；anthropic 协议的
+        # 用户如实告知，而不是让他们在 deep 环节撞协议错误
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": 30011,
+                "message": "Agent 功能暂仅支持 OpenAI 兼容协议，请在 AI 服务配置中调整",
+                "data": None,
+            },
+        )
+
     # Agent 依赖 LangChain，装了才可用；没装时明确告知而不是抛 500 堆栈
     try:
         from app.agent.executor import run_agent
@@ -646,6 +663,9 @@ def agent_chat(
             user_id=current_user.id,
             relation_id=relation.id,
             history=history or None,
+            api_key=uaicfg._rotate(keys, config.key_cursor or 0)[0],
+            base_url=config.base_url,
+            model_name=config.model_name,
         )
     except Exception:
         logger.exception("[AI] Agent 执行失败 user=%s", current_user.id)
