@@ -202,7 +202,9 @@ fun AiConfigScreen(
                             modifier = Modifier.padding(vertical = 8.dp),
                         )
                         KeyRow(
-                            masked = key,
+                            // 与顶部「不会展示给任何人」口径一致：未保存的 key 也不以明文示人，
+                            // 只在本地展示打码形态（原文仅存于 ViewModel，保存时才提交）。
+                            masked = maskNewKey(key),
                             label = "新增（保存时校验）",
                             enabled = true,
                             errorHint = "",
@@ -280,15 +282,7 @@ fun AiConfigScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // ---- 测试与保存 ----
-            if (state.testPassed.isNotBlank()) {
-                Text(
-                    text = "✓ ${state.testPassed}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppAccent,
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
+            // 测试结果放在按钮下方：插在上方会把「测试连接/保存」顶下去，连续操作容易点空。
             AppAccentButton(
                 text = if (state.isTesting) "正在测试…" else "测试连接",
                 onClick = viewModel::testConnection,
@@ -301,9 +295,28 @@ fun AiConfigScreen(
                 enabled = !state.isSaving && !state.isTesting,
             )
 
+            if (state.testPassed.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "✓ ${state.testPassed}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppAccent,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+            }
+
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
+}
+
+/**
+ * 本地打码未保存的新 key，格式与服务端一致（如 `sk-****1680`）。
+ * 过短的 key 尾 4 位会暴露过多内容（≤8 位时尾 4 占一半以上），整体打码不回显。
+ */
+private fun maskNewKey(raw: String): String {
+    val key = raw.trim()
+    return if (key.length <= 8) "••••••••" else key.take(3) + "****" + key.takeLast(4)
 }
 
 /** 服务商单选（D7：OpenAI 兼容 / Anthropic 双协议）。 */
