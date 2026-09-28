@@ -27,7 +27,9 @@ data class AiConfigUiState(
     val baseUrl: String = "",
     val modelName: String = "",
     val embeddingBaseUrl: String = "",
-    val embeddingModel: String = "",
+    // 预填 DashScope 默认 embedding 模型（1024 维，与 Chroma 集合一致），可改；
+    // 大多数用户与聊天 key 同厂，这一行零改动即可用。
+    val embeddingModel: String = "text-embedding-v4",
     val embeddingApiKey: String = "",
     val enableRateLimit: Boolean = true,
     val newKeys: List<String> = emptyList(),
@@ -69,7 +71,7 @@ class AiConfigViewModel @Inject constructor(
                             baseUrl = cfg.baseUrl,
                             modelName = cfg.modelName,
                             embeddingBaseUrl = cfg.embeddingBaseUrl,
-                            embeddingModel = cfg.embeddingModel,
+                            embeddingModel = cfg.embeddingModel.ifBlank { "text-embedding-v4" },
                             embeddingApiKey = "",
                             enableRateLimit = cfg.enableRateLimit,
                             newKeys = emptyList(),
