@@ -50,6 +50,10 @@ def get_my_profile(
         "id": profile.id,
         "user_id": profile.user_id,
         "profile_type": profile.profile_type,
+        # 2026-09-28 画像页可视化：类型中文名 + 维度中文名随分数下发，
+        # 客户端不再各自维护第二份映射。纯 additive，老客户端忽略未知键。
+        "profile_type_label": profile_service.PROFILE_TYPE_LABELS.get(
+            profile.profile_type, profile.profile_type),
         "confidence": profile.confidence,
         "summary": profile.summary,
         "version": profile.version,
@@ -57,6 +61,8 @@ def get_my_profile(
         "dimension_scores": [
             {
                 "dimension_key": s.dimension_key,
+                "label": profile_service.DIMENSION_DEFINITIONS.get(
+                    s.dimension_key, {}).get("label", s.dimension_key),
                 "score": s.score,
                 "explanation": s.explanation,
             }
@@ -78,6 +84,8 @@ def get_my_dimensions(
     return ApiResponse(data=[
         {
             "dimension_key": s.dimension_key,
+            "label": profile_service.DIMENSION_DEFINITIONS.get(
+                s.dimension_key, {}).get("label", s.dimension_key),
             "score": s.score,
             "explanation": s.explanation,
         }

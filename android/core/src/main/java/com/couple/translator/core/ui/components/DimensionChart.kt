@@ -22,7 +22,9 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.couple.translator.core.ui.theme.AppIsDark
+import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppTextTertiary
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
@@ -35,8 +37,9 @@ import kotlin.math.PI
 fun DimensionRadarChart(
     dimensions: List<Triple<String, String, Float>>,
     modifier: Modifier = Modifier,
-    accentColor: Color = if (AppIsDark) Color(0xFF9E8CFF) else Color(0xFF6C5CE7),
-    gridColor: Color = if (AppIsDark) Color(0xFF3A3A3C) else Color(0xFFE0E0E0),
+    // 2026-09-28 去AI味 P-1：紫色是色板外的历史遗留，统一回品牌 accent。
+    accentColor: Color = AppAccent,
+    gridColor: Color = AppBorderLight,
 ) {
     val animProgress = remember { Animatable(0f) }
     LaunchedEffect(dimensions) {
@@ -46,8 +49,7 @@ fun DimensionRadarChart(
 
     val density = LocalDensity.current
     val textSizePx = with(density) { 11.sp.toPx() }
-    val labelColor = if (AppIsDark) android.graphics.Color.parseColor("#9A9A9E")
-    else android.graphics.Color.parseColor("#888888")
+    val labelColor = AppTextTertiary.toArgb()
     val accentArgb = accentColor.toArgb()
 
     Box(modifier = modifier.fillMaxWidth()) {

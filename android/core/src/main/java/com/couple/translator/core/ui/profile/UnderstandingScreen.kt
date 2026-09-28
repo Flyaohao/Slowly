@@ -1,16 +1,21 @@
 package com.couple.translator.core.ui.profile
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Quiz
 import androidx.compose.material.icons.outlined.Restore
@@ -20,22 +25,40 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.ProfileDto
 import com.couple.translator.core.navigation.Screen
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppInfoBanner
 import com.couple.translator.core.ui.components.AppListItem
 import com.couple.translator.core.ui.components.AppListItemDivider
 import com.couple.translator.core.ui.components.AppPageHeader
+import com.couple.translator.core.ui.components.AppRingProgress
+import com.couple.translator.core.ui.components.AppScoreBar
+import com.couple.translator.core.ui.components.AppTag
+import com.couple.translator.core.ui.components.DimensionRadarChart
 import com.couple.translator.core.ui.components.SectionTitle
+import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppSpacing
+import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
+import com.couple.translator.core.ui.theme.AppTextTertiary
 import kotlin.math.roundToInt
+
+/** 后端 profile_type_label 缺失时的客户端兜底（与 profile_service.PROFILE_TYPE_LABELS 对齐）。 */
+internal val profileTypeNames = mapOf(
+    "secure" to "安全型依恋",
+    "anxious" to "焦虑依恋型",
+    "dismissive" to "疏离回避型",
+    "fearful" to "恐惧回避型",
+    "mixed" to "混合型依恋",
+)
 
 /**
  * 「人格画像」（契约 §3.2 画像三合一，W4.3）。
@@ -71,9 +94,12 @@ fun UnderstandingScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
         ) {
-            AppPageHeader(
-                title = "人格画像",
-                subtitle = "画像来自你的问卷作答与你们的互动。这里能看到依据，也能纠正。",
+            AppPageHeader(title = "人格画像")
+
+            AppInfoBanner(
+                text = "画像来自你的问卷作答与你们的互动。这里能看到依据，也能纠正。",
+                icon = Icons.Outlined.Info,
+                modifier = Modifier.padding(horizontal = AppSpacing.screenH),
             )
 
             if (uiState.error.isNotBlank()) {
@@ -94,18 +120,46 @@ fun UnderstandingScreen(
             ) {
                 val myProfile = uiState.myProfile
                 if (myProfile != null) {
+                    // 类型徽章 + 置信度环 + AI 解读正文 —— 类型与把握程度是
+                    // 这张卡最重要的两个信息，先用图形元素立住，正文退居其次。
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            AppTag(
+                                text = myProfile.profileTypeLabel
+                                    ?: profileTypeNames[myProfile.profileType]
+                                    ?: myProfile.profileType,
+                                leadingIcon = Icons.Outlined.Favorite,
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = myProfile.summary?.takeIf { it.isNotBlank() }
+                                    ?: "完成问卷后，军师会在这里写下对你的理解。",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AppTextSecondary,
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        AppRingProgress(progress = myProfile.confidence) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "${(myProfile.confidence * 100).roundToInt()}%",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppAccent,
+                                )
+                                Text(
+                                    text = "置信度",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = AppTextTertiary,
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = myProfile.summary?.takeIf { it.isNotBlank() }
-                            ?: "完成问卷后，军师会在这里写下对你的理解。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AppTextSecondary,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "置信度 ${(myProfile.confidence * 100).roundToInt()}% · " +
-                            "作答越完整，这个数字越高",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTextSecondary,
+                        text = "作答越完整，这个数字越高",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppTextTertiary,
                     )
                 } else if (!uiState.isLoading) {
                     Text(
@@ -202,27 +256,31 @@ fun UnderstandingScreen(
                         color = AppTextSecondary,
                     )
                 } else {
+                    // 雷达图给「整体形状」，分数条给「逐项细节」——两层数据视角，
+                    // 替代之前整卡纯文字的排法。维度不足 3 个时雷达图画不出来，只上分数条。
+                    if (uiState.dimensions.size >= 3) {
+                        DimensionRadarChart(
+                            dimensions = uiState.dimensions.map { dimension ->
+                                Triple(
+                                    dimension.dimensionKey,
+                                    dimension.label
+                                        ?: dimensionNames[dimension.dimensionKey]
+                                        ?: dimension.dimensionKey,
+                                    dimension.score,
+                                )
+                            },
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
                     Text(
                         text = "军师的每个判断都来自下面这些维度，分数与解读一一对应：",
                         style = MaterialTheme.typography.bodySmall,
                         color = AppTextSecondary,
-                        modifier = Modifier.padding(bottom = 8.dp),
+                        modifier = Modifier.padding(bottom = 4.dp),
                     )
                     uiState.dimensions.forEachIndexed { index, dimension ->
                         if (index > 0) AppListItemDivider()
-                        val name = dimensionNames[dimension.dimensionKey] ?: dimension.dimensionKey
-                        val scoreText = if (dimension.score == dimension.score.toInt().toFloat()) {
-                            "${dimension.score.toInt()} 分"
-                        } else {
-                            "${dimension.score} 分"
-                        }
-                        AppListItem(
-                            title = name,
-                            subtitle = dimension.explanation?.takeIf { it.isNotBlank() }
-                                ?: "暂无更多解读",
-                            trailingText = scoreText,
-                            tileColor = Color.Transparent,
-                        )
+                        DimensionScoreRow(dimension)
                     }
                 }
             }
@@ -302,6 +360,59 @@ fun UnderstandingScreen(
             }
 
             Spacer(modifier = Modifier.height(AppSpacing.block))
+        }
+    }
+}
+
+/**
+ * 「判断来自哪里」的维度行：名称 + 分数 + 分数条 + 整行解读。
+ *
+ * 不用 AppListItem——它的 subtitle 是单行省略，解读文字会被截断；
+ * 这里解读整行展示，分数条替代「行尾一个孤零零的数字」。
+ * 分数条口径 0-100（与后端 bands 一致）；存量旧量纲数据只影响条的相对长度，
+ * 数字仍原样展示，不掩盖原始值。
+ */
+@Composable
+private fun DimensionScoreRow(dimension: ProfileDto.DimensionScoreResponse) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = dimension.label
+                    ?: dimensionNames[dimension.dimensionKey]
+                    ?: dimension.dimensionKey,
+                style = MaterialTheme.typography.titleSmall,
+                color = AppTextPrimary,
+            )
+            val scoreText = if (dimension.score == dimension.score.toInt().toFloat()) {
+                "${dimension.score.toInt()} 分"
+            } else {
+                "${dimension.score} 分"
+            }
+            Text(
+                text = scoreText,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = AppAccent,
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        AppScoreBar(score = dimension.score)
+        val explanation = dimension.explanation?.takeIf { it.isNotBlank() }
+        if (explanation != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = explanation,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTextTertiary,
+            )
         }
     }
 }

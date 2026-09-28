@@ -10,6 +10,7 @@ object ProfileDto {
         @Json(name = "id") val id: Long,
         @Json(name = "user_id") val userId: Long,
         @Json(name = "profile_type") val profileType: String,
+        @Json(name = "profile_type_label") val profileTypeLabel: String? = null,
         @Json(name = "confidence") val confidence: Float = 0f,
         @Json(name = "summary") val summary: String? = null,
         @Json(name = "version") val version: Int = 1,
@@ -20,6 +21,7 @@ object ProfileDto {
     data class DimensionScoreResponse(
         @Json(name = "id") val id: Long = 0,
         @Json(name = "dimension_key") val dimensionKey: String,
+        @Json(name = "label") val label: String? = null,
         @Json(name = "score") val score: Float = 0f,
         @Json(name = "explanation") val explanation: String? = null,
     )
