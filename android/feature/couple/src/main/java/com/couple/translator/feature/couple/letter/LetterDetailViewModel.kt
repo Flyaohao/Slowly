@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.couple.translator.core.service.AiStreamKeepAlive
 import com.couple.translator.feature.couple.data.model.LetterDto
 import com.couple.translator.feature.couple.data.repository.LetterRepository
+import com.couple.translator.core.data.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -49,9 +50,27 @@ data class LetterDetailUiState(
     val reply: ReplySuggestion? = null,
     val replyError: String = "",
     val showReply: Boolean = false,
+
+    /**
+     * 当前登录用户 id（2026-09-29 新增）。
+     * 用来判断这封信是不是「我写的」——自己写的信不该出现「回应 / AI 建议怎么回」
+     * 这类只有收信人才需要的入口（此前 A 打开自己发出的信，整页都在引导他回信）。
+     */
+    val currentUserId: Long? = null,
 ) {
     /** 解读结果是否已经拿到了结构化字段（决定渲染要点卡片还是纯正文）。 */
     val hasStructured: Boolean get() = understanding != null
+
+    /**
+     * 这封信是我发出的吗？
+     * null = 尚未取到 currentUserId 或信件未加载，此时按「不确定」处理（保守隐藏回信入口）。
+     */
+    val isMine: Boolean?
+        get() {
+            val me = currentUserId ?: return null
+            val l = letter ?: return null
+            return l.senderId == me
+        }
 }
 
 /** AI 回信建议：几个可以直接用的版本 + 一句「别这么说」。 */
@@ -72,12 +91,24 @@ sealed class LetterDetailUiEvent {
 @HiltViewModel
 class LetterDetailViewModel @Inject constructor(
     private val letterRepository: LetterRepository,
+    private val userRepository: UserRepository,
     // 保活服务要用 applicationContext 启动，不能拿 Activity 的 context
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LetterDetailUiState())
     val uiState: StateFlow<LetterDetailUiState> = _uiState.asStateFlow()
+
+    init {
+        // 拉一次当前用户 id：用来分辨这封信是不是「我写的」，
+        // 决定要不要出现「回应 / AI 建议怎么回」。失败保持 null，UI 保守隐藏回信入口。
+        viewModelScope.launch {
+            val me = runCatching { userRepository.getCurrentUser().getOrNull()?.userId }.getOrNull()
+            if (me != null) {
+                _uiState.update { it.copy(currentUserId = me) }
+            }
+        }
+    }
 
     private val _event = MutableSharedFlow<LetterDetailUiEvent>()
     val event: SharedFlow<LetterDetailUiEvent> = _event.asSharedFlow()

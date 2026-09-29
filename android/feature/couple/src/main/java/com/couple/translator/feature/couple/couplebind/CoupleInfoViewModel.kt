@@ -149,7 +149,12 @@ class CoupleInfoViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(isLoading = false, unbindMessage = "解绑完成")
                     }
-                    coupleStateManager.refresh()
+                    // 🔴 2026-09-29 修复：此处原先只调 refresh()，但解绑完成后
+                    // /couples/me 会返回 30005（关系已失效），refresh() 的 catch 分支
+                    // 是「保持当前模式」，于是用户解绑后仍停在情侣壳里——假解绑。
+                    // clearCouple() 明确把模式置为未绑定，NavGraph 的 Main 目的地
+                    // 随之渲染强制绑定页，用户被引导去重新绑定。
+                    coupleStateManager.clearCouple()
                     loadCoupleInfo(silent = true)
                 },
                 onFailure = { error ->

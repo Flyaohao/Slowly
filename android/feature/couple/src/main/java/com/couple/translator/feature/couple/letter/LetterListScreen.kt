@@ -76,8 +76,6 @@ import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
 import com.couple.translator.feature.couple.data.model.LetterDto
 
-private val diaryTabs = listOf("全部", "本周", "本月", "收藏")
-
 /**
  * couple 模式可见的信件分类 tab（纯数据，供导航可达性测试直接断言「无未来/私密」）。
  *
@@ -91,13 +89,13 @@ fun visibleCoupleTabs(): List<String> = listOf("全部", "收到", "发出", "�
 fun LetterListScreen(
     onNavigateBack: () -> Unit,
     onNavigateToLetterDetail: (Long) -> Unit,
-    isCoupleMode: Boolean = true,
     // 默认空实现：根图旧注册点暂不传也不会编译错；接线后右下角 FAB 才有去处
     onNavigateToCompose: () -> Unit = {},
     viewModel: LetterListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val tabs = if (isCoupleMode) visibleCoupleTabs() else diaryTabs
+    // 2026-09-29：单身模式删除后本页恒为「信件」列表（原「全部观点」分支已移除）。
+    val tabs = visibleCoupleTabs()
     val safeTabIndex = uiState.selectedTab.coerceIn(0, tabs.size - 1)
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
@@ -138,7 +136,7 @@ fun LetterListScreen(
                 title = if (uiState.isSelectionMode) {
                     "已选 ${uiState.selectedIds.size} 项"
                 } else {
-                    if (isCoupleMode) "全部信件" else "全部观点"
+                    "全部信件"
                 },
                 trailing = {
                     if (uiState.isSelectionMode) {
@@ -205,8 +203,8 @@ fun LetterListScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             AppEmptyState(
-                                icon = if (isCoupleMode) Icons.Outlined.MailOutline else Icons.Outlined.Edit,
-                                title = if (isCoupleMode) "还没有信件" else "还没有观点",
+                                icon = Icons.Outlined.MailOutline,
+                                title = "还没有信件",
                                 subtitle = "点击右下角按钮写一封吧",
                             )
                         }
@@ -222,7 +220,7 @@ fun LetterListScreen(
                             items(uiState.letters, key = { it.id }) { letter ->
                                 LetterListItem(
                                     letter = letter,
-                                    isCoupleMode = isCoupleMode,
+                                    currentUserId = uiState.currentUserId,
                                     isSelectionMode = uiState.isSelectionMode,
                                     isSelected = uiState.selectedIds.contains(letter.id),
                                     onClick = {
@@ -284,7 +282,7 @@ private fun ScrollableTabRow(
 @Composable
 private fun LetterListItem(
     letter: LetterDto.LetterResponse,
-    isCoupleMode: Boolean,
+    currentUserId: Long?,
     isSelectionMode: Boolean,
     isSelected: Boolean,
     onClick: () -> Unit,
@@ -292,6 +290,9 @@ private fun LetterListItem(
 ) {
     val bgColor = if (isSelected) AppAccentLight else AppSurface
     val borderColor = if (isSelected) AppAccent else AppBorderLight
+
+    // 方向判定（2026-09-29）：currentUserId 未取到时不猜，保持不显示方向徽章。
+    val isMine: Boolean? = currentUserId?.let { letter.senderId == it }
 
     AppCard(
         modifier = Modifier
@@ -362,10 +363,15 @@ private fun LetterListItem(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (isCoupleMode) {
-                            // Couple mode: show letter type
-                            TypeBadge(letterTypeName(letter.letterType))
+                        // 方向徽章（首要信息）：一眼分清「TA 写给我的」与「我发出的」。
+                        // 草稿单独成类，不标方向。
+                        when {
+                            letter.status == "draft" -> Unit
+                            isMine == true -> TypeBadge("我发出的", color = AppTextSecondary)
+                            isMine == false -> TypeBadge("来自 TA", color = AppAccent)
                         }
+                        // 2026-09-29：本页恒为信件列表，信类型徽章常显。
+                        TypeBadge(letterTypeName(letter.letterType))
                         // Status badge (draft)
                         if (letter.status == "draft") {
                             TypeBadge("草稿", color = AppTextTertiary)

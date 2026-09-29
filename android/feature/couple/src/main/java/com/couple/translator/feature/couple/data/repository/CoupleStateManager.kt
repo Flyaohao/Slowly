@@ -135,6 +135,27 @@ class CoupleStateManager @Inject constructor(
         }
     }
 
+    /**
+     * 登录成功后立即用登录响应写入的 mode 落态（2026-09-29 修复）。
+     *
+     * 修的 BUG：A 登出后（clearCouple → mode=SINGLE）在同一进程内用 B 登录，
+     * 登录只把 mode 写进了本地缓存（AuthRepository.login → saveLastMode），
+     * 没有更新本单例的内存态；而 NavGraph 的 refresh() 只在首次组合时跑一次，
+     * 登录跳 Main 时不重跑 → Main 首帧读到残留的 SINGLE → 已绑定的 B 被
+     * 判成未绑定、落到强制绑定页，只有杀进程冷启动才自愈。
+     *
+     * 在跳转 Main 之前调用本方法，用刚写入缓存的 mode 同步落态，
+     * 首帧即正确。network refresh() 仍会在壳层 ON_RESUME 后纠正误差。
+     *
+     * @return true 表示成功从缓存取到 mode 并落态
+     */
+    suspend fun adoptLoginMode(): Boolean {
+        val cached = AppMode.fromStorage(tokenStore.getLastMode()) ?: return false
+        modeResolved = true
+        _state.update { it.copy(mode = cached, isLoading = false) }
+        return true
+    }
+
     /** 首次刷新前用上次成功的模式垫底（登录响应写入或上次 /couples/me 成功时写入） */
     private suspend fun seedModeFromCache() {
         val cached = AppMode.fromStorage(tokenStore.getLastMode()) ?: return

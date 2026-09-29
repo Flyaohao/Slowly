@@ -67,6 +67,12 @@ fun LetterUnderstandingCard(
     isStructuring: Boolean = false,
     thinkingSeconds: Int = 0,
     status: String = "",
+    /**
+     * 是否展示「回信建议」分组（2026-09-29）。
+     * 只有收信人才需要知道怎么回；自己写的信展示它属于语义错位，由调用方按
+     * 信件方向传入。默认 true 以兼容既有调用点。
+     */
+    showReplySuggestions: Boolean = true,
 ) {
     val badge: Pair<String, Color>? = when {
         isThinking -> "深度思考中" to AppAccent
@@ -125,7 +131,7 @@ fun LetterUnderstandingCard(
                         textSizeSp = 14f,
                     )
                     // 只在真的要渲染要点时才画分隔线，否则正文下面会挂一条孤零零的线
-                    if (understanding.hasAnySection()) {
+                    if (understanding.hasAnySection(showReplySuggestions)) {
                         Spacer(modifier = Modifier.height(12.dp))
                         AppDivider()
                         Spacer(modifier = Modifier.height(12.dp))
@@ -133,7 +139,7 @@ fun LetterUnderstandingCard(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
-                UnderstandingSections(understanding)
+                UnderstandingSections(understanding, showReplySuggestions)
             }
 
             // 正文还在流：逐字显示
@@ -160,12 +166,12 @@ fun LetterUnderstandingCard(
  * 用来决定正文与要点之间要不要画那条分隔线：模型偶尔会整段 JSON 都没吐出
  * （被截断或格式跑偏），这时只有正文可看，多一条线就显得莫名其妙。
  */
-private fun LetterDto.LetterUnderstanding.hasAnySection(): Boolean =
+private fun LetterDto.LetterUnderstanding.hasAnySection(showReplySuggestions: Boolean): Boolean =
     emotion.isNotEmpty() ||
         keyConcerns.isNotEmpty() ||
         expectedResponse.isNotEmpty() ||
         misunderstandable.isNotEmpty() ||
-        replySuggestions.isNotEmpty()
+        (showReplySuggestions && replySuggestions.isNotEmpty())
 
 @Composable
 private fun SectionLabel(text: String) {
@@ -177,7 +183,10 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun UnderstandingSections(understanding: LetterDto.LetterUnderstanding) {
+private fun UnderstandingSections(
+    understanding: LetterDto.LetterUnderstanding,
+    showReplySuggestions: Boolean = true,
+) {
     if (understanding.emotion.isNotEmpty()) {
         SectionItem(label = "对方情绪", value = understanding.emotion)
     }
@@ -226,7 +235,7 @@ private fun UnderstandingSections(understanding: LetterDto.LetterUnderstanding) 
         Spacer(modifier = Modifier.height(8.dp))
     }
 
-    if (understanding.replySuggestions.isNotEmpty()) {
+    if (showReplySuggestions && understanding.replySuggestions.isNotEmpty()) {
         Text(
             text = "回信建议",
             style = MaterialTheme.typography.labelMedium,

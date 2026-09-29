@@ -206,6 +206,17 @@ fun LetterDetailScreen(
                     color = AppAccent,
                 )
                 Spacer(modifier = Modifier.width(12.dp))
+                // 身份提示（2026-09-29）：一眼看清这封是我写的还是 TA 写给我的。
+                // 此前详情页对两者一视同仁，A 打开自己发出的信会看到「回应」「怎么回这封信」，
+                // 整页都在引导他回自己的信 —— 这是用户反馈「A 也来回信」的直接来源。
+                if (uiState.isMine != null) {
+                    Text(
+                        text = if (uiState.isMine == true) "我发出的" else "来自 TA",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (uiState.isMine == true) AppTextSecondary else AppAccent,
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
                 Text(
                     text = letter.createdAt ?: "",
                     style = MaterialTheme.typography.labelMedium,
@@ -248,10 +259,14 @@ fun LetterDetailScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             Row {
-                TextButton(onClick = { onNavigateToComposeReply(letter.id) }) {
-                    Text("回应", color = AppAccent)
+                // 「回应」只对收信人成立（2026-09-29）。自己写的信不出现回信入口，
+                // 否则 A 打开自己发出的信，会被引导去回自己的信。
+                if (uiState.isMine == false) {
+                    TextButton(onClick = { onNavigateToComposeReply(letter.id) }) {
+                        Text("回应", color = AppAccent)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
-                Spacer(modifier = Modifier.width(8.dp))
                 // 同一个按钮承担「开始」和「停止」两种语义：生成中它变成停止入口，
                 // 否则用户找不到中止的地方（旧版这里是禁用的「AI 理解中...」）。
                 TextButton(onClick = { viewModel.understandLetter() }) {
@@ -264,14 +279,27 @@ fun LetterDetailScreen(
                         color = AppAccent,
                     )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                // 读懂来信之后自然要多一步：这封该怎么回。接口一直有，此前没有入口。
-                TextButton(onClick = { viewModel.generateReply() }) {
-                    Text(
-                        text = if (uiState.isReplyLoading) "正在想…" else "AI 建议怎么回",
-                        color = AppAccent,
-                    )
+                // 「AI 建议怎么回」同样是收信人专属。
+                if (uiState.isMine == false) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    // 读懂来信之后自然要多一步：这封该怎么回。接口一直有，此前没有入口。
+                    TextButton(onClick = { viewModel.generateReply() }) {
+                        Text(
+                            text = if (uiState.isReplyLoading) "正在想…" else "AI 建议怎么回",
+                            color = AppAccent,
+                        )
+                    }
                 }
+            }
+
+            // 自己写的信：给一句状态说明，替代被移除的回信入口，避免用户以为功能缺失。
+            if (uiState.isMine == true) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "这是你发出的信，等 TA 的回应。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextTertiary,
+                )
             }
 
             if (uiState.showReply) {
@@ -295,6 +323,8 @@ fun LetterDetailScreen(
                     isStructuring = uiState.isStructuring,
                     thinkingSeconds = uiState.thinkingSeconds,
                     status = uiState.understandingStatus,
+                    // 自己写的信不展示「回信建议」分组：那是收信人才需要的
+                    showReplySuggestions = uiState.isMine != true,
                     onDismiss = { viewModel.dismissUnderstanding() },
                 )
             }

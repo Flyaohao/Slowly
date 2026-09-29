@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.couple.translator.feature.couple.data.model.LetterDto
 import com.couple.translator.feature.couple.data.repository.LetterRepository
+import com.couple.translator.core.data.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -26,15 +27,33 @@ data class LetterListUiState(
     val selectedIds: Set<Long> = emptySet(),
     val isDeleting: Boolean = false,
     val error: String = "",
+    /**
+     * 当前登录用户 id（2026-09-29 新增）。
+     * 「全部」tab 后端返回的是 sender OR receiver 的混排列表，前端必须靠它
+     * 区分「我写的」与「TA 写给我的」——否则自己发的信会被误当成来信。
+     * null = 还没取到（此时列表不显示方向标识，降级而非猜错）。
+     */
+    val currentUserId: Long? = null,
 )
 
 @HiltViewModel
 class LetterListViewModel @Inject constructor(
     private val letterRepository: LetterRepository,
+    private val userRepository: UserRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LetterListUiState())
     val uiState: StateFlow<LetterListUiState> = _uiState.asStateFlow()
+
+    init {
+        // 拉一次当前用户 id（与首页同法）；失败保持 null，UI 降级为不显示方向标识
+        viewModelScope.launch {
+            val me = runCatching { userRepository.getCurrentUser().getOrNull()?.userId }.getOrNull()
+            if (me != null) {
+                _uiState.update { it.copy(currentUserId = me) }
+            }
+        }
+    }
 
     fun selectTab(index: Int) {
         _uiState.update { it.copy(selectedTab = index) }

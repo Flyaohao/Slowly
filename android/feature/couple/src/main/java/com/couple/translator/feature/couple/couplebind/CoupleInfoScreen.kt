@@ -49,6 +49,8 @@ import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.feature.couple.data.repository.AppMode
 import com.couple.translator.feature.couple.data.repository.CoupleStateManager
+import com.couple.translator.feature.couple.navigation.ShellLandingHolder
+import com.couple.translator.feature.couple.navigation.ShellPage
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
@@ -237,7 +239,13 @@ fun CoupleInfoScreen(
                     // Navigate to main space button
                     AppAccentButton(
                         text = "进入我们的空间",
-                        onClick = { viewModel.navigateToMain() },
+                        onClick = {
+                            // 2026-09-29：先请求壳层精确落到「我们的空间」页，再回 Main。
+                            // 壳层的 pager 会保留上次停留的 tab，光靠 navigate(Main)
+                            // 可能落在军师页——与按钮文案不符。
+                            ShellLandingHolder.request(ShellPage.Home)
+                            viewModel.navigateToMain()
+                        },
                     )
 
                     Spacer(modifier = Modifier.weight(1f))
