@@ -65,7 +65,6 @@ fun ComposeLetterScreen(
     draftId: Long? = null,
     onNavigateBack: () -> Unit,
     onLetterSent: () -> Unit,
-    isCoupleMode: Boolean = true,
     // 从别处带入的预填正文（默认空 = 不预填，根图旧注册点无需改动即可编译）
     content: String = "",
     viewModel: ComposeLetterViewModel = hiltViewModel(),
@@ -107,59 +106,36 @@ fun ComposeLetterScreen(
     }
 
     // Send confirmation dialog
+    // 2026-09-29：单身模式删除后本页只对情侣用户可达，原「未绑定不能发送」分支已移除。
     if (showSendConfirm) {
-        if (!isCoupleMode) {
-            // Single mode: can't send
-            AlertDialog(
-                onDismissRequest = { showSendConfirm = false },
-                title = { Text("无法发送") },
-                text = {
-                    Column {
-                        Text("你还没有绑定情侣关系，暂时无法发送信件。")
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "信件已保存为草稿，绑定情侣后可以发送。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppTextTertiary,
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showSendConfirm = false }) {
-                        Text("知道了")
-                    }
-                },
-            )
-        } else {
-            AlertDialog(
-                onDismissRequest = { showSendConfirm = false },
-                title = { Text("确认发送") },
-                text = {
-                    Column {
-                        Text("确定要发送这封信吗？")
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "发送后将无法编辑或撤回",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppTextTertiary,
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showSendConfirm = false
-                        viewModel.sendLetter()
-                    }) {
-                        Text("发送", color = AppAccent)
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showSendConfirm = false }) {
-                        Text("取消")
-                    }
-                },
-            )
-        }
+        AlertDialog(
+            onDismissRequest = { showSendConfirm = false },
+            title = { Text("确认发送") },
+            text = {
+                Column {
+                    Text("确定要发送这封信吗？")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "发送后将无法编辑或撤回",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextTertiary,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSendConfirm = false
+                    viewModel.sendLetter()
+                }) {
+                    Text("发送", color = AppAccent)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSendConfirm = false }) {
+                    Text("取消")
+                }
+            },
+        )
     }
 
     // Template selection dialog
@@ -201,8 +177,7 @@ fun ComposeLetterScreen(
                 title = when {
                     uiState.isSending -> "发送中..."
                     uiState.isSaving -> "保存中..."
-                    isCoupleMode -> "写信"
-                    else -> "写观点"
+                    else -> "写信"
                 },
                 subtitle = if (uiState.letterId != null && !uiState.isSaving && !uiState.isSending) {
                     "草稿已自动保存"
@@ -210,29 +185,17 @@ fun ComposeLetterScreen(
                     null
                 },
                 trailing = {
-                    if (isCoupleMode) {
-                        AppTopBarAction(
-                            icon = Icons.Filled.Send,
-                            contentDescription = "发送",
-                            tint = if (uiState.content.isNotBlank() && !uiState.isSending) AppAccent else AppTextSecondary,
-                            onClick = {
-                                if (!uiState.isSending && !uiState.isSaving && uiState.content.isNotBlank()) {
-                                    showSendConfirm = true
-                                }
-                            },
-                        )
-                    } else {
-                        AppLinkText(
-                            label = if (uiState.isSaving) "保存中..." else "保存",
-                            color = if (uiState.isSaving) AppTextSecondary else AppAccent,
-                            onClick = {
-                                if (!uiState.isSaving && uiState.content.isNotBlank()) {
-                                    viewModel.saveDraft()
-                                    onNavigateBack()
-                                }
-                            },
-                        )
-                    }
+                    // 2026-09-29：单身模式删除后恒为「写信」，原「写观点」保存分支已移除。
+                    AppTopBarAction(
+                        icon = Icons.Filled.Send,
+                        contentDescription = "发送",
+                        tint = if (uiState.content.isNotBlank() && !uiState.isSending) AppAccent else AppTextSecondary,
+                        onClick = {
+                            if (!uiState.isSending && !uiState.isSaving && uiState.content.isNotBlank()) {
+                                showSendConfirm = true
+                            }
+                        },
+                    )
                 },
             )
         },
@@ -244,7 +207,6 @@ fun ComposeLetterScreen(
                 onTemplate = { showTemplates = true },
                 currentType = uiState.letterType,
                 isRewriting = uiState.isRewriting,
-                isCoupleMode = isCoupleMode,
             )
         },
     ) { padding ->
@@ -289,7 +251,7 @@ fun ComposeLetterScreen(
                 onValueChange = { viewModel.onContentChange(it) },
                 placeholder = {
                     Text(
-                        if (isCoupleMode) "写下你想说的话..." else "写下此刻的心情...",
+                        "写下你想说的话...",
                         color = AppTextSecondary,
                         style = MaterialTheme.typography.bodyLarge,
                     )
@@ -337,13 +299,7 @@ private fun ComposeBottomBar(
     onTemplate: () -> Unit,
     currentType: String,
     isRewriting: Boolean,
-    isCoupleMode: Boolean = true,
 ) {
-    if (!isCoupleMode) {
-        // Single mode (diary): no bottom bar
-        return
-    }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()

@@ -102,11 +102,6 @@ fun DiaryDetailScreen(
     diaryId: Long,
     onNavigateBack: () -> Unit,
     onNavigateToEdit: (Long) -> Unit = {},
-    /**
-     * 是否处于情侣模式。「计入军师记忆」只在情侣模式出现——军师记忆以关系为单位
-     * （`ai_memory.relation_id` 是非空外键），单身本来就没有军师。
-     */
-    isCoupleMode: Boolean = false,
     viewModel: DiaryDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -230,9 +225,9 @@ fun DiaryDetailScreen(
                             MarkdownContent(content = diary.content)
 
                             // 深度解读 → 两个开关（计入画像 / 计入记忆）
+                            // 2026-09-29：isCoupleMode 已从本页摘除（恒为情侣模式）。
                             ViewpointAnalysisSection(
                                 uiState = uiState,
-                                isCoupleMode = isCoupleMode,
                                 onAnalyze = { viewModel.analyzeViewpoint() },
                                 onLinkProfile = { viewModel.linkProfile() },
                                 onUnlinkProfile = { viewModel.unlinkProfile() },
@@ -286,7 +281,6 @@ fun DiaryDetailScreen(
 @Composable
 private fun ViewpointAnalysisSection(
     uiState: DiaryDetailUiState,
-    isCoupleMode: Boolean,
     onAnalyze: () -> Unit,
     onLinkProfile: () -> Unit,
     onUnlinkProfile: () -> Unit,
@@ -452,29 +446,20 @@ private fun ViewpointAnalysisSection(
                 onCheckedChange = { want -> if (want) onLinkProfile() else onUnlinkProfile() },
             )
 
-            if (isCoupleMode) {
-                Spacer(modifier = Modifier.height(16.dp))
-                ToggleRow(
-                    title = "计入军师记忆",
-                    desc = if (uiState.memoryLinked) {
-                        "军师已经记住了，仅你可见，可在「记忆」页删除。"
-                    } else {
-                        "让军师以后在对话里记得这件事（仅你可见）。"
-                    },
-                    checked = uiState.memoryLinked,
-                    busy = uiState.isTogglingMemory,
-                    onCheckedChange = { want -> if (want) onLinkMemory() else onUnlinkMemory() },
-                )
-            } else {
-                // 单身模式没有军师记忆（记忆以关系为单位），这里说清边界而不是
-                // 给一个点了会报错的开关
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "绑定情侣关系后军师才有长期记忆；个人画像不受影响。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppTextTertiary,
-                )
-            }
+            // 2026-09-29：单身模式删除后本页只对情侣用户可达（观点是情侣抽屉功能），
+            // 原 isCoupleMode 门控恒为真，已摘除；「不计入记忆」的边界文案不再需要。
+            Spacer(modifier = Modifier.height(16.dp))
+            ToggleRow(
+                title = "计入军师记忆",
+                desc = if (uiState.memoryLinked) {
+                    "军师已经记住了，仅你可见，可在「记忆」页删除。"
+                } else {
+                    "让军师以后在对话里记得这件事（仅你可见）。"
+                },
+                checked = uiState.memoryLinked,
+                busy = uiState.isTogglingMemory,
+                onCheckedChange = { want -> if (want) onLinkMemory() else onUnlinkMemory() },
+            )
         }
 
         uiState.analysisError?.let { msg ->

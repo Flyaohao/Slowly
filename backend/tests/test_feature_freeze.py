@@ -3,11 +3,14 @@
 
 ## 覆盖什么
 
-`app.core.features.FEATURE_FLAGS` 八个开关（全部 False = 冻结）逐一打真实
-路由，断言 **HTTP 200 + {code:10006, message:"该功能已停用"}**：
+`app.core.features.FEATURE_FLAGS` 各开关（除已解冻的 wishlists 外全部 False = 冻结）
+逐一打真实路由，断言 **HTTP 200 + {code:10006, message:"该功能已停用"}**：
 
-    museum / wishlists / presence / self_practices / practices
-    / practice_summary / memory_card / avatar_appearance
+    museum / presence / practices / practice_summary
+    / memory_card / avatar_appearance
+
+注：`self_practices` 已于 2026-09-29 随单身模式整体删除（路由、模型、服务均已物理移除），
+其开关仍留在 FEATURE_FLAGS 中但已无路由可守——本测试不再探它。
 
 同时断言：
 
@@ -30,6 +33,10 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.dirname(HERE)
 sys.path.insert(0, BACKEND_DIR)
+
+#: 2026-09-29：self_practices 随单身模式删除，仅剩开关名、无路由可守，
+#: 因此不再进「冻结端点 10006」用例，也不再参与探活。
+RETIRED_FLAGS = frozenset({"self_practices"})
 
 FAILURES = []
 
@@ -61,7 +68,8 @@ def t_frozen_endpoints_10006():
         cases = [
             ("GET", "/api/v1/couple/museum", None, "museum"),
             ("GET", "/api/v1/couple/presence/feed", None, "presence"),
-            ("GET", "/api/v1/single/self-practices", None, "self_practices"),
+            # 2026-09-29：GET /api/v1/single/self-practices 已随单身模式删除（现为 404），
+            # 不再属于「冻结端点」——冻结前提是端点存在。
             ("POST", "/api/v1/couple/ai/memory-card/stream",
              {"target_type": "anniversary", "target_id": 1}, "memory_card"),
             # §1 AI 形象（捏脸）：assets 整端点冻结（不带 token 也是 10006）
@@ -103,14 +111,18 @@ def t_unregistered_feature_fails_fast():
 def t_unfrozen_not_affected():
     from app.core.features import FEATURE_FLAGS
 
-    check("wishlists 已解冻为 True，其余开关仍全为 False",
+    # 2026-09-29：self_practices 已随单身模式删除（无路由可守）——它既不在
+    # 「在册开关」期望集里，也不再要求为 False（等清理期结束后可与开关一并摘除）。
+    expected_active = {
+        "museum", "wishlists", "presence", "practices",
+        "memory_card", "practice_summary", "avatar_appearance",
+    }
+    effective = {k: v for k, v in FEATURE_FLAGS.items() if k not in RETIRED_FLAGS}
+    check("wishlists 已解冻为 True，其余在册开关仍全为 False",
           FEATURE_FLAGS.get("wishlists") is True
-          and all(v is False for k, v in FEATURE_FLAGS.items() if k != "wishlists")
-          and set(FEATURE_FLAGS) == {
-              "museum", "wishlists", "presence", "self_practices",
-              "practices", "memory_card", "practice_summary",
-              "avatar_appearance",
-          },
+          and all(v is False for k, v in effective.items() if k != "wishlists")
+          and set(effective) == expected_active
+          and set(FEATURE_FLAGS) <= expected_active | RETIRED_FLAGS,
           str(FEATURE_FLAGS))
 
     client, app = _client()

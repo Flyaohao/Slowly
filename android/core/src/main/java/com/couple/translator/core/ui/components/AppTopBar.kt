@@ -67,7 +67,6 @@ data class TopBarIdentity(
 fun AppTopBar(
     onOpenDrawer: () -> Unit,
     modifier: Modifier = Modifier,
-    isCoupleMode: Boolean = true,
     identity: TopBarIdentity = TopBarIdentity(),
     trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
@@ -105,18 +104,18 @@ fun AppTopBar(
                 ringColor = background,
                 ringWidth = 1.5.dp,
             )
-            if (isCoupleMode) {
-                AvatarBubble(
-                    url = identity.partnerAvatarUrl,
-                    nickname = identity.partnerNickname,
-                    size = 30.dp,
-                    containerColor = AppWarmLight,
-                    contentColor = AppWarm,
-                    fallbackText = "TA",
-                    ringColor = background,
-                    ringWidth = 1.5.dp,
-                )
-            }
+            // 2026-09-29：单身模式已删除，本栏只会出现在情侣模式外壳里，
+            // 叠头像恒为「我 + TA」两个（原先按 isCoupleMode 二选一）。
+            AvatarBubble(
+                url = identity.partnerAvatarUrl,
+                nickname = identity.partnerNickname,
+                size = 30.dp,
+                containerColor = AppWarmLight,
+                contentColor = AppWarm,
+                fallbackText = "TA",
+                ringColor = background,
+                ringWidth = 1.5.dp,
+            )
         }
 
         Spacer(modifier = Modifier.weight(1f))

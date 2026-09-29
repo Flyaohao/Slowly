@@ -83,7 +83,6 @@ fun SettingsScreen(
     // 军师对话设置（原抽屉「军师设置」，2026-09-28 迁入本页军师模块并更名）
     onNavigateToAdvisorSettings: () -> Unit = {},
     onLogout: () -> Unit,
-    isCoupleMode: Boolean = true,
     themeMode: ThemeMode = ThemeMode.DEFAULT,
     onThemeModeChange: (ThemeMode) -> Unit = {},
     notificationPref: NotificationPrefUiState = NotificationPrefUiState(),
@@ -189,9 +188,9 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 军师设置 —— 仅情侣模式且已绑定关系（决策点④：30005 整组隐藏）。
-            // 单身模式不提供军师是产品红线，isCoupleMode 条件与通知分组保持一致。
-            if (isCoupleMode && distillSwitch.distillAvailable) {
+            // 军师设置 —— 仅已绑定关系时可见（决策点④：30005 整组隐藏）。
+            // 2026-09-29：单身模式删除后本页只有情侣用户能进，原 isCoupleMode 门控已摘除。
+            if (distillSwitch.distillAvailable) {
                 SectionTitle(text = "军师")
                 AppCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -265,54 +264,53 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 通知设置 - 仅情侣模式（通知都是围绕伴侣互动的：收信 / 调解邀请 / 解绑请求）
-            if (isCoupleMode) {
-                SectionTitle(text = "通知")
-                AppCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(0.dp),
-                ) {
-                    Column {
-                        SwitchItem(
-                            icon = Icons.Outlined.MarkEmailRead,
-                            title = "邮件通知",
-                            subtitle = emailNotifySubtitle(notificationPref),
-                            checked = notificationPref.emailNotifyEnabled,
-                            enabled = notificationPref.emailReady && !notificationPref.isLoading,
-                            onCheckedChange = { want ->
-                                haptics.tick()
-                                onEmailNotifyChange(want)
-                            },
-                        )
-                        HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(horizontal = 16.dp))
-                        SettingsItem(
-                            icon = Icons.Outlined.Notifications,
-                            title = "系统通知栏",
-                            subtitle = if (systemNotifyAllowed) {
-                                "已开启，收到信时会弹提醒"
-                            } else {
-                                "未开启，点按前往系统设置里打开"
-                            },
-                            onClick = {
-                                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                runCatching { context.startActivity(intent) }
-                            },
-                        )
-                    }
+            // 通知设置（通知都是围绕伴侣互动的：收信 / 调解邀请 / 解绑请求）
+            // 2026-09-29：单身模式删除后无「仅情侣可见」的语义，门控已摘除。
+            SectionTitle(text = "通知")
+            AppCard(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(0.dp),
+            ) {
+                Column {
+                    SwitchItem(
+                        icon = Icons.Outlined.MarkEmailRead,
+                        title = "邮件通知",
+                        subtitle = emailNotifySubtitle(notificationPref),
+                        checked = notificationPref.emailNotifyEnabled,
+                        enabled = notificationPref.emailReady && !notificationPref.isLoading,
+                        onCheckedChange = { want ->
+                            haptics.tick()
+                            onEmailNotifyChange(want)
+                        },
+                    )
+                    HorizontalDivider(color = AppBorderLight, modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsItem(
+                        icon = Icons.Outlined.Notifications,
+                        title = "系统通知栏",
+                        subtitle = if (systemNotifyAllowed) {
+                            "已开启，收到信时会弹提醒"
+                        } else {
+                            "未开启，点按前往系统设置里打开"
+                        },
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            runCatching { context.startActivity(intent) }
+                        },
+                    )
                 }
-
-                Text(
-                    text = "邮件通知是「App 被关掉也能收到提醒」的唯一通道——" +
-                        "提醒只告诉你有人写了信，不包含信件内容，内容仍然只能在 App 内查看。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppTextTertiary,
-                    modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp),
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
             }
+
+            Text(
+                text = "邮件通知是「App 被关掉也能收到提醒」的唯一通道——" +
+                    "提醒只告诉你有人写了信，不包含信件内容，内容仍然只能在 App 内查看。",
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTextTertiary,
+                modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp),
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
 
             // 关于
             // 整改 §8.8：抽屉里的「账号与设置」指的就是这一页，标题必须一致，

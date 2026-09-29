@@ -96,7 +96,6 @@ internal val dimensionNames = mapOf(
 fun ProfileResultScreen(
     onNavigateBack: () -> Unit,
     onNavigateToCoupleProfile: () -> Unit,
-    isCoupleMode: Boolean = true,
     viewModel: ProfileResultViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -428,12 +427,11 @@ fun ProfileResultScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            if (isCoupleMode) {
-                AppSecondaryButton(
-                    text = "查看情侣组合画像",
-                    onClick = onNavigateToCoupleProfile,
-                )
-            }
+            // 2026-09-29：单身模式删除后本页只对情侣用户可达，原 isCoupleMode 门控已摘除。
+            AppSecondaryButton(
+                text = "查看情侣组合画像",
+                onClick = onNavigateToCoupleProfile,
+            )
 
             Spacer(modifier = Modifier.height(32.dp))
         }

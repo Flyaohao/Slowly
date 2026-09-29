@@ -147,9 +147,11 @@ fun DiaryListScreen(
                         trailing = { ComposeEntryButton(onClick = onNavigateToCompose) },
                     )
                 } else {
+                    // 入口 = 根 NavGraph 的「观点」（抽屉/指南），只从情侣模式进入，
+                    // onNavigateBack 恒非空 → 上面二级页分支已覆盖。此分支保留仅作兜底，
+                    // 且 2026-09-29 起 AppTopBar 恒显示「我 + TA」叠头像。
                     AppTopBar(
                         onOpenDrawer = onOpenDrawer,
-                        isCoupleMode = false,
                         identity = identity,
                         trailing = { ComposeEntryButton(onClick = onNavigateToCompose) },
                     )

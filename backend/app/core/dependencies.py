@@ -43,23 +43,6 @@ def get_current_relation(
     return relation
 
 
-def require_single_mode(
-    current_user=Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """确保用户当前为单身模式"""
-    if current_user.has_couple:
-        relation = couple_repo.get_relation_by_user_including_unbinding(db, current_user.id)
-        if relation and relation.status in ("active", "unbinding"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={"code": 30001, "message": "当前为情侣模式", "data": None},
-            )
-        else:
-            user_repo.update_has_couple(db, current_user.id, False)
-    return current_user
-
-
 def require_couple_mode(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),

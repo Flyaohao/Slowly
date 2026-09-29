@@ -1,7 +1,6 @@
 package com.couple.translator.feature.single.network
 
 import com.couple.translator.feature.single.data.model.DiaryDto
-import com.couple.translator.feature.single.data.model.SelfPracticeDto
 import com.couple.translator.core.network.ApiResponse
 import com.couple.translator.core.network.PagedResponse
 import retrofit2.http.Body
@@ -13,8 +12,11 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
- * 单身模式 API 服务
- * 包含 Diary 等单身模式专属接口
+ * 观点（内部标识仍是 diary）API 服务。
+ *
+ * 2026-09-29：单身模式已删除。本接口类**保留**——「观点」是情侣模式的功能，
+ * 抽屉入口与 GuideScreen 都指向它，路由前缀 `/api/v1/single/diary` 是历史命名，
+ * 后端不校验模式（只用 get_current_user），所以情侣用户正常可用。
  */
 interface SingleApiService {
 
@@ -47,26 +49,6 @@ interface SingleApiService {
     @POST("api/v1/single/diary/batch-delete")
     suspend fun batchDeleteDiaries(@Body body: DiaryDto.BatchDeleteRequest): ApiResponse<DiaryDto.BatchDeleteResponse>
 
-    // Self Practice（单身模式专属 — 路由前缀 /api/v1/single/self-practices）
-    @GET("api/v1/single/self-practices")
-    suspend fun getSelfPractices(): ApiResponse<List<SelfPracticeDto.SelfPracticeResponse>>
-
-    @POST("api/v1/single/self-practices/{id}/start")
-    suspend fun startSelfPractice(@Path("id") practiceId: Long): ApiResponse<SelfPracticeDto.SelfPracticeRecordResponse>
-
-    @POST("api/v1/single/self-practices/records/{rid}/submit")
-    suspend fun submitSelfPractice(
-        @Path("rid") recordId: Long,
-        @Body body: SelfPracticeDto.SubmitSelfPracticeRequest,
-    ): ApiResponse<SelfPracticeDto.SelfPracticeRecordResponse>
-
-    // 后端返回的是分页包装 {total, items:[...]}，不是单条记录
-    @GET("api/v1/single/self-practices/records")
-    suspend fun getSelfPracticeRecords(
-        @Query("page") page: Int = 1,
-        @Query("page_size") pageSize: Int = 20,
-    ): ApiResponse<SelfPracticeDto.SelfPracticeRecordListResponse>
-
-    @GET("api/v1/single/self-practices/records/{rid}")
-    suspend fun getSelfPracticeRecordDetail(@Path("rid") recordId: Long): ApiResponse<SelfPracticeDto.SelfPracticeRecordResponse>
+    // 2026-09-29：Self Practice 的 5 个方法已随单身模式删除（后端 features.py 早已冻结 10006、
+    // 前端入口已注释）。保留 diary 相关方法不受影响。
 }

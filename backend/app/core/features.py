@@ -43,7 +43,9 @@ FEATURE_FLAGS: dict = {
     # 2026-09-27 用户裁决：愿望清单解冻——抽屉新增「愿望」入口，需手动增删改查。
     "wishlists": True,        # §1 愿望清单 5 个
     "presence": False,         # §1 异地陪伴 3 个（meet-date 保留，不挂本依赖）
-    "self_practices": False,  # §1 自我练习 5 个
+    # 2026-09-29：self_practices 开关随单身模式删除——路由/模型/服务已物理移除，
+    # 此名已无端点可守，仅保留占位以防历史调用报未登记错误。
+    "self_practices": False,
     "practices": False,       # §1 关系练习 5 个
     "memory_card": False,     # §1 AI 回忆卡
     "practice_summary": False,  # §1 练习 AI 摘要（随练习模块）

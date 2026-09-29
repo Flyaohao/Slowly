@@ -42,7 +42,6 @@ from app.models.anniversary import Anniversary, Wishlist
 from app.models.avatar import AiAvatar, AiAvatarAsset
 from app.models.diary_entry import DiaryEntry
 from app.models.invite_code import InviteCode
-from app.models.self_practice import SelfPractice, SelfPracticeRecord
 from app.models.email_verification import EmailVerificationCode
 from app.models.presence import PresenceMoment
 from app.models.safety_event import SafetyEvent
@@ -93,8 +92,6 @@ __all__ = [
     "AiAvatarAsset",
     "DiaryEntry",
     "InviteCode",
-    "SelfPractice",
-    "SelfPracticeRecord",
     "EmailVerificationCode",
     "PresenceMoment",
     "SafetyEvent",

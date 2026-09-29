@@ -75,9 +75,9 @@ enum class Screen(val route: String) {
     // 从关系页迁出，收敛为侧边栏「待办」条目 + 独立列表页（角标显示待办数）
     TodoList("todo_list"),
 
-    // 单身模式专属
+    // 观点（内部数据仍是 diary_entry）。2026-09-29 单身模式删除后，
+    // 这三个路由归属情侣模式——抽屉「观点」条目与 GuideScreen 都指向 DiaryList。
     DiaryList("diary_list"),
     DiaryDetail("diary_detail"),
     ComposeDiary("compose_diary"),
-    SelfPracticeList("self_practice_list"),
 }
