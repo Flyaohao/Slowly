@@ -16,7 +16,7 @@ fi
 if [ "${SEED_ON_START:-0}" = "1" ]; then
     # 种子脚本同样做了存在性判断，可重复执行。
     # 失败不阻断启动：线上更应该先让服务起来，再单独补数据。
-    for s in seed_questionnaire seed_ai_scenes seed_knowledge seed_practices seed_self_practices seed_avatar_assets; do
+    for s in seed_questionnaire seed_ai_scenes seed_knowledge seed_practices seed_avatar_assets; do
         echo "[entrypoint] 灌种子数据：$s"
         python "scripts/$s.py" || echo "[entrypoint] $s 执行失败，已跳过"
     done
