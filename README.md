@@ -10,13 +10,16 @@ AI 链路全部接入真实大模型，已容器化部署在线运行。
 军师最重的落地场景是**共同调解室**：矛盾发生时，双方与军师三方同房实时调解，
 谈拢后生成调解书留档——单人对话与双人共同在场，跑在同一套记忆与治理底座上。
 
+产品只有一个身份、一条主链路：**登录后必须绑定情侣才能进入**（未绑定则停在绑定页）。
+进主界面后底栏只有两个一级页——**军师**（默认首屏）与**空间**。
+
 | | 实测值 |
 |---|---|
-| 客户端 | 245 个 Kotlin 文件 / 51,700 行 |
-| 后端 | 237 个 Python 文件 / 38,700 行（含迁移与脚本） |
-| 接口 | 173 个 REST 端点 + SSE 流式 + WebSocket |
-| 数据模型 | 55 个 ORM 模型，37 个 Alembic 迁移，单 head，可从空库一键重建 |
-| 测试 | 79 个后端验证脚本 + 15 个 Android JVM 测试文件 |
+| 客户端 | 238 个 Kotlin 文件 / 50,500 行 |
+| 后端 | 231 个 Python 文件 / 38,400 行（含迁移与脚本） |
+| 接口 | 168 个 REST 端点 + SSE 流式 + WebSocket |
+| 数据模型 | 53 个 ORM 模型，37 个 Alembic 迁移，单 head，可从空库一键重建 |
+| 测试 | 85 个后端验证脚本 + 15 个 Android JVM 测试文件 |
 
 ---
 
@@ -41,6 +44,10 @@ AI 链路全部接入真实大模型，已容器化部署在线运行。
 
 ## 界面速览
 
+| 军师（默认首屏）：结构化建议卡片，各节可展开 | 空间：在一起 N 天页头 + 观察卡 + 共同记录 + 共同时间线 |
+|---|---|
+| <img src="docs/screenshots/01-advisor-home.png" width="280"/> | <img src="docs/screenshots/02-space-hub.png" width="280"/> |
+
 | 共同调解室：吵架后开一间房，双方与军师三方同聊 | 房间内 @军师流式建议，结束后生成调解书留档（和解 + 共同约定） |
 |---|---|
 | <img src="docs/screenshots/07-mediation-room-list.png" width="280"/> | <img src="docs/screenshots/08-mediation-room-advisor.png" width="280"/> |
@@ -49,9 +56,9 @@ AI 链路全部接入真实大模型，已容器化部署在线运行。
 |---|---|
 | <img src="docs/screenshots/09-observation-card.png" width="280"/> | <img src="docs/screenshots/10-observation-detail.png" width="280"/> |
 
-| 军师对话：结构化建议卡片，各节可展开 | 抽屉：全部功能入口，按使用频率排序 |
+| 信箱：写一封信 / 已发出 · 已收到，按方向分列 | 抽屉：全部功能入口，按使用频率排序 |
 |---|---|
-| <img src="docs/screenshots/01-advisor-evidence.png" width="280"/> | <img src="docs/screenshots/11-drawer.png" width="280"/> |
+| <img src="docs/screenshots/06-mailbox.png" width="280"/> | <img src="docs/screenshots/11-drawer.png" width="280"/> |
 
 | 人格画像：依恋类型 + 置信度 + 逐维解读 | 画像治理：记忆入口 / 问卷历史 / 版本回撤 |
 |---|---|
@@ -61,9 +68,9 @@ AI 链路全部接入真实大模型，已容器化部署在线运行。
 |---|---|
 | <img src="docs/screenshots/05-memory-privacy.jpg" width="280"/> | <img src="docs/screenshots/06-letter-ai-assist.jpg" width="280"/> |
 
-| 关系主页：在一起 N 天渐变页头 + 观察卡 + 关系背景 | AI 服务配置：绑定自己的模型 API，Key 加密存储 |
+| AI 服务配置：绑定自己的模型 API，Key 加密存储 | |
 |---|---|
-| <img src="docs/screenshots/02-relation-hub.png" width="280"/> | <img src="docs/screenshots/12-ai-config.png" width="280"/> |
+| <img src="docs/screenshots/12-ai-config.png" width="280"/> | |
 
 ---
 
@@ -73,16 +80,13 @@ AI 链路全部接入真实大模型，已容器化部署在线运行。
 这个 App 做三件事：把对方那句话翻译成他真实的需求，再告诉你此刻回什么话不致于把火拱起来；
 而当火真的拱起来了，**共同调解室**接手——把双方和军师请进同一间房间，把吵架本身谈成一次留档的和解。
 
-两种模式，绑定情侣后无缝切换：
+主界面只有两个一级页：**军师**（默认首屏，AI 对话）+ **空间**（你们走过的记录）。
+关系记录的位置收敛成「空间」一页——在一起天数、军师观察、共同记录（信箱 / 观点 / 纪念日 / 纪念事件）、
+共同时间线；其余功能（共同调解室、人格画像、信箱、愿望、待办……）从侧边抽屉进入。
 
-```
-单身模式（未绑定）              情侣模式（已绑定）
-  首页（我）/ 日记                我们 / 信箱 / 军师
-  问卷、自我练习      ──绑定──▶   双视角、纪念馆、关系练习
-  个人画像、绑定情侣  ◀──和离──   纪念日、愿望清单、AI 形象、共同调解室
-```
-
-「和离」是刻意的设计：单方面解不了绑，必须双方确认，中间留冷静期。
+未绑定情侣的账号不再有独立的「单身壳」：登录 / 注册 / 冷启动三条入口都汇到同一个主目的地，
+未绑定就在这里渲染**强制绑定页**，绑定成功才进主界面。「和离」是刻意的设计：
+单方面解不了绑，必须双方确认，中间留冷静期。
 
 AI 的 **7 个场景**：私人军师、对方翻译、表达改写、冷战开解、信件解读、信件改写、信件回信。
 每个场景一套独立 system prompt + 一个独立的 Pydantic 输出模型。
@@ -97,12 +101,12 @@ flowchart TB
 
     subgraph Android["Android 客户端 · Kotlin + Compose"]
         direction LR
-        SingleUI["单身模式<br/>日记 · 问卷 · 自我练习"]
-        CoupleUI["情侣模式<br/>军师 · 共同调解室 · 信箱 · 画像"]
+        CoupleUI["主界面<br/>军师 · 空间 · 共同调解室 · 信箱 · 画像"]
+        Gate["绑定门槛<br/>未绑定 → 强制绑定页"]
     end
 
     subgraph Backend["FastAPI 后端"]
-        REST["REST API（165 端点）"]
+        REST["REST API（168 端点）"]
         SSE["SSE 流式通道<br/>thinking / delta 双通道"]
         WS["WebSocket 实时事件"]
         AISvc["AI 服务层<br/>场景分流 · 安全过滤 · 落库"]
@@ -125,8 +129,9 @@ flowchart TB
     Chroma[("Chroma<br/>couple_theory / couple_memory<br/>可重建的派生向量索引")]
     DashScope["DashScope（OpenAI 兼容）<br/>qwen-flash / qwen-plus / deepseek-v3"]
 
-    User --> Android
-    Android --> REST & SSE & WS
+    User --> Gate
+    Gate -->|"绑定成功"| CoupleUI
+    CoupleUI --> REST & SSE & WS
     REST --> AISvc
     SSE --> AISvc
     AISvc --> Pre --> Recall --> Budget --> Prompt --> LLM --> DashScope
@@ -234,7 +239,7 @@ flowchart TB
 ## 军师的观察：它主动开口
 
 前面的能力都是「你问，军师才答」。军师的观察是反过来的：**它把最近看到的，主动讲给你听**。
-关系页顶部有一张观察卡——有新内容时高亮 + NEW 角标，底部 tab 同步亮角标；
+空间页顶部有一张观察卡——有新内容时高亮 + NEW 角标，底部 tab 同步亮角标；
 点开卡片看完整建议，NEW 与高亮即时回落；读过之后回归安静态，
 还没有可说的素材时，它显示一句冷启动引导语，不装作有话要说。
 
@@ -245,8 +250,8 @@ V1 版本刻意**零新增模型调用**：观察内容由既有数据拼装—�
 - **已读是服务端状态**：每份观察内容带 md5 签名，「已读」= 把签名写回 `couple_relation`——
   判定在服务端完成，角标跨设备一致，换台手机登录也不会把读过的再看一遍；
 - **壳层只读，进页才算已读**：用户停在军师 tab 时，壳层的后台拉取只为亮角标、**绝不 ack**——
-  「已读」只能发生在真正打开关系页那一刻，push 语义不会因为切个 tab 就被静默消费；
-- **角标是合计口径**：关系 tab 角标 = 新观察 + 待办（调解邀请 / 双视角 / 解绑确认），
+  「已读」只能发生在真正打开空间页那一刻，push 语义不会因为切个 tab 就被静默消费；
+- **角标是合计口径**：空间 tab 角标 = 新观察 + 待办（调解邀请 / 双视角 / 解绑确认），
   一处看清所有「等着你的事」。
 
 V2 事件驱动的独立观察生成已排期：观察将有自己的生成节奏（防抖 + 水位线，与调解书联动），
@@ -336,12 +341,14 @@ AI 的判断错了，用户能纠正，纠正过程本身可追溯。
 
 客户端做过一轮整体翻新，纯样式、零后端改动：
 
-- **主题**：暖白 / 暖黑双底色 + 品牌品红 accent + 渐变语义色（主按钮、关系页「在一起 N 天」大字页头、底栏滑块），
+- **主题**：暖白 / 暖黑双底色 + 品牌品红 accent + 渐变语义色（主按钮、空间页「在一起 N 天」大字页头、底栏滑块），
   Inter 字体四档内嵌（OFL 许可证随源码归档）；
-- **动效与触感**：统一动效系统——根导航 12% 滑入 + fade、结构化卡片展开、关系页数字滚动、信件入场；
+- **动效与触感**：统一动效系统——根导航 12% 滑入 + fade、结构化卡片展开、空间页数字滚动、信件入场；
   触感反馈带总开关，设置页一键闭环；
-- **信息架构**：抽屉按使用频率重排（共同调解室置顶），「军师设置」并入系统设置页与记忆沉淀同卡，
-  个人资料页查看态改为昵称大字 + 签名 + 信息卡。
+- **一级页结构**：底栏收敛为**军师 + 空间**两个 tab，一级页之间手指跟拖横滑；
+  军师页右滑顺势把侧边抽屉「推」出来，返回键只在非军师页拦截；
+- **信息架构**：抽屉按使用频率重排（我们的空间 / 共同调解室置顶），
+  「军师设置」并入系统设置页与记忆沉淀同卡，个人资料页查看态改为昵称大字 + 签名 + 信息卡。
 
 ---
 
@@ -363,12 +370,12 @@ embedding 用 `text-embedding-v4`（1024 维）。用户可在 App 内绑定自�
 
 | 层 | 模块 |
 |----|------|
-| 基础 | 用户认证、个人资料、情侣绑定 / 解绑 |
+| 基础 | 用户认证、个人资料、情侣绑定 / 解绑（绑定是进入主界面的前置门槛） |
 | 画像 | 心理问卷（11 维度）、依恋类型判定、个人画像、情侣组合画像、画像版本化 |
 | AI 军师 | 7 场景对话、混合记忆召回、记忆蒸馏管线、判断依据面板、记忆与隐私管理、军师主动观察（观察卡 + 已读 ack）、用户级 AI 配置（自带 Key，加密落库） |
-| 沟通 | 情侣邮箱（写信 / 收信 / 草稿 / AI 辅助）、各自的看法（单人调解）、共同调解室（双方 + 军师同房） |
-| 沉淀 | 双视角记录、关系纪念馆、关系练习、纪念日、愿望清单、观点（日记） |
-| 体验 | AI 形象（捏脸 / 换装）、远程陪伴、情侣空间首页 |
+| 沟通 | 信箱（写信 / 收信 / 草稿 / AI 辅助）、各自的看法（单人调解）、共同调解室（双方 + 军师同房） |
+| 沉淀 | 双视角记录、关系纪念馆、关系练习、纪念日、愿望清单、观点（内部标识为日记） |
+| 体验 | AI 形象（捏脸 / 换装）、远程陪伴、我们的空间（在一起天数 + 观察卡 + 共同记录 + 共同时间线） |
 | 安全 | 输入输出双向过滤、邮件通知隐私收窄、解绑冷静期与记忆保留期 |
 
 ---
@@ -408,7 +415,7 @@ cp .env.example .env                 # 填 DB_URL / JWT_SECRET / AI_API_KEY
 python -m alembic upgrade head
 
 # 灌种子数据（脚本幂等，重复执行安全）
-for s in seed_questionnaire seed_ai_scenes seed_knowledge seed_self_practices seed_avatar_assets; do
+for s in seed_questionnaire seed_ai_scenes seed_knowledge seed_avatar_assets; do
   python "scripts/$s.py"
 done
 python scripts/build_vectorstore.py   # 首次构建向量库（需要 AI_API_KEY 调 embedding）
@@ -442,30 +449,31 @@ cd android
 ```
 backend/
   app/
-    api/v1/          common（认证/用户） · couple（情侣侧） · single（单身侧）
+    api/v1/          common（认证/用户） · couple（情侣侧） · single（观点/历史命名）
     services/        业务编排；AI 统一入口 llm_client.py，流式基建 sse.py，
                      记忆召回 memory_retrieval.py，蒸馏管线 pipeline
     repositories/    数据访问；service 不直接碰 db.query()
     models/ schemas/ ORM 模型与 Pydantic 出入参（含 AI 输出模型）
     tasks/           后台任务（解绑冷静期巡检）
   alembic/versions/  37 个迁移，单 head
-  tests/             79 个可执行验证脚本
+  tests/             85 个可执行验证脚本
   scripts/           seed_* / build_vectorstore / build_memory_index / verify_migrations
 
 android/
-  core/              跨模式共享：网络、主题、通用组件、设置页、通知
-  feature/couple/    情侣模式：首页、信箱、军师、共同调解室、纪念馆、双视角……
-  feature/single/    单身模式：日记、自我练习
-  app/               壳层：MainActivity → NavGraph → CoupleShell / SingleShell
+  core/              跨模块共享：网络、主题、通用组件、设置页、通知
+  feature/couple/    主界面：军师、我们的空间、信箱、共同调解室、纪念馆、双视角……
+  feature/single/    观点（内部标识为 diary_entry；single 是历史命名，现属情侣功能）
+  app/               壳层：MainActivity → NavGraph → CoupleShell / CoupleBindScreen
 ```
 
-壳层只有一个：`MainActivity → NavGraph → CoupleShell(feature:couple) / SingleShell(feature:single)`。
+壳层只有一个：`MainActivity → NavGraph → CoupleShell(feature:couple)`；
+未绑定账号在同一个 Main 目的地渲染 `CoupleBindScreen`（强制绑定页），绑定成功后才进 `CoupleShell`。
 
 ---
 
 ## 测试
 
-后端是**可执行脚本**而非 pytest（便于单跑、便于留档），79 个脚本按主题分片：
+后端是**可执行脚本**而非 pytest（便于单跑、便于留档），85 个脚本按主题分片：
 
 ```bash
 cd backend
@@ -506,6 +514,8 @@ cd android
 - `GenerationStreamTest` — SSE 帧 → 业务事件解码，以及「错误码 → 用户文案」映射
 - `UrlsTest` — 相对路径 → 绝对 URL 拼接
 - `RealtimeNoticeTest` — 实时事件 → Snackbar / 通知 的唯一映射表
+- `RouteReachabilityTest` — 扫描所有 `composable(...)` 注册头，断言每个页面都有可达入口
+  （用豁免表标注确实隐藏的页面），防止删改路由时把某个页面变成「死页」
 
 ---
 
