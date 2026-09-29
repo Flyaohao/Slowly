@@ -17,7 +17,6 @@ data class MailboxUiState(
     val receivedLetters: List<LetterDto.LetterResponse> = emptyList(),
     val sentLetters: List<LetterDto.LetterResponse> = emptyList(),
     val favoriteLetters: List<LetterDto.LetterResponse> = emptyList(),
-    val recentDiaries: List<LetterDto.LetterResponse> = emptyList(),
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val error: String = "",
@@ -31,113 +30,60 @@ class MailboxViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MailboxUiState())
     val uiState: StateFlow<MailboxUiState> = _uiState.asStateFlow()
 
-    fun refresh(coupleMode: Boolean) {
+    // 2026-09-29：单身模式删除后信箱恒为情侣模式，原 coupleMode 分支与
+    // 单侧日记加载（refreshSingleDiary / loadSingleDiary）已一并移除。
+
+    fun refresh() {
         _uiState.update { it.copy(isRefreshing = true, error = "") }
         viewModelScope.launch {
-            if (coupleMode) {
-                refreshCoupleMailbox()
-            } else {
-                refreshSingleDiary()
+            val inboxResult = letterRepository.getInbox()
+            val sentResult = letterRepository.getLetters(direction = "sent")
+            val favResult = letterRepository.getLetters()
+
+            val received = inboxResult.getOrNull()?.items ?: emptyList()
+            val sent = sentResult.getOrNull()?.items ?: emptyList()
+            val all = favResult.getOrNull()?.items ?: emptyList()
+            val favorites = all.filter { it.isFavorite }
+
+            _uiState.update {
+                it.copy(
+                    receivedLetters = received,
+                    sentLetters = sent,
+                    favoriteLetters = favorites,
+                    isRefreshing = false,
+                )
+            }
+
+            if (inboxResult.isFailure && sentResult.isFailure && favResult.isFailure) {
+                _uiState.update { it.copy(error = inboxResult.exceptionOrNull()?.message ?: "加载失败") }
             }
         }
     }
 
-    private suspend fun refreshCoupleMailbox() {
-        val inboxResult = letterRepository.getInbox()
-        val sentResult = letterRepository.getLetters(direction = "sent")
-        val favResult = letterRepository.getLetters()
-
-        val received = inboxResult.getOrNull()?.items ?: emptyList()
-        val sent = sentResult.getOrNull()?.items ?: emptyList()
-        val all = favResult.getOrNull()?.items ?: emptyList()
-        val favorites = all.filter { it.isFavorite }
-
-        _uiState.update {
-            it.copy(
-                receivedLetters = received,
-                sentLetters = sent,
-                favoriteLetters = favorites,
-                recentDiaries = emptyList(),
-                isRefreshing = false,
-            )
-        }
-
-        if (inboxResult.isFailure && sentResult.isFailure && favResult.isFailure) {
-            _uiState.update { it.copy(error = inboxResult.exceptionOrNull()?.message ?: "加载失败") }
-        }
-    }
-
-    private suspend fun refreshSingleDiary() {
-        val draftsResult = letterRepository.getDrafts()
-        val allResult = letterRepository.getLetters()
-
-        val drafts = draftsResult.getOrNull()?.items ?: emptyList()
-        val all = allResult.getOrNull()?.items ?: emptyList()
-        val favorites = all.filter { it.isFavorite }
-
-        _uiState.update {
-            it.copy(
-                receivedLetters = emptyList(),
-                sentLetters = emptyList(),
-                favoriteLetters = favorites,
-                recentDiaries = drafts.take(5),
-                isRefreshing = false,
-            )
-        }
-    }
-
-    fun loadMailbox(coupleMode: Boolean) {
+    fun loadMailbox() {
         _uiState.update { it.copy(isLoading = true, error = "") }
         viewModelScope.launch {
-            if (coupleMode) {
-                loadCoupleMailbox()
-            } else {
-                loadSingleDiary()
+            val inboxResult = letterRepository.getInbox()
+            val sentResult = letterRepository.getLetters(direction = "sent")
+            val favResult = letterRepository.getLetters()
+
+            val received = inboxResult.getOrNull()?.items ?: emptyList()
+            val sent = sentResult.getOrNull()?.items ?: emptyList()
+            val all = favResult.getOrNull()?.items ?: emptyList()
+            val favorites = all.filter { it.isFavorite }
+
+            _uiState.update {
+                it.copy(
+                    receivedLetters = received,
+                    sentLetters = sent,
+                    favoriteLetters = favorites,
+                    isLoading = false,
+                )
             }
-        }
-    }
 
-    private suspend fun loadCoupleMailbox() {
-        val inboxResult = letterRepository.getInbox()
-        val sentResult = letterRepository.getLetters(direction = "sent")
-        val favResult = letterRepository.getLetters()
-
-        val received = inboxResult.getOrNull()?.items ?: emptyList()
-        val sent = sentResult.getOrNull()?.items ?: emptyList()
-        val all = favResult.getOrNull()?.items ?: emptyList()
-        val favorites = all.filter { it.isFavorite }
-
-        _uiState.update {
-            it.copy(
-                receivedLetters = received,
-                sentLetters = sent,
-                favoriteLetters = favorites,
-                recentDiaries = emptyList(),
-                isLoading = false,
-            )
-        }
-
-        if (inboxResult.isFailure && sentResult.isFailure && favResult.isFailure) {
-            _uiState.update { it.copy(error = inboxResult.exceptionOrNull()?.message ?: "加载失败") }
-        }
-    }
-
-    private suspend fun loadSingleDiary() {
-        val draftsResult = letterRepository.getDrafts()
-        val allResult = letterRepository.getLetters()
-
-        val drafts = draftsResult.getOrNull()?.items ?: emptyList()
-        val all = allResult.getOrNull()?.items ?: emptyList()
-        val favorites = all.filter { it.isFavorite }
-
-        _uiState.update {
-            it.copy(
-                receivedLetters = emptyList(),
-                sentLetters = emptyList(),
-                favoriteLetters = favorites,
-                recentDiaries = drafts.take(5),
-                isLoading = false,
-            )
+            if (inboxResult.isFailure && sentResult.isFailure && favResult.isFailure) {
+                _uiState.update { it.copy(error = inboxResult.exceptionOrNull()?.message ?: "加载失败") }
+            }
         }
     }
 

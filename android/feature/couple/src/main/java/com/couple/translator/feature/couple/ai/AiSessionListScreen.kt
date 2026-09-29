@@ -187,6 +187,8 @@ fun AiSessionListScreen(
                                 LazyColumn(
                                     modifier = Modifier.fillMaxSize(),
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    // 会话卡片与搜索框同宽：左右留屏边距，不再贴边
+                                    contentPadding = PaddingValues(horizontal = AppSpacing.screenH),
                                 ) {
                                     grouped.forEach { (label, list) ->
                                         item(key = "header_$label") {

@@ -134,6 +134,14 @@ fun NewAiChatScreen(
     /** 沉浸模式：false = 底部 Tab 栏已隐藏（状态由 CoupleShell 持有） */
     tabBarVisible: Boolean = true,
     onToggleTabBar: () -> Unit = {},
+    /**
+     * 2026-09-28 跟手滑动重构：本页挂在 CoupleShell 的 HorizontalPager（页 1）。
+     * pageActive=false 表示当前停在别的页——「再进即刷新」副作用（下方
+     * LaunchedEffect）只在本页真正滑到（currentPage 越过中线）时才跑，
+     * 从关系页/抽屉滑回军师仍会刷新，语义与旧版切 tab 一致。
+     * 独立挂载（无 pager）时默认 true，行为不变。
+     */
+    pageActive: Boolean = true,
     viewModel: AiChatViewModel = hiltViewModel(),
     taskCardsViewModel: TaskCardsViewModel = hiltViewModel(),
 ) {
@@ -170,10 +178,12 @@ fun NewAiChatScreen(
     }
 
     // P0-10B 改动四：再进页面即刷新。放 Screen 的 LaunchedEffect 而非 VM init——
-    // VM 由 hiltViewModel() 作用在 tab 的 NavBackStackEntry，切 tab 时 Screen
-    // 重组而 VM 存活，init 不会重跑；LaunchedEffect(Unit) 正好实现「再进即刷新」。
+    // VM 由 hiltViewModel() 存活于壳层，切页时 Screen 重组而 VM 存活，init 不会重跑。
+    // 2026-09-28 跟手滑动重构：本页常驻 pager 组合，旧 LaunchedEffect(Unit) 只会
+    // 在壳打开时跑一次 → 改用 pageActive 作 key，每次滑回军师页刷新一次。
     // 优先消费列表页传来的待进入会话，否则向服务端要 active。
-    LaunchedEffect(Unit) {
+    LaunchedEffect(pageActive) {
+        if (!pageActive) return@LaunchedEffect
         val pending = PendingSessionHolder.consume()
         if (pending != null && pending.newChat) {
             // P-A §3.1 D5：列表页「＋」→ 回来开新对话（lambda 内可安全 return）

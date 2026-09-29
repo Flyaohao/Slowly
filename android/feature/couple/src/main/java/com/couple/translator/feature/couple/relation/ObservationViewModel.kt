@@ -14,18 +14,20 @@ import javax.inject.Inject
 /**
  * 军师观察卡 VM（V1 聚合版，《军师主动观察》设计文档 2026-09-28）。
  *
- * **作用域 = Activity**（CoupleShell 与 RelationScreen 都用
+ * **作用域 = Activity**（CoupleShell 与空间页都用
  * `hiltViewModel(activity)` 取同一个实例）：观察的「未读」是壳层角标
- * （F-5 合计口径）和关系页卡片（三态）共用的同一份状态，ack 之后角标
+ * （F-5 合计口径）和空间页卡片（三态）共用的同一份状态，ack 之后角标
  * 必须立刻清零，分属两个 NavBackStackEntry 的默认 hiltViewModel() 会拿到
  * 两个互不知情的实例。
+ *
+ * 2026-09-29：观察卡随关系页删除迁入「我们的空间」，VM 职责不变。
  *
  * 决策⑥（已拍板）：已读走服务端 ack，角标跨设备。前端 F-5 建议「开页
  * ack 后清零」——[load] 拿到 has_new=true 就立刻 ack；但卡片高亮
  * （isNewForCard）保留到下次进页，否则刚打开就看到 NEW 闪一下变灰。
  *
  * 降级语义沿用整改 §8.4：读不到 ≠ 没有。请求失败时维持上一次的内容
- * （可能为空），不报错、不清空——观察卡是关系页第一内容位，网络抖动
+ * （可能为空），不报错、不清空——观察卡是空间页第一内容位，网络抖动
  * 不该让它凭空消失。
  */
 data class ObservationUiState(
@@ -53,7 +55,7 @@ class ObservationViewModel @Inject constructor(
     /**
      * 拉取一次观察。幂等：每次进页/回前台都会调。
      *
-     * [ackIfNew] 只有**用户真正打开关系页**时才传 true（RelationScreen）：
+     * [ackIfNew] 只有**用户真正打开空间页**时才传 true（NewHomeScreen）：
      * ack 意味着「用户看到了」，壳层（CoupleShell）为亮角标做的后台拉取
      * 绝不能 ack——否则用户停在军师 tab 时新观察就被静默已读，角标闪一下
      * 就没了，「push」语义整个失效。

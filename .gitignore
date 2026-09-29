@@ -411,3 +411,15 @@ package-lock.json
 # 属于开发过程留档，含内部口径，不对外公开。
 /*.md
 !/README.md
+
+# ---- 根目录临时截图 / UI dump / 本地简历素材：开发过程产物，非源码 ----
+# 真机走查随手截的 png、uiautomator dump 的 xml、求职简历目录
+/shot.png
+/resume_preview.png
+/ui.xml
+/clear1.xml
+/resume/
+# 锚定根目录，避免误伤 app 内真正需要入库的资源
+/*.html
+/android/s1.png
+/android/u1.xml

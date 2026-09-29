@@ -171,9 +171,6 @@ private fun TabItem(
         BottomTab.Home -> Icons.Outlined.Home
         BottomTab.Mailbox -> Icons.Outlined.MailOutline
         BottomTab.AiChat -> Icons.Outlined.ChatBubbleOutline
-        BottomTab.Relation -> Icons.Outlined.FavoriteBorder
-        BottomTab.SingleHome -> Icons.Outlined.Person
-        BottomTab.Diary -> Icons.Outlined.Book
     }
 
     // 滑块已是品牌渐变（两种主题下都是粉色系），选中内容统一用白色而非 surface——

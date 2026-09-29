@@ -20,13 +20,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.EventNote
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Hearing
 import androidx.compose.material.icons.outlined.Icecream
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MailOutline
@@ -80,7 +82,6 @@ import com.couple.translator.core.ui.theme.AppTextTertiary
 fun GuideScreen(
     onNavigateBack: () -> Unit,
     onNavigateToRoute: (String) -> Unit,
-    isCoupleMode: Boolean = true,
 ) {
     Scaffold(
         containerColor = AppBackground,
@@ -128,22 +129,18 @@ fun GuideScreen(
                     index = "3",
                     icon = Icons.Outlined.AutoAwesome,
                     title = "开始使用",
-                    // L3：底栏入口按模式区分——情侣模式是「军师 + 关系」，
-                    // 单身模式是「我 + 观点」，写死两入口会误导另一模式的用户。
-                    desc = if (isCoupleMode) {
-                        "底部两个入口：军师、关系。核心功能是「军师」，关系状态都在「关系」里。"
-                    } else {
-                        "底部两个入口：我、观点。核心功能是「我」，观点是给军师的私密记录。"
-                    },
+                    // 2026-09-29：单身模式已删除，底栏恒为「军师 + 关系」两入口。
+                    desc = "底部两个入口：军师、关系。核心功能是「军师」，关系状态都在「关系」里。",
                     route = null,
                     onNavigateToRoute = onNavigateToRoute,
                 )
             }
 
             Spacer(modifier = Modifier.height(28.dp))
-            // 场景数与下方实际列出的行一致（6 行：日常/听懂 TA/帮我表达/冷静一下/
-            // 信件解读/信件改写——双人调解入口 W1 隐藏后不再计入）
-            SectionTitle("AI 军师", "整个 App 的核心，共 6 个场景")
+            // 场景数与下方实际列出的行一致（7 行：日常/听懂 TA/帮我表达/冷静一下/
+            // 关系复盘/信件解读/信件改写——双人调解入口 W1 隐藏后不计入，
+            // 调解场景由「共同调解室」承担，见下方「左侧菜单」卡）
+            SectionTitle("AI 军师", "整个 App 的核心，共 7 个场景")
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "进入底部「军师」，点左上角可切换场景。每个场景的回答结构和侧重点都不同。",
@@ -184,6 +181,13 @@ fun GuideScreen(
                 //     desc = "两个人都参与的完整调解流程：各自陈述 → 生成方案 → 双方确认。从军师页面的调解入口进入。",
                 // )
                 GuideDivider()
+                // 关系复盘（2026-09-28 上线）：独立输入页 + 流式端点，走军师首页快捷入口
+                SceneRow(
+                    icon = Icons.Outlined.AutoAwesome,
+                    name = "关系复盘",
+                    desc = "吵完和好了，复盘一次：触发点在哪、当时能降温的说法、下次怎么提前说。军师首页快捷入口进入。",
+                )
+                GuideDivider()
                 SceneRow(
                     icon = Icons.Outlined.MailOutline,
                     name = "信件解读",
@@ -201,18 +205,17 @@ fun GuideScreen(
             SectionTitle("日常沟通", "写下来，比说出来容易")
             Spacer(modifier = Modifier.height(8.dp))
             GuideCard {
-                // 信件是情侣间功能；单身模式没有信箱（抽屉同款门控）。
-                // 跳转目标是根导航的「深度表达」二级页（Screen.Mailbox）：压栈全屏、
+                // 跳转目标是根导航的「信箱」二级页（Screen.Mailbox）：压栈全屏、
                 // 返回箭头顶栏，不是信箱 tab 一级页，也不是 letter_list 全屏列表。
-                if (isCoupleMode) {
-                    GuideEntryRow(
-                        icon = Icons.Outlined.MailOutline,
-                        title = "深度表达",
-                        desc = "写信、存草稿、收发往来。可以收藏，也可以让 AI 帮你解读或改写。",
-                        route = Screen.Mailbox.route,
-                        onNavigateToRoute = onNavigateToRoute,
-                    )
-                }
+                // 2026-09-29：单身模式删除后此处恒可达（指南只有情侣模式能进）；
+                // 同时全 App 统一叫「信箱」（原「深度表达」）。
+                GuideEntryRow(
+                    icon = Icons.Outlined.MailOutline,
+                    title = "信箱",
+                    desc = "写信、存草稿、收发往来。可以收藏，也可以让 AI 帮你解读或改写。",
+                    route = Screen.Mailbox.route,
+                    onNavigateToRoute = onNavigateToRoute,
+                )
                 // [W1 隐藏] 双视角记录跳转项（机制保留，由军师推荐触发）
                 // GuideDivider()
                 // GuideEntryRow(
@@ -237,11 +240,38 @@ fun GuideScreen(
                 //     onNavigateToRoute = onNavigateToRoute,
                 // )
                 // GuideDivider()
+                // 2026-09-29：以下条目全部是情侣模式内容，指南恒为情侣用户可见，
+                // 故不再需要 isCoupleMode 门控（原门控在单身模式删除后恒为真）。
                 GuideEntryRow(
                     icon = Icons.Outlined.StarOutline,
                     title = "纪念日",
                     desc = "记下对你们有意义的日子，可以设成每年重复，也可以只算一次。",
                     route = Screen.AnniversaryList.route,
+                    onNavigateToRoute = onNavigateToRoute,
+                )
+                // 2026-09-28 补齐：观点 / 纪念事件 / 愿望均已回到抽屉一级入口，指南同步给出可点跳转。
+                GuideDivider()
+                GuideEntryRow(
+                    icon = Icons.Outlined.Lightbulb,
+                    title = "观点",
+                    desc = "写下你对某件事的看法，军师可以把它计入画像或记忆，随时可撤回。",
+                    route = Screen.DiaryList.route,
+                    onNavigateToRoute = onNavigateToRoute,
+                )
+                GuideDivider()
+                GuideEntryRow(
+                    icon = Icons.Outlined.EventNote,
+                    title = "纪念事件",
+                    desc = "记录你们经历过的关系事件，军师会拿它们当理解你们的素材。",
+                    route = Screen.RelationshipEvent.route,
+                    onNavigateToRoute = onNavigateToRoute,
+                )
+                GuideDivider()
+                GuideEntryRow(
+                    icon = Icons.Outlined.StarOutline,
+                    title = "愿望",
+                    desc = "想一起做的事，做完标记一下。",
+                    route = Screen.Wishlist.route,
                     onNavigateToRoute = onNavigateToRoute,
                 )
                 // [W4.3 合并] 关系画像并入「人格画像」（条目在下方「左侧菜单」卡）
@@ -276,6 +306,33 @@ fun GuideScreen(
                     route = Screen.Memory.route,
                     onNavigateToRoute = onNavigateToRoute,
                 )
+                // 2026-09-27 关系页改版：调解邀请 / 双视角 / 解绑确认收敛为抽屉「待办」
+                GuideDivider()
+                GuideEntryRow(
+                    icon = Icons.Outlined.FavoriteBorder,
+                    title = "待办",
+                    desc = "等你处理的事：对方的「各自的看法」邀请、待提交的双视角、解绑确认。有待办时抽屉里亮红点。",
+                    route = Screen.TodoList.route,
+                    onNavigateToRoute = onNavigateToRoute,
+                )
+                // 2026-09-28 共同调解室：军师在场的三人房间
+                GuideDivider()
+                GuideEntryRow(
+                    icon = Icons.Outlined.Forum,
+                    title = "共同调解室",
+                    desc = "两个人加军师在同一个房间把话说开：双方自由聊，@军师 请求建议，双方同意后生成调解书。",
+                    route = Screen.MediationRoomList.route,
+                    onNavigateToRoute = onNavigateToRoute,
+                )
+                // [W4.4] 原 AI 形象页改造为「军师设置」
+                GuideDivider()
+                GuideEntryRow(
+                    icon = Icons.Outlined.AutoAwesome,
+                    title = "军师设置",
+                    desc = "军师怎么称呼你、说话语气、回答详细程度、主动程度、是否展示判断依据。",
+                    route = Screen.AdvisorSettings.route,
+                    onNavigateToRoute = onNavigateToRoute,
+                )
                 // [W4.3 合并] 了解自己并入上方「人格画像」
                 // GuideDivider()
                 // GuideEntryRow(
@@ -285,16 +342,14 @@ fun GuideScreen(
                 //     route = Screen.QuestionnaireIntro.route,
                 //     onNavigateToRoute = onNavigateToRoute,
                 // )
-                if (isCoupleMode) {
-                    GuideDivider()
-                    GuideEntryRow(
-                        icon = Icons.Outlined.Info,
-                        title = "关系管理",
-                        desc = "修改在一起的日子和空间设置。解除绑定需要双方同意，并有 72 小时冷静期。",
-                        route = Screen.CoupleInfo.route,
-                        onNavigateToRoute = onNavigateToRoute,
-                    )
-                }
+                GuideDivider()
+                GuideEntryRow(
+                    icon = Icons.Outlined.Info,
+                    title = "关系管理",
+                    desc = "修改在一起的日子和空间设置。解除绑定需要双方同意，并有 72 小时冷静期。",
+                    route = Screen.CoupleInfo.route,
+                    onNavigateToRoute = onNavigateToRoute,
+                )
                 GuideDivider()
                 GuideEntryRow(
                     icon = Icons.Outlined.SelfImprovement,
@@ -305,30 +360,9 @@ fun GuideScreen(
                 )
             }
 
-            if (!isCoupleMode) {
-                Spacer(modifier = Modifier.height(28.dp))
-                SectionTitle("单身模式", "还没绑定伴侣时可用")
-                Spacer(modifier = Modifier.height(8.dp))
-                GuideCard {
-                    // [W4.5 收缩] 日记降级为「给军师的私密记录」入口，不再宣传笔记软件能力
-                    GuideEntryRow(
-                        icon = Icons.Outlined.Book,
-                        title = "观点",
-                        desc = "给军师的私密记录：写下来的心情只有你和军师能看到。",
-                        route = Screen.DiaryList.route,
-                        onNavigateToRoute = onNavigateToRoute,
-                    )
-                    // [W1 隐藏] 自我练习跳转项（冻结 10006）
-                    // GuideDivider()
-                    // GuideEntryRow(
-                    //     icon = Icons.Outlined.SelfImprovement,
-                    //     title = "自我练习",
-                    //     desc = "面向个人的练习题库，做完留下记录。",
-                    //     route = Screen.SelfPracticeList.route,
-                    //     onNavigateToRoute = onNavigateToRoute,
-                    // )
-                }
-            }
+            // 2026-09-29：单身模式已删除，原「单身模式」卡（我 + 观点）不再可达——
+            // 未绑定用户会落在强制绑定页，进不到本指南；「观点」已由上方情侣模式卡片承担。
+            // 因此整块条件渲染已被移除。
 
             Spacer(modifier = Modifier.height(28.dp))
             SectionTitle("遇到这些情况，该用哪个功能", "按处境查就行")
@@ -343,20 +377,28 @@ fun GuideScreen(
                 // 双人调解入口在 P0-3/P0-4 验收前隐藏，速查文案同步收窄
                 QuickCaseRow("吵完架谁都不肯先开口", "军师 · 冷静一下")
                 GuideDivider()
+                QuickCaseRow("吵完了，想知道下次怎么避免", "军师 · 关系复盘")
+                GuideDivider()
+                QuickCaseRow("两个人各执一词，需要军师当面评理", "菜单 · 共同调解室")
+                GuideDivider()
+                QuickCaseRow("不想当面吵，想先各自写清楚立场", "空间 → 各自的看法")
+                GuideDivider()
                 QuickCaseRow("收到一封信，不确定 TA 想表达什么", "信箱 → 打开信件 → 信件解读")
                 GuideDivider()
                 QuickCaseRow("想道歉，但不知道怎么措辞", "信箱写信时用「信件改写」")
+                GuideDivider()
+                QuickCaseRow("军师总误解我的想法", "写一条「观点」，计入画像")
                 // [W1 隐藏] 双视角记录跳转项已随上方「日常沟通」卡一并隐藏（速查行不能指向不可达功能）
                 // GuideDivider()
                 // QuickCaseRow("想让 TA 明白我当时真实的感受", "双视角记录")
                 GuideDivider()
                 // L3：关系画像入口已并入「人格画像」（W4.3 合并），速查文案同步改指合并后的入口
-                QuickCaseRow("为什么我们总在同一件事上吵", "人格画像 + 军师里的 AI 记忆")
+                QuickCaseRow("为什么我们总在同一件事上吵", "人格画像 + 军师的观察")
                 // [W1 隐藏] 关系练习 / 愿望清单均已隐藏，整条速查一并隐藏
                 // GuideDivider()
                 // QuickCaseRow("想一起做点什么", "关系练习 / 愿望清单")
                 // GuideDivider()
-                QuickCaseRow("想留住某个重要的瞬间", "纪念日")
+                QuickCaseRow("想留住某个重要的瞬间", "纪念事件 / 纪念日")
             }
 
             Spacer(modifier = Modifier.height(24.dp))

@@ -10,7 +10,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.Send
@@ -40,14 +39,16 @@ import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.feature.couple.data.model.LetterDto
 
 /**
- * 深度表达（情侣模式，原「信箱」）/ 我的观点（单身模式）。
+ * 信箱（情侣模式）/ 我的观点（单身模式）。
  *
  * 两种形态共用同一份内容（2026-09-28 用户裁决）：
  * - **tab 形态**（默认）：[onNavigateBack] 为 null，顶栏是叠头像 + 抽屉入口，
  *   挂在 CoupleShell 内层 NavHost 的 tab_mailbox 上（底栏隐藏 ≠ 删除）；
  * - **二级页形态**：[onNavigateBack] 非空，顶栏换成返回箭头、无头像无 tab 栏，
- *   注册在根导航 Screen.Mailbox 上——使用指南 / 抽屉 / 关系页 / 收信通知兜底
- *   四个「深度表达」入口全部走这一形态（压栈，系统返回可退回来源页）。
+ *   注册在根导航 Screen.Mailbox 上——使用指南 / 抽屉 / 空间页宫格 / 收信通知兜底
+ *   四个「信箱」入口全部走这一形态（压栈，系统返回可退回来源页）。
+ *
+ * 2026-09-29：全 App 统一叫「信箱」（原「深度表达」）。
  *
  * 排版原则和首页对齐：**顶栏只放叠头像入口，标题交给正文大标题**；
  * 列表不再是「裸行 + 全宽分隔线」，而是收进卡片里 —— 分组一看就清楚，
@@ -59,15 +60,15 @@ fun NewMailboxScreen(
     onNavigateToCompose: () -> Unit,
     onNavigateToLetterList: () -> Unit,
     onNavigateToLetterDetail: (Long) -> Unit,
-    isCoupleMode: Boolean = true,
     identity: TopBarIdentity = TopBarIdentity(),
     onNavigateBack: (() -> Unit)? = null,
     viewModel: MailboxViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(isCoupleMode) {
-        viewModel.loadMailbox(isCoupleMode)
+    // 2026-09-29：单身模式删除后信箱恒为情侣模式，原 isCoupleMode 分支已移除。
+    LaunchedEffect(Unit) {
+        viewModel.loadMailbox()
     }
 
     if (uiState.isLoading) {
@@ -77,7 +78,7 @@ fun NewMailboxScreen(
 
     PullToRefreshLayout(
         isRefreshing = uiState.isRefreshing,
-        onRefresh = { viewModel.refresh(isCoupleMode) },
+        onRefresh = { viewModel.refresh() },
     ) {
         Column(
             modifier = Modifier
@@ -91,26 +92,16 @@ fun NewMailboxScreen(
             } else {
                 AppTopBar(
                     onOpenDrawer = onOpenDrawer,
-                    isCoupleMode = isCoupleMode,
                     identity = identity,
                 )
             }
 
-            if (isCoupleMode) {
-                CoupleMailboxContent(
-                    uiState = uiState,
-                    onNavigateToCompose = onNavigateToCompose,
-                    onNavigateToLetterList = onNavigateToLetterList,
-                    onNavigateToLetterDetail = onNavigateToLetterDetail,
-                )
-            } else {
-                SingleDiaryContent(
-                    uiState = uiState,
-                    onNavigateToCompose = onNavigateToCompose,
-                    onNavigateToLetterList = onNavigateToLetterList,
-                    onNavigateToLetterDetail = onNavigateToLetterDetail,
-                )
-            }
+            CoupleMailboxContent(
+                uiState = uiState,
+                onNavigateToCompose = onNavigateToCompose,
+                onNavigateToLetterList = onNavigateToLetterList,
+                onNavigateToLetterDetail = onNavigateToLetterDetail,
+            )
 
             Spacer(modifier = Modifier.height(100.dp))
         }
@@ -129,8 +120,8 @@ private fun CoupleMailboxContent(
     val pending = uiState.receivedLetters.size
 
     AppPageHeader(
-        title = "深度表达",
-        // 副标题保持数据驱动（未读数）与能力描述，不提「信箱」旧名
+        title = "信箱",
+        // 副标题保持数据驱动（未读数）与能力描述
         subtitle = when {
             pending > 0 -> "有 $pending 封信在等你打开"
             else -> "认真写下的句子，会一直留在这里。"
@@ -204,77 +195,6 @@ private fun CoupleMailboxContent(
     AppLinkRow(
         label = "全部信件",
         leadingIcon = Icons.Outlined.MailOutline,
-        onClick = onNavigateToLetterList,
-        modifier = Modifier.padding(horizontal = AppSpacing.screenH),
-    )
-}
-
-// ==================== 单身模式 ====================
-
-@Composable
-private fun SingleDiaryContent(
-    uiState: MailboxUiState,
-    onNavigateToCompose: () -> Unit,
-    onNavigateToLetterList: () -> Unit,
-    onNavigateToLetterDetail: (Long) -> Unit,
-) {
-    val total = uiState.recentDiaries.size
-
-    AppPageHeader(
-        title = "我的观点",
-        subtitle = if (total > 0) "已经写下 $total 条" else "写给自己，也算数。",
-    )
-
-    Spacer(modifier = Modifier.height(AppSpacing.section))
-
-    AppPrimaryButton(
-        text = "写一条观点",
-        icon = Icons.Outlined.Edit,
-        onClick = onNavigateToCompose,
-        modifier = Modifier.padding(horizontal = AppSpacing.screenH),
-    )
-
-    if (uiState.recentDiaries.isNotEmpty()) {
-        SectionTitle(text = "最近观点", count = uiState.recentDiaries.size)
-        AppListCard(
-            items = uiState.recentDiaries,
-            modifier = Modifier.padding(horizontal = AppSpacing.screenH),
-        ) { letter ->
-            LetterRow(
-                letter = letter,
-                icon = Icons.Outlined.EditNote,
-                onClick = { onNavigateToLetterDetail(letter.id) },
-            )
-        }
-    }
-
-    if (uiState.favoriteLetters.isNotEmpty()) {
-        SectionTitle(text = "收藏", count = uiState.favoriteLetters.size)
-        AppListCard(
-            items = uiState.favoriteLetters.take(3),
-            modifier = Modifier.padding(horizontal = AppSpacing.screenH),
-        ) { letter ->
-            LetterRow(
-                letter = letter,
-                icon = Icons.Outlined.StarOutline,
-                onClick = { onNavigateToLetterDetail(letter.id) },
-            )
-        }
-    }
-
-    if (uiState.recentDiaries.isEmpty() && uiState.favoriteLetters.isEmpty()) {
-        AppEmptyState(
-            icon = Icons.Outlined.Edit,
-            title = "还没有观点",
-            subtitle = "记录此刻的心情。",
-            modifier = Modifier.padding(top = AppSpacing.section),
-        )
-    }
-
-    SectionTitle(text = "更多")
-    AppLinkRow(
-        label = "全部观点",
-        leadingIcon = Icons.Outlined.Edit,
         onClick = onNavigateToLetterList,
         modifier = Modifier.padding(horizontal = AppSpacing.screenH),
     )

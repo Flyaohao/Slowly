@@ -87,14 +87,14 @@ import com.couple.translator.feature.couple.wishlist.WishlistScreen
 import com.couple.translator.feature.single.diary.DiaryListScreen
 import com.couple.translator.feature.single.diary.DiaryDetailScreen
 import com.couple.translator.feature.single.diary.ComposeDiaryScreen
-import com.couple.translator.feature.single.practice.SelfPracticeListScreen
-import com.couple.translator.feature.single.SingleShell
 import com.couple.translator.feature.couple.CoupleShell
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
@@ -114,6 +114,27 @@ fun NavGraph(
     var startDest by remember { mutableStateOf<String?>(null) }
     val coupleState = coupleStateManager?.state?.collectAsState()?.value
     val isCoupleMode = coupleState?.mode != com.couple.translator.feature.couple.data.repository.AppMode.SINGLE
+
+    // 🔴 登出唯一实现（2026-09-29 BUG 修复）：
+    // 此前 `clearTokens()` 写在 CoupleShell 组件内部，导致绑定页 / 设置页两个登出入口
+    // 只做了「导航回登录页」这一半——界面看似登出，本地 jwt/refresh/lastMode 原封不动，
+    // 杀进程冷启动读到旧 token 又判为已登录，用户被弹回强制绑定页。
+    // 现收敛到 NavGraph 根级：任何出口都复用这一份，杜绝再漏。
+    // 用根组合的 scope（比任何页面活得久）+ NonCancellable，保证 navigate 触发
+    // 页面销毁时，清理动作不会被协程取消打断。
+    val rootScope = rememberCoroutineScope()
+    val performLogout: () -> Unit = {
+        rootScope.launch {
+            withContext(NonCancellable) {
+                runCatching { tokenStore?.clearTokens() }
+                runCatching { coupleStateManager?.clearCouple() }
+                runCatching { realtimeSocketManager?.stop() }
+            }
+            navController.navigate(Screen.Login.route) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         // 🔴 白屏修复（2026-09-28）：此前 startDest 要等 isLoggedIn()+refresh() 全部
@@ -178,8 +199,15 @@ fun NavGraph(
                 onNavigateToRegister = { navController.navigate(Screen.Register.route) },
                 onNavigateToForgotPassword = { navController.navigate(Screen.ForgotPassword.route) },
                 onLoginSuccess = {
-                    navController.navigate(Screen.Main.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
+                    // 2026-09-29 修复：登录成功后必须先把 CoupleStateManager 的内存态
+                    // 同步成登录响应写入的 mode，再跳 Main。否则「A 登出 → 同进程 B 登录」
+                    // 会因内存态残留 SINGLE，让已绑定的 B 首帧落到强制绑定页（杀进程才自愈）。
+                    // 先用本地缓存零等待落态（不与网络竞速），跳转后壳层 ON_RESUME 再 refresh 纠正。
+                    rootScope.launch {
+                        runCatching { coupleStateManager?.adoptLoginMode() }
+                        navController.navigate(Screen.Main.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
                     }
                 },
             )
@@ -189,8 +217,13 @@ fun NavGraph(
             RegisterScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onRegisterSuccess = {
-                    navController.navigate(Screen.Main.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
+                    // 新注册用户必然未绑定：走同一落态逻辑（缓存此时可能为空，
+                    // adoptLoginMode 返回 false，CoupleStateManager 初值 SINGLE 即正确）。
+                    rootScope.launch {
+                        runCatching { coupleStateManager?.adoptLoginMode() }
+                        navController.navigate(Screen.Main.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
                     }
                 },
             )
@@ -203,28 +236,29 @@ fun NavGraph(
         }
 
         composable(Screen.Main.route) {
+            // 2026-09-29 用户裁决：删除单身模式。未绑定用户不再有「单身壳」可进，
+            // Main 直接渲染强制绑定页——登录 / 注册 / 冷启动三条入口都汇到 Main，
+            // 所以「绑定成功才能进入」这一个分支即可全覆盖。
+            // 响应式渲染（isCoupleMode 来自 collectAsState）：refresh() 完成后
+            // 自动从绑定页切到情侣壳，无需在登录回调里判断模式，天然规避竞态。
             if (isCoupleMode) {
                 CoupleShell(
                     onNavigateToRoute = { route -> navController.navigate(route) },
-                    onLogout = {
-                        navController.navigate(Screen.Login.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    },
+                    onLogout = performLogout,
                     tokenStore = tokenStore,
                     coupleStateManager = coupleStateManager,
                     realtimeSocketManager = realtimeSocketManager,
                     notificationPermissionStore = notificationPermissionStore,
                 )
             } else {
-                SingleShell(
-                    onNavigateToRoute = { route -> navController.navigate(route) },
-                    onLogout = {
-                        navController.navigate(Screen.Login.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
+                CoupleBindScreen(
+                    onNavigateBack = {},
+                    onBindSuccess = {
+                        navController.navigate(Screen.CoupleInfo.route)
                     },
-                    tokenStore = tokenStore,
+                    coupleStateManager = coupleStateManager!!,
+                    forced = true,
+                    onLogout = performLogout,
                 )
             }
         }
@@ -233,7 +267,6 @@ fun NavGraph(
             GuideScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToRoute = { route -> navController.navigate(route) },
-                isCoupleMode = isCoupleMode,
             )
         }
 
@@ -342,7 +375,6 @@ fun NavGraph(
                 onNavigateToCoupleProfile = {
                     navController.navigate(Screen.Understanding.route)
                 },
-                isCoupleMode = isCoupleMode,
             )
         }
 
@@ -401,9 +433,11 @@ fun NavGraph(
             )
         }
 
-        // 深度表达二级页（2026-09-28 用户裁决）：使用指南 / 抽屉 / 关系页 / 收信通知
+        // 信箱二级页（2026-09-28 用户裁决）：使用指南 / 抽屉 / 空间页宫格 / 收信通知
         // 兜底四个入口都压到这里——压栈全屏、返回箭头顶栏，无 tab 栏无抽屉头像。
-        // 信箱 tab（tab_mailbox）仍注册在 CoupleShell 内层，隐藏 ≠ 删除。
+        // 2026-09-28 跟手滑动重构：CoupleShell 内层 NavHost 已改为 HorizontalPager，
+        // tab_home/tab_mailbox 不再注册壳内 composable；信箱以二级页形式注册在
+        // 根导航（下方 Screen.Mailbox），BottomTab 枚举与路由字符串保留（隐藏 ≠ 删除）。
         composable(Screen.Mailbox.route) {
             NewMailboxScreen(
                 onOpenDrawer = {},
@@ -416,7 +450,6 @@ fun NavGraph(
                 onNavigateToLetterDetail = { letterId ->
                     navController.navigate("${Screen.LetterDetail.route}/$letterId")
                 },
-                isCoupleMode = isCoupleMode,
                 onNavigateBack = { navController.popBackStack() },
             )
         }
@@ -427,7 +460,6 @@ fun NavGraph(
                 onNavigateToLetterDetail = { letterId ->
                     navController.navigate("${Screen.LetterDetail.route}/$letterId")
                 },
-                isCoupleMode = isCoupleMode,
                 // 整改 §8.1：列表页右下角「写一封信」FAB 的真实去处——
                 // 不接线则空态承诺的「右下角按钮」是死的
                 onNavigateToCompose = {
@@ -479,7 +511,6 @@ fun NavGraph(
                         popUpTo(Screen.ComposeLetter.route) { inclusive = true }
                     }
                 },
-                isCoupleMode = isCoupleMode,
             )
         }
 
@@ -982,8 +1013,6 @@ fun NavGraph(
                 onNavigateToEdit = { editId ->
                     navController.navigate("${Screen.ComposeDiary.route}?editId=$editId")
                 },
-                // 记忆开关只在情侣模式出现（军师记忆以关系为单位）
-                isCoupleMode = isCoupleMode,
             )
         }
 
@@ -1001,12 +1030,8 @@ fun NavGraph(
             )
         }
 
-        // Self Practice (单身模式专属)
-        composable(Screen.SelfPracticeList.route) {
-            SelfPracticeListScreen(
-                onNavigateBack = { navController.popBackStack() },
-            )
-        }
+        // 2026-09-29：自我练习已随单身模式删除（后端 features.py 早已冻结 10006、入口已注释），
+        // 路由注册一并移除。
 
         // Settings
         composable("settings") {
@@ -1032,12 +1057,7 @@ fun NavGraph(
                 onNavigateToAdvisorSettings = {
                     navController.navigate(Screen.AdvisorSettings.route)
                 },
-                onLogout = {
-                    navController.navigate(Screen.Login.route) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                },
-                isCoupleMode = isCoupleMode,
+                onLogout = performLogout,
                 themeMode = themeMode,
                 onThemeModeChange = { mode ->
                     scope.launch { themeStore?.setThemeMode(mode) }

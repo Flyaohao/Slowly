@@ -33,7 +33,7 @@ fun RealtimeEvent.toNotice(): RealtimeNotice? = when (notificationType) {
         notificationTitle = "收到一封新信件",
         notificationText = "对方给你写了一封信，点开看看",
         // 带上 letter_id 就能直达那一封（信件详情挂在**根 NavHost** 上，深链够得着）；
-        // 老服务端不给 id 时退回「深度表达」二级页（Screen.Mailbox，根导航压栈、
+        // 老服务端不给 id 时退回「信箱」二级页（Screen.Mailbox，根导航压栈、
         // 返回箭头顶栏）——2026-09-28 用户裁决，不再是信箱 tab 一级页。
         route = letterId?.takeIf { it > 0L }
             ?.let { "${Screen.LetterDetail.route}/$it" }

@@ -27,7 +27,8 @@ import java.io.File
  * 豁免表刻意做小，而且只放契约 §1 明确裁决为冻结/隐藏、或被 W4.3/W4.4 合并掉的页面；
  * 「保留能力」一个都不许进（§8.0：保留能力必须有用户真实可走的入口路径）。
  *
- * 检测纯度已按当前代码实测校准：57 条注册路由、0 条漏网，豁免正好命中 4 条。
+ * 检测纯度随重构校准：注册路由数由主断言下限看守（>40），豁免表以
+ * [HIDDEN_WITHOUT_ENTRY] 实际条目数为准（2026-09-28 时为 3 条）。
  */
 class RouteReachabilityTest {
 
@@ -51,7 +52,8 @@ class RouteReachabilityTest {
             "couple_profile" to "W4.3：关系画像已并入「人格画像」，路由保留备查",
             // W4.3 合并：我的画像入口随遗留壳 MainScreen 的删除消失，路由保留备查
             "profile_result" to "W4.3：我的画像已并入「人格画像」，路由保留备查",
-            "self_practice_list" to "§1：自我练习冻结 10006，入口按收敛期裁决切断",
+            // 2026-09-29：self_practice_list 随单身模式整体删除（页面、路由常量、后端接口
+            // 均已移除），不再需要豁免条目——它连注册都不存在了。
         )
 
         /**
@@ -62,9 +64,11 @@ class RouteReachabilityTest {
          */
         val REQUIRED_ENTRIES: Map<String, Set<String>> = mapOf(
             // §8.1 深度表达（信件）
-            Screen.LetterList.route to setOf("CoupleShell.kt"),
-            Screen.ComposeLetter.route to setOf("CoupleShell.kt"),
-            Screen.LetterDetail.route to setOf("CoupleShell.kt"),
+            // 2026-09-28 用户裁决：深度表达翻转为根导航「二级页」（压栈全屏），
+            // 信箱 tab 从 CoupleShell 摘除，三个信件页的接线随之迁到 NavGraph。
+            Screen.LetterList.route to setOf("NavGraph.kt"),
+            Screen.ComposeLetter.route to setOf("NavGraph.kt", "CoupleShell.kt"),
+            Screen.LetterDetail.route to setOf("NavGraph.kt", "RealtimeNotice.kt", "TaskCardsViewModel.kt"),
             // §8.2 AI 行动
             Screen.FeedbackOutcome.route to setOf("CoupleShell.kt", "NewAiChatScreen.kt"),
             Screen.RelationshipReview.route to setOf("CoupleShell.kt", "NavGraph.kt"),
@@ -81,7 +85,9 @@ class RouteReachabilityTest {
             Screen.MediationInput.route to setOf("NavGraph.kt"),
             Screen.MediationConfirm.route to setOf("NavGraph.kt"),
             Screen.MediationResult.route to setOf("NavGraph.kt"),
-            Screen.MediationHistory.route to setOf("RelationScreen.kt"),
+            // 2026-09-29 关系页删除：已完成调解的入口迁到抽屉「各自的看法」+
+            // 空间页宫格之外的稳定入口（TodoListScreen 的待办列表亦可达）。
+            Screen.MediationHistory.route to setOf("DrawerContent.kt"),
             // §8.8 记忆与隐私 / 画像
             // 2026-09-28 用户裁决：「记忆与隐私」移出抽屉（军师页顶部已有入口），
             // 剩余入口在 CoupleShell / 使用指南 / 人格画像页。
@@ -182,24 +188,33 @@ class RouteReachabilityTest {
     @Test
     fun `被壳托管的 tab 路由不出现在根导航图注册头里`() {
         val registrations = scanRegistrations()
-        // 三个 tab 路由由 CoupleShell / SingleShell 的内层 NavHost 提供，
-        // 根导航图没有它们的目的地，自然也没入口——
+        // tab 路由由壳提供，根导航图没有它们的目的地，自然也没入口——
         // 这里显式记录，避免以后有人把它们当成「漏注册」或者贴上豁免表。
         //
-        // 例外说明：Screen.Mailbox（深度表达）2026-09-28 用户裁决翻转为根导航
+        // 例外一：Screen.Mailbox（深度表达）2026-09-28 用户裁决翻转为根导航
         // 二级页（压栈全屏、返回箭头顶栏），从此**必须**注册在根导航图里并有
         // 真实入口——它已从本禁注清单移除，由上方「已注册必须有入口」主断言看守。
-        val tabRoutes: List<String> = listOf(
-            BottomTab.AiChat.route,
-            BottomTab.Relation.route,
-            BottomTab.SingleHome.route,
-            BottomTab.Diary.route,
-        )
+        //
+        // 例外二（2026-09-28 跟手滑动重构）：CoupleShell 的内层 NavHost 改为
+        // HorizontalPager，情侣侧两个 tab（tab_ai / tab_home）不再有
+        // composable 注册头，改为「壳源码里必须保留 tab 路由映射」看守——
+        // 映射一旦被删，底部栏点上去就切不过去。
+        //
+        // 2026-09-29（重构）：底栏收敛为「军师 + 空间」两个 tab，tab_relation
+        // 随关系页整体删除（RelationScreen.kt 已删）。
+        //
+        // 2026-09-29：单身模式已删除，SingleShell 及其两个 tab
+        // （tab_single_home / tab_diary）不复存在，相关断言移除。
         listOf(Screen.Home.route, Screen.AiChat.route).forEach { route ->
             assertTrue("$route 不该出现在根导航图注册头里", !registrations.containsKey(route))
         }
-        tabRoutes.forEach { route ->
-            assertTrue("$route 应当被壳注册", registrations.containsKey(route))
+        listOf(BottomTab.AiChat.route, BottomTab.Home.route).forEach { route ->
+            val hits = entries(route)
+            assertTrue(
+                "$route 已改为 CoupleShell 的 HorizontalPager 页（无注册头），" +
+                    "但壳源码里找不到它的 tab 路由映射——tab 没接上，用户点底栏切不过去",
+                hits.any { it.startsWith("CoupleShell.kt:") },
+            )
         }
     }
 

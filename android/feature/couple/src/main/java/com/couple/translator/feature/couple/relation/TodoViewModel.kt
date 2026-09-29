@@ -20,18 +20,23 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** 解绑确认状态（契约 §2.6-2 的展示切片；完整对话框在 couple_info 页）。 */
+data class UnbindStatusUi(
+    val requestedAt: String,
+    /** null = 服务端未给发起人，无法判定我方角色，展示中性文案。 */
+    val isInitiator: Boolean? = null,
+)
+
 /**
  * 2026-09-27 关系页改版（用户裁决 ①A②A④A）：
  *
  * 调解邀请 / 双视角「我未提交」/ 解绑确认 三类待办从关系页迁出，
  * 收敛为侧边栏「待办」条目（角标 = 待办数，为 0 时仍显示条目、不显示角标）
  * 与独立的待办列表页。本 VM 是这三类数据的**唯一**加载方：
- * CoupleShell（角标）与 TodoListScreen（列表）共用同一个实例，
- * 不再像旧 RelationViewModel 那样为了待办把 7 路请求全打一遍。
+ * CoupleShell（角标）与 TodoListScreen（列表）共用同一个实例。
  *
- * 可靠性语义沿用整改 §8.4 的裁决：**读不到 ≠ 没有**。三类源任何一路失败
- * （或拿不到 myUserId 导致「我提交没有」无法判定）时 [TodoUiState.pendingReliable]
- * 置 false，列表页渲染「读取失败 + 重试」而不是「暂无待办」。
+ * 2026-09-29：原 RelationViewModel 随关系页删除（[UnbindStatusUi] 迁入本文件），
+ * 待办数据源与角标口径不变。
  */
 data class TodoUiState(
     val isLoading: Boolean = true,

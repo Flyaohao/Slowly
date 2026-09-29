@@ -1,18 +1,20 @@
 package com.couple.translator.feature.couple.home
 
+import androidx.activity.ComponentActivity
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,20 +23,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.outlined.Archive
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.material.icons.outlined.Event
+import androidx.compose.material.icons.outlined.EventNote
+import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.MailOutline
-import androidx.compose.material.icons.outlined.People
-import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Spa
 import androidx.compose.material.icons.outlined.StarOutline
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -50,27 +52,36 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.couple.translator.core.data.model.HomeDto
+import com.couple.translator.core.navigation.Screen
+import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.AppPageHeader
+import com.couple.translator.core.ui.components.AppPrimaryButton
 import com.couple.translator.core.ui.components.AppTopBar
-import com.couple.translator.core.ui.components.AvatarBubble
 import com.couple.translator.core.ui.components.PullToRefreshLayout
+import com.couple.translator.core.ui.components.SectionTitle
 import com.couple.translator.core.ui.components.SkeletonBlock
 import com.couple.translator.core.ui.components.TopBarIdentity
 import com.couple.translator.core.ui.components.pressFeedback
 import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentFaint
 import com.couple.translator.core.ui.theme.AppAccentLight
-import com.couple.translator.core.ui.theme.AppOnAccent
-import com.couple.translator.core.ui.theme.AppPrimaryGradient
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppMotion
+import com.couple.translator.core.ui.theme.AppOnAccent
+import com.couple.translator.core.ui.theme.AppPrimaryGradient
 import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppSize
 import com.couple.translator.core.ui.theme.AppSpacing
@@ -79,31 +90,63 @@ import com.couple.translator.core.ui.theme.AppSurfaceMuted
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
-import com.couple.translator.core.ui.theme.AppWarm
-import com.couple.translator.core.ui.theme.AppWarmLight
 import com.couple.translator.core.ui.theme.InterFontFamily
+import com.couple.translator.feature.couple.relation.ObservationUiState
+import com.couple.translator.feature.couple.relation.ObservationViewModel
+import java.time.Duration
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 /**
- * 情侣模式首页。
+ * 「我们的空间」——情侣模式一级页（2026-09-29 重构，顶替已删除的关系页）。
  *
- * 这一版的排版原则：**先有一个视觉锚点，再谈信息**。
- * 之前的版本把「在一起第几天」当成一行正文排在标题下面，整页读起来像文档；
- * 现在这个数字被放大成 52sp 放进一张淡粉卡片里，成为首屏唯一的重心，
- * 其余信息（快捷入口 / 军师 / 最近）依次退到它下面。
+ * **定位：回忆 / 生活向**。这一页只回答一个问题——「我们一起走到了哪、留下了什么」。
+ * 与另两个页面的分工：
+ * - 军师页 = 当下「这件事怎么办」；
+ * - 空间页 = 过去→现在「我们经历了什么」；
+ * - 信箱页 = 单次「有句话想认真说给你听」。
+ *
+ * 内容块（自上而下，用户拍板）：
+ * ① 天数头图（在一起 N 天，全 App 唯一展示处）
+ * ② 军师的观察（原关系页三态卡迁入）
+ * ③ 共同记录入口宫格（信箱 / 观点 / 纪念日 / 纪念事件）
+ * ④ 共同时间线（信件 + 观点 + 纪念日 + 关系事件，倒序混流）
+ *
+ * 与旧版的差异：删除了 HomePrimaryButton（W1 已是隐藏的 no-op）、
+ * HomeQuickEntryCards（并入宫格）、HomeStatusCards（并入时间线）、
+ * HomeRecentSection（被时间线取代）、HomeAiHint（被观察卡取代）。
  */
 @Composable
 fun NewHomeScreen(
     onOpenDrawer: () -> Unit,
+    onNavigateToRoute: (String) -> Unit,
     onNavigateToComposeLetter: () -> Unit,
     onNavigateToMailbox: () -> Unit,
     onNavigateToAiChat: () -> Unit,
     onNavigateToLetterDetail: (Long) -> Unit,
     onNavigateToBind: () -> Unit = {},
-    isCoupleMode: Boolean = true,
     identity: TopBarIdentity = TopBarIdentity(),
+    pageActive: Boolean = true,
     viewModel: NewHomeViewModel = hiltViewModel(),
+    timelineViewModel: SpaceTimelineViewModel = hiltViewModel(),
+    // Activity 作用域：与 CoupleShell 的空间 tab 角标共用同一个 ObservationViewModel
+    // （见 ObservationViewModel 类注释——ack 之后角标要同步清零）。
+    observationViewModel: ObservationViewModel =
+        hiltViewModel(LocalContext.current as ComponentActivity),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val timelineState by timelineViewModel.uiState.collectAsState()
+    val observationState by observationViewModel.uiState.collectAsState()
+
+    // 观察详情弹窗开关（纯本地态，由本页持有）
+    var showObservationDetail by remember { mutableStateOf(false) }
+
+    // 每次滑到本页（pageActive false→true）重拉观察并 ack：
+    // ackIfNew=true 只有真正打开本页才算「已读」（决策⑥）。
+    LaunchedEffect(pageActive) {
+        if (!pageActive) return@LaunchedEffect
+        observationViewModel.load(ackIfNew = true)
+    }
 
     // 顶栏身份优先用全局共享的那份（与信箱/军师同源），拿不到时退回本页自己拉的
     val barIdentity = remember(identity, uiState) {
@@ -120,11 +163,15 @@ fun NewHomeScreen(
     }
 
     PullToRefreshLayout(
-        isRefreshing = uiState.isRefreshing,
-        onRefresh = { viewModel.refresh() },
+        isRefreshing = uiState.isRefreshing || timelineState.isRefreshing,
+        onRefresh = {
+            viewModel.refresh()
+            timelineViewModel.refresh()
+            observationViewModel.load()
+        },
     ) {
         if (uiState.isLoading) {
-            HomeSkeleton()
+            SpaceSkeleton()
         } else {
             Column(
                 modifier = Modifier
@@ -134,104 +181,86 @@ fun NewHomeScreen(
             ) {
                 AppTopBar(
                     onOpenDrawer = onOpenDrawer,
-                    isCoupleMode = isCoupleMode,
                     identity = barIdentity,
                 )
 
-                if (isCoupleMode) {
-                    StaggeredAppear(0) {
-                        AppPageHeader(
-                            title = uiState.spaceName,
-                            subtitle = uiState.heroText,
-                        )
-                    }
+                AppPageHeader(
+                    title = uiState.spaceName,
+                    subtitle = "我们走过的地方，都在这里。",
+                )
 
+                // ---------- ① 在一起的天数 ----------
+                StaggeredAppear(0) {
+                    DaysHeroCard(
+                        daysCount = uiState.daysCount,
+                        userNickname = uiState.nickname,
+                        partnerNickname = uiState.partnerNickname,
+                    )
+                }
+
+                // ---------- ② 军师的观察 ----------
+                if (observationState.loaded) {
                     StaggeredAppear(1) {
-                        HomeHeroCard(
-                            daysCount = uiState.daysCount,
-                            userNickname = uiState.nickname,
-                            partnerNickname = uiState.partnerNickname,
-                        )
-                    }
-
-                    StaggeredAppear(2) {
-                        // [W1 隐藏] 调解/纪念日两个主按钮目前是 no-op 空转，先隐藏入口
-                        // （隐藏 ≠ 删除：HomePrimaryAction 分支与文案生成逻辑保留）
-                        val primaryAction = uiState.primaryAction
-                        val isNoOpAction = primaryAction == HomePrimaryAction.ContinueMediation ||
-                            primaryAction == HomePrimaryAction.ViewAnniversary
-                        if (!isNoOpAction) {
-                            HomePrimaryButton(
-                                text = uiState.primaryButtonText,
-                                onClick = {
-                                    when (uiState.primaryAction) {
-                                        HomePrimaryAction.ReadLetter,
-                                        HomePrimaryAction.ContinueDraft,
-                                        -> onNavigateToMailbox()
-                                        HomePrimaryAction.InvitePartner -> onNavigateToBind()
-                                        HomePrimaryAction.ContinueMediation -> {}
-                                        HomePrimaryAction.ViewAnniversary -> {}
-                                        else -> onNavigateToComposeLetter()
-                                    }
+                        Column {
+                            SectionTitle("军师的观察")
+                            ObservationCard(
+                                state = observationState,
+                                onClick = if (observationState.content != null) {
+                                    { showObservationDetail = true }
+                                } else {
+                                    null // 冷启动引导语不可点
                                 },
                             )
                         }
                     }
+                }
 
-                    StaggeredAppear(3) {
-                        Box(modifier = Modifier.padding(top = AppSpacing.lg)) {
-                            HomeQuickEntryCards(
-                                pendingLetterCount = uiState.pendingLetterCount,
-                                onNavigateToMailbox = onNavigateToMailbox,
-                                onNavigateToAiChat = onNavigateToAiChat,
-                            )
-                        }
+                // ---------- ③ 共同记录入口 ----------
+                StaggeredAppear(2) {
+                    Column {
+                        SectionTitle("共同记录")
+                        RecordEntryGrid(
+                            pendingLetterCount = uiState.pendingLetterCount,
+                            onNavigateToRoute = onNavigateToRoute,
+                            onNavigateToComposeLetter = onNavigateToComposeLetter,
+                        )
                     }
+                }
 
-                    uiState.homeData?.let { data ->
-                        // [W1 隐藏] 未来信 / 纪念馆状态卡已隐藏，不再参与「有没有卡」判断
-                        val hasAnything = data.activeMediation != null ||
-                            data.upcomingAnniversary != null
-                        if (hasAnything) {
-                            StaggeredAppear(4) {
-                                Box(modifier = Modifier.padding(top = AppSpacing.section)) {
-                                    HomeStatusCards(homeData = data)
+                // ---------- ④ 共同时间线 ----------
+                StaggeredAppear(3) {
+                    Column {
+                        SectionTitle("共同时间线")
+                        SharedTimeline(
+                            state = timelineState,
+                            onEntryClick = { entry ->
+                                when (entry.kind) {
+                                    // 信件走类型化的回调（与 CoupleShell 的接线一致）
+                                    TimelineKind.Letter -> {
+                                        val id = entry.key.removePrefix("letter-").toLongOrNull()
+                                        if (id != null) onNavigateToLetterDetail(id)
+                                    }
+                                    // 观点/纪念日/关系事件统一走根导航路由字符串
+                                    else -> entry.route?.let { onNavigateToRoute(it) }
                                 }
-                            }
-                        }
+                            },
+                            onRetry = { timelineViewModel.load() },
+                        )
                     }
-
-                    if (uiState.recentItems.isNotEmpty()) {
-                        StaggeredAppear(6) {
-                            Box(modifier = Modifier.padding(top = AppSpacing.section)) {
-                                HomeRecentSection(
-                                    items = uiState.recentItems,
-                                    onItemClick = { item ->
-                                        when (item.type) {
-                                            "letter", "draft" -> onNavigateToLetterDetail(item.id)
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                    }
-
-                    StaggeredAppear(7) {
-                        Box(modifier = Modifier.padding(top = AppSpacing.section)) {
-                            HomeAiHint(onClick = onNavigateToAiChat)
-                        }
-                    }
-
-                } else {
-                    HomeSingleModeSection(
-                        onNavigateToComposeLetter = onNavigateToComposeLetter,
-                        onNavigateToBind = onNavigateToBind,
-                    )
                 }
 
                 Spacer(modifier = Modifier.height(100.dp))
             }
         }
+    }
+
+    // 观察详情弹窗（三态卡的「看全文」），随空间页走
+    if (showObservationDetail && observationState.content != null) {
+        ObservationDetailDialog(
+            state = observationState,
+            onOpened = { observationViewModel.markCardViewed() },
+            onDismiss = { showObservationDetail = false },
+        )
     }
 }
 
@@ -274,18 +303,15 @@ private fun StaggeredAppear(
     }
 }
 
-// ============ 主视觉：在一起的天数 ============
+// ============ ① 主视觉：在一起的天数 ============
 
 /**
- * 首屏唯一的重心。
+ * 首屏唯一的重心。全 App 唯一展示「在一起 N 天」的位置（关系页删除后无重复）。
  *
- * 这一版去掉了卡内那两个白色圆头像：
- * 一是顶栏已经有一组（一屏四张脸没必要），二是白圈落在淡粉底上像"挖了个洞"。
- * 空出来的位置给了一个 eyebrow 小标「在一起」，卡片从"三行居中"变成
- * **小标 → 天文数字 → 昵称** 的三级结构，同时把上下留白收回一档，不再显得空。
+ * 结构：小标「在一起」→ 天文数字 → 双方昵称，数字用 animateIntAsState 从 0 滚动入场。
  */
 @Composable
-private fun HomeHeroCard(
+private fun DaysHeroCard(
     daysCount: Int,
     userNickname: String?,
     partnerNickname: String?,
@@ -305,13 +331,18 @@ private fun HomeHeroCard(
         ).joinToString(" 和 ")
     }
 
+    val animatedDays by animateIntAsState(
+        targetValue = daysCount,
+        animationSpec = tween(durationMillis = AppMotion.slow, easing = AppMotion.EaseOut),
+        label = "loveDays",
+    )
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = AppSpacing.screenH)
             .padding(top = AppSpacing.lg)
             .clip(RoundedCornerShape(AppRadius.xl))
-            // S-B/S5 拍板：主视觉卡用品牌渐变（批2 落地），文字整体翻白
             .background(AppPrimaryGradient)
             .border(0.5.dp, AppOnAccent.copy(alpha = 0.25f), RoundedCornerShape(AppRadius.xl))
             .padding(vertical = AppSpacing.section),
@@ -328,7 +359,7 @@ private fun HomeHeroCard(
         if (daysCount > 0) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    text = daysCount.toString(),
+                    text = animatedDays.toString(),
                     style = numberStyle,
                     color = AppOnAccent,
                 )
@@ -359,262 +390,340 @@ private fun HomeHeroCard(
     }
 }
 
-// ============ 主操作按钮 ============
+// ============ ③ 共同记录入口宫格 ============
 
+/**
+ * 四宫格快捷入口：信箱 / 观点 / 纪念日 / 纪念事件。
+ *
+ * 与抽屉是**同路由双入口**（用户拍板 D6）：宫格负责「在空间里随手就能记一笔」，
+ * 抽屉负责「关系管理类的稳定入口」。
+ */
 @Composable
-private fun HomePrimaryButton(
-    text: String,
-    onClick: () -> Unit,
-) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = AppSpacing.screenH)
-            .padding(top = AppSpacing.lg)
-            .height(AppSize.button),
-        shape = RoundedCornerShape(AppRadius.pill),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = AppTextPrimary,
-            contentColor = AppSurface,
-        ),
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.Edit,
-            contentDescription = null,
-            modifier = Modifier.size(16.dp),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.titleSmall,
-        )
-    }
-}
-
-// ============ 快捷入口 ============
-
-@Composable
-private fun HomeQuickEntryCards(
+private fun RecordEntryGrid(
     pendingLetterCount: Int,
-    onNavigateToMailbox: () -> Unit,
-    onNavigateToAiChat: () -> Unit,
+    onNavigateToRoute: (String) -> Unit,
+    onNavigateToComposeLetter: () -> Unit,
 ) {
-    Row(
+    val items = listOf(
+        RecordEntry(
+            icon = Icons.Outlined.MailOutline,
+            title = "信箱",
+            subtitle = if (pendingLetterCount > 0) "$pendingLetterCount 封等你" else "写一封",
+        ) { onNavigateToRoute(Screen.Mailbox.route) },
+        RecordEntry(
+            icon = Icons.Outlined.EditNote,
+            title = "观点",
+            subtitle = "各自的看法",
+        ) { onNavigateToRoute(Screen.DiaryList.route) },
+        RecordEntry(
+            icon = Icons.Outlined.Event,
+            title = "纪念日",
+            subtitle = "重要的日子",
+        ) { onNavigateToRoute(Screen.AnniversaryList.route) },
+        RecordEntry(
+            icon = Icons.Outlined.EventNote,
+            title = "纪念事件",
+            subtitle = "一起记下的",
+        ) { onNavigateToRoute(Screen.RelationshipEvent.route) },
+    )
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = AppSpacing.screenH),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        QuickEntryCard(
-            icon = Icons.Outlined.MailOutline,
-            title = "信箱",
-            subtitle = if (pendingLetterCount > 0) "$pendingLetterCount 封等你回应" else "还没有待读的信",
-            onClick = onNavigateToMailbox,
-            modifier = Modifier.weight(1f),
-        )
-        QuickEntryCard(
-            icon = Icons.Outlined.ChatBubbleOutline,
-            title = "军师",
-            subtitle = "随时帮你整理",
-            onClick = onNavigateToAiChat,
-            modifier = Modifier.weight(1f),
-        )
+        items.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { entry ->
+                    RecordEntryCard(entry = entry, modifier = Modifier.weight(1f))
+                }
+                // 奇数个时补一个空位，避免最后一行卡片被拉伸成半宽
+                if (row.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
     }
 }
 
+private data class RecordEntry(
+    val icon: ImageVector,
+    val title: String,
+    val subtitle: String,
+    val onClick: () -> Unit,
+)
+
 @Composable
-private fun QuickEntryCard(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
+private fun RecordEntryCard(
+    entry: RecordEntry,
     modifier: Modifier = Modifier,
 ) {
-    val border = AppBorderLight
-    Column(
+    Row(
         modifier = modifier
-            .pressFeedback(onClick = onClick)
+            .pressFeedback(onClick = entry.onClick)
             .clip(RoundedCornerShape(AppRadius.lg))
             .background(AppSurface)
-            .border(0.5.dp, border, RoundedCornerShape(AppRadius.lg))
+            .border(0.5.dp, AppBorderLight, RoundedCornerShape(AppRadius.lg))
             .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = AppAccent,
-            modifier = Modifier.size(17.dp),
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall,
-            color = AppTextPrimary,
-        )
-        Spacer(modifier = Modifier.height(3.dp))
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.labelSmall,
-            color = AppTextTertiary,
-            maxLines = 1,
-        )
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(AppRadius.xs))
+                .background(AppAccentFaint),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = entry.icon,
+                contentDescription = null,
+                tint = AppAccent,
+                modifier = Modifier.size(17.dp),
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = entry.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = AppTextPrimary,
+                maxLines = 1,
+            )
+            Text(
+                text = entry.subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = AppTextTertiary,
+                maxLines = 1,
+            )
+        }
     }
 }
 
-// ============ 最近 ============
+// ============ ④ 共同时间线 ============
 
+/**
+ * 共同时间线（本页核心）。
+ *
+ * 左侧一条垂直细线贯穿，节点 = 圆点（普通内容）/ 图标（里程碑：纪念日/关系事件），
+ * 右侧是内容卡。倒序（最近的在上）。空态给引导卡。
+ */
 @Composable
-private fun HomeRecentSection(
-    items: List<RecentItem>,
-    onItemClick: (RecentItem) -> Unit,
+private fun SharedTimeline(
+    state: SpaceTimelineUiState,
+    onEntryClick: (TimelineEntry) -> Unit,
+    onRetry: () -> Unit,
 ) {
-    Column(modifier = Modifier.padding(horizontal = AppSpacing.screenH)) {
-        Text(
-            text = "最近",
-            style = MaterialTheme.typography.labelSmall,
-            color = AppTextTertiary,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
-        items.forEachIndexed { index, item ->
-            Row(
+    when {
+        state.isLoading && state.entries.isEmpty() -> {
+            TimelineSkeleton()
+        }
+
+        state.loadError && state.entries.isEmpty() -> {
+            AppEmptyState(
+                icon = Icons.Outlined.CloudOff,
+                title = "时间线没加载出来",
+                subtitle = "网络或服务异常，重试一次试试",
+                action = {
+                    AppPrimaryButton(text = "重试", onClick = onRetry)
+                },
+            )
+        }
+
+        state.entries.isEmpty() -> {
+            EmptyTimelineGuide()
+        }
+
+        else -> {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .pressFeedback(onClick = { onItemClick(item) })
-                    .padding(vertical = 13.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .padding(horizontal = AppSpacing.screenH),
             ) {
+                state.entries.forEachIndexed { index, entry ->
+                    TimelineRow(
+                        entry = entry,
+                        isFirst = index == 0,
+                        isLast = index == state.entries.lastIndex,
+                        onClick = { onEntryClick(entry) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimelineRow(
+    entry: TimelineEntry,
+    isFirst: Boolean,
+    isLast: Boolean,
+    onClick: () -> Unit,
+) {
+    val isMilestone = entry.kind == TimelineKind.Anniversary || entry.kind == TimelineKind.Event
+    val nodeColor = if (isMilestone) AppAccentLight else AppBorderLight
+
+    Row(modifier = Modifier.fillMaxWidth()) {
+        // 左侧轨道：细线 + 节点
+        Box(
+            modifier = Modifier
+                .width(28.dp)
+                .height(if (isFirst) 24.dp else 64.dp),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            // 竖线（首条不画上半段，末条不画下半段——这里简化为始终画满，视觉连续）
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(if (isFirst) 12.dp else if (isLast) 12.dp else 64.dp)
+                    .offset(y = if (isFirst) 24.dp else 0.dp)
+                    .background(AppBorderLight),
+            )
+            if (isMilestone) {
                 Box(
                     modifier = Modifier
-                        .size(34.dp)
-                        .clip(RoundedCornerShape(AppRadius.xs))
-                        .background(AppSurfaceMuted),
+                        .padding(top = 14.dp)
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(nodeColor),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.MailOutline,
+                        imageVector = if (entry.kind == TimelineKind.Anniversary) {
+                            Icons.Outlined.StarOutline
+                        } else {
+                            Icons.Outlined.EventNote
+                        },
                         contentDescription = null,
-                        tint = AppTextSecondary,
-                        modifier = Modifier.size(16.dp),
+                        tint = AppAccent,
+                        modifier = Modifier.size(12.dp),
                     )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = item.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = AppTextPrimary,
-                        maxLines = 1,
-                    )
-                    Text(
-                        text = item.excerpt,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTextSecondary,
-                        maxLines = 1,
-                    )
-                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 20.dp)
+                        .size(9.dp)
+                        .clip(CircleShape)
+                        .background(AppAccentLight),
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(bottom = 14.dp)
+                // pressFeedback 必须在 modifier 链最前：graphicsLayer 只对链中
+                // 它之后的节点生效，放后面会导致按压缩放不作用在卡片背景上。
+                .pressFeedback(onClick = onClick)
+                .clip(RoundedCornerShape(AppRadius.md))
+                .background(AppSurface)
+                .border(0.5.dp, AppBorderLight, RoundedCornerShape(AppRadius.md))
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = item.timeLabel,
+                    text = entry.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = AppTextPrimary,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = timelineDateLabel(entry.occurredAt),
                     style = MaterialTheme.typography.labelSmall,
                     color = AppTextTertiary,
                 )
             }
-            if (index < items.lastIndex) {
-                HorizontalDivider(color = AppBorderLight)
+            entry.excerpt?.takeIf { it.isNotBlank() }?.let { excerpt ->
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = excerpt,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextSecondary,
+                    maxLines = 2,
+                )
             }
         }
     }
 }
 
-// ============ AI 入口 ============
+/** 时间线日期：显示完整年月日（YYYY-MM-DD → YYYY年M月d日）；不可解析时原文返回。 */
+private fun timelineDateLabel(iso: String?): String {
+    if (iso.isNullOrBlank()) return ""
+    val datePart = iso.take(10)
+    val parts = datePart.split("-")
+    if (parts.size != 3) return datePart
+    val year = parts[0].trimStart('0').ifBlank { "0" }
+    val month = parts[1].trimStart('0').ifBlank { "0" }
+    val day = parts[2].trimStart('0').ifBlank { "0" }
+    return "$year 年 $month 月 $day 日"
+}
 
-@Composable
-private fun HomeAiHint(onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = AppSpacing.screenH)
-            .pressFeedback(onClick = onClick)
-            .clip(RoundedCornerShape(AppRadius.lg))
-            .background(AppSurfaceMuted)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.ChatBubbleOutline,
-            contentDescription = null,
-            tint = AppAccent,
-            modifier = Modifier.size(17.dp),
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = "没想好怎么说？让军师替你润色",
-            style = MaterialTheme.typography.bodySmall,
-            color = AppTextSecondary,
-            modifier = Modifier.weight(1f),
-        )
-        Icon(
-            imageVector = Icons.Outlined.ChevronRight,
-            contentDescription = null,
-            tint = AppTextTertiary,
-            modifier = Modifier.size(16.dp),
-        )
+/**
+ * 服务端时间 → 相对时间（「2 小时前」「昨天 21:04」）。解析失败返回 null，不显示。
+ *
+ * 2026-09-29：随观察卡从关系页迁到空间页（原定义在 RelationScreen.kt，
+ * 该文件已随关系页删除）。
+ */
+private fun observationRelativeTime(iso: String): String? {
+    val time = try {
+        LocalDateTime.parse(iso, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+    } catch (_: Exception) {
+        return null
+    }
+    val now = LocalDateTime.now()
+    val minutes = Duration.between(time, now).toMinutes()
+    return when {
+        minutes < 1 -> "刚刚"
+        minutes < 60 -> "$minutes 分钟前"
+        minutes < 24 * 60 -> "${minutes / 60} 小时前"
+        time.toLocalDate() == now.toLocalDate().minusDays(1) ->
+            "昨天 " + time.format(DateTimeFormatter.ofPattern("HH:mm"))
+        else -> time.format(DateTimeFormatter.ofPattern("M月d日"))
     }
 }
 
-// ============ 单身模式 ============
-
 @Composable
-private fun HomeSingleModeSection(
-    onNavigateToComposeLetter: () -> Unit,
-    onNavigateToBind: () -> Unit = {},
-) {
-    Column(
+private fun EmptyTimelineGuide() {
+    AppCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = AppSpacing.screenH),
-        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(modifier = Modifier.height(40.dp))
-
-        Text(
-            text = "这个空间还差一个人",
-            style = MaterialTheme.typography.headlineSmall,
-            color = AppTextPrimary,
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Text(
-            text = "绑定情侣后解锁完整功能",
-            style = MaterialTheme.typography.bodyLarge,
-            color = AppTextSecondary,
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Button(
-            onClick = onNavigateToBind,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = AppAccent,
-                contentColor = AppSurface,
-            ),
-            shape = RoundedCornerShape(AppRadius.pill),
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(AppSize.button),
+                .padding(vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(AppAccentFaint),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Favorite,
+                    contentDescription = null,
+                    tint = AppAccent,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "邀请 TA",
-                style = MaterialTheme.typography.titleMedium,
+                text = "你们的故事，从第一条记录开始。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = AppTextPrimary,
             )
-        }
-
-        Spacer(modifier = Modifier.height(AppSpacing.xs))
-
-        TextButton(onClick = onNavigateToComposeLetter) {
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "或者，先写给自己",
+                text = "写一封信、记下一个观点，或者加一个纪念日，\n它们都会留在这条时间线上。",
+                textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodySmall,
                 color = AppTextTertiary,
             )
@@ -622,82 +731,203 @@ private fun HomeSingleModeSection(
     }
 }
 
-// ============ 状态卡（有数据时才出现） ============
-
 @Composable
-private fun HomeStatusCards(homeData: HomeDto.HomeResponse) {
-    val cards = mutableListOf<Pair<ImageVector, Pair<String, String>>>()
-
-    homeData.activeMediation?.let {
-        cards.add(Icons.Outlined.People to ("调解进行中" to "还有一场没说完的对话"))
-    }
-    // [W1 隐藏] 未来信状态卡（P0-5：future 类型冻结，卡片也不再展示）
-    // homeData.futureLetter?.let {
-    //     cards.add(Icons.Outlined.Schedule to ("未来信" to "解锁于 ${it.unlockTime?.take(10) ?: "待定"}"))
-    // }
-    homeData.upcomingAnniversary?.let {
-        // 整改 §8.8：天数由服务端算（服务端已保证这里不会是「一次性且已过」的
-        // 纪念日），当天说「就是今天」而不是「0 天后」。
-        val daysText = if (it.daysUntil <= 0) "就是今天" else "${it.daysUntil} 天后"
-        cards.add(Icons.Outlined.StarOutline to (it.title to daysText))
-    }
-    // [W1 隐藏] 纪念馆状态卡（模块冻结 10006）
-    // if (homeData.recentMuseumItems.isNotEmpty()) {
-    //     cards.add(Icons.Outlined.Archive to ("纪念馆" to "${homeData.recentMuseumItems.size} 件新藏品"))
-    // }
-
+private fun TimelineSkeleton() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = AppSpacing.screenH),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        cards.forEach { (icon, texts) ->
-            StatusCard(icon = icon, title = texts.first, value = texts.second)
+        repeat(3) {
+            SkeletonBlock(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(66.dp),
+                shape = RoundedCornerShape(AppRadius.md),
+            )
         }
     }
 }
 
+// ============ 军师的观察卡（自关系页迁入，2026-09-29） ============
+
+/**
+ * 观察卡三态：高亮（有新）/ 安静（无新）/ 冷启动（无素材）。
+ *
+ * - 高亮 = 浅强调底 + 强调描边 + NEW 角标（isNewForCard 只在本次进页有效）；
+ * - 点击卡片 → 详情弹窗展开全文（[onClick]，仅正文态可点）；
+ * - 正文卡内截断 4 行，弹窗里看全文；
+ * - 颜色全部走 App* getter（深色模式自动切换），无 Canvas/remember lambda。
+ */
 @Composable
-private fun StatusCard(
-    icon: ImageVector,
-    title: String,
-    value: String,
+private fun ObservationCard(
+    state: ObservationUiState,
+    onClick: (() -> Unit)? = null,
 ) {
-    Row(
+    AppCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(AppRadius.md))
-            .background(AppSurface)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .then(
+                if (onClick != null) {
+                    Modifier
+                        .padding(horizontal = AppSpacing.screenH)
+                        .pressFeedback(onClick = onClick)
+                } else {
+                    Modifier.padding(horizontal = AppSpacing.screenH)
+                }
+            ),
+        containerColor = if (state.isNewForCard) AppAccentFaint else AppSurface,
+        borderColor = if (state.isNewForCard) AppAccentLight else AppBorderLight,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = AppAccent,
-            modifier = Modifier.size(18.dp),
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyMedium,
-            color = AppTextPrimary,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.labelSmall,
-            color = AppTextSecondary,
-        )
+        if (state.content == null) {
+            // 态③ 冷启动：没有任何可拼装素材（首观察前）
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp, bottom = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(AppAccentFaint),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Spa,
+                        contentDescription = null,
+                        tint = AppAccent,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "随着你们使用，军师会在这里\n记下它对这段关系的观察。",
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextSecondary,
+                )
+            }
+        } else {
+            // 态① 高亮 / 态② 安静：同一结构，只有颜色与 NEW 角标不同
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "军师的观察",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (state.isNewForCard) AppAccent else AppTextSecondary,
+                )
+                state.observedAt?.let { observationRelativeTime(it) }?.let { timeText ->
+                    Text(
+                        text = " · $timeText",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppTextTertiary,
+                    )
+                }
+                if (state.isNewForCard) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    // NEW 角标缩放入场（0→1 spring），出现不是「啪一下」
+                    val badgeScale by animateFloatAsState(
+                        targetValue = 1f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium,
+                        ),
+                        label = "newBadgeScale",
+                    )
+                    Box(
+                        modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = badgeScale
+                                scaleY = badgeScale
+                            }
+                            .background(AppErrorRed, RoundedCornerShape(50)),
+                    ) {
+                        Text(
+                            text = "NEW",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = state.content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = AppTextPrimary,
+                maxLines = 4,
+            )
+            state.citationTitle?.let { title ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "引用：调解书《$title》",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppTextTertiary,
+                )
+            }
+        }
     }
+}
+
+/**
+ * 观察详情弹窗：完整军师建议 = 观察正文全文 + 观察时间 + 引用来源。
+ */
+@Composable
+private fun ObservationDetailDialog(
+    state: ObservationUiState,
+    onOpened: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // 调用方已守卫 content != null，这里再收窄一次给编译器
+    val body = state.content ?: return
+    LaunchedEffect(Unit) { onOpened() }
+    val timeText = state.observedAt?.let { observationRelativeTime(it) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("军师的观察") },
+        text = {
+            Column {
+                if (timeText != null) {
+                    Text(
+                        text = timeText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppTextTertiary,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                Text(
+                    text = body,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTextPrimary,
+                )
+                state.citationTitle?.let { title ->
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "引用：调解书《$title》",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppTextTertiary,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("知道了", color = AppAccent)
+            }
+        },
+    )
 }
 
 // ============ 骨架屏 ============
 
 /** 首屏加载态：把真实排版先用灰块摆出来，数据到位时只是"填色"，不会整页跳一下。 */
 @Composable
-private fun HomeSkeleton() {
+private fun SpaceSkeleton() {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -719,25 +949,17 @@ private fun HomeSkeleton() {
         )
         Spacer(modifier = Modifier.height(AppSpacing.lg))
 
-        SkeletonBlock(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(AppSize.button),
-            shape = RoundedCornerShape(AppRadius.pill),
-        )
-        Spacer(modifier = Modifier.height(AppSpacing.lg))
-
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             SkeletonBlock(
                 modifier = Modifier
                     .weight(1f)
-                    .height(92.dp),
+                    .height(66.dp),
                 shape = RoundedCornerShape(AppRadius.lg),
             )
             SkeletonBlock(
                 modifier = Modifier
                     .weight(1f)
-                    .height(92.dp),
+                    .height(66.dp),
                 shape = RoundedCornerShape(AppRadius.lg),
             )
         }
