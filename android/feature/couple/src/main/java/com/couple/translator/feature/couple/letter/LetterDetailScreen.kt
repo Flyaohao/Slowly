@@ -133,8 +133,14 @@ fun LetterDetailScreen(
                 trailing = {
                     val letter = uiState.letter
                     if (letter != null) {
-                        // 草稿信件显示编辑按钮
-                        if (letter.status == "draft") {
+                        // 草稿信件显示编辑按钮。
+                        // isMine 守卫（2026-10-01 线上排查补充）：编辑与 AI 改写的后端
+                        // 鉴权都只认发件人（letter_service.update_letter / letter_ai_service
+                        // .prepare_rewrite_letter 均为 sender_id != user_id → 403），
+                        // 收件方若能看到这个入口，点下去只能拿到「无权访问此信件」。
+                        // 用 != false 而不是 == true：isMine 为 null（用户 id 尚未取到、
+                        // 信件未加载）时不该让作者丢掉编辑能力，只拦「确定不是作者」。
+                        if (letter.status == "draft" && uiState.isMine != false) {
                             AppTopBarAction(
                                 icon = Icons.Default.Edit,
                                 contentDescription = "编辑",

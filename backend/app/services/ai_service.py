@@ -171,6 +171,14 @@ def _preprocess(
     if couple_prof:
         conflict_pattern = couple_prof.conflict_pattern
 
+    # ---- v5.0 D4：AI 配置预检（必须在建会话之前）----
+    # 位置很关键：下面会创建会话行并 commit 用户消息，而调用方要到之后
+    # build_chat_client 才抛 30010——那条「只有用户消息、没有 AI 回复」的空会话
+    # 已经落库了，未配置用户每试一次就留一条垃圾会话（2026-10-01 定位）。
+    # 为什么放在这里而不是函数入口：上面是安全拦截的提前 return，
+    # 危机输入的响应不该被「未配置 AI」抢走；此处是安全拦截之后、任何业务写库之前。
+    uaicfg.resolve(db, user_id)
+
     # ---- P0-10A 改动四：分段 / 续接（服务端权威）----
     now = datetime.now()
     session = None

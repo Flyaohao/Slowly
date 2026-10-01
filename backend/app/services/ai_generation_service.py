@@ -138,6 +138,15 @@ def begin(
     而客户端要靠这个 id 才能调用取消端点。先落一条 `streaming` 也顺带保证
     「用户点完立刻退出页面」这种极端情况下，记录里至少有一条痕迹。
     """
+    # v5.0 D4 配置预检必须先于落库（2026-10-01 补充）：
+    # 各 prepare_* 都在 begin() 之后才 build_chat_client，未配置用户会先留下一条
+    # status=streaming 的空生成记录、再抛 30010 —— 每试一次就攒一条垃圾行。
+    # 在这里统一前置，一处覆盖所有走 ai_generation 的流式端点。
+    # 延迟导入理由同 llm_client：本模块与 user_ai_config_service 互相引用。
+    from app.services import user_ai_config_service as _uaicfg
+
+    _uaicfg.resolve(db, user_id)
+
     row = ai_generation_repo.upsert_generation(
         db,
         user_id=user_id,

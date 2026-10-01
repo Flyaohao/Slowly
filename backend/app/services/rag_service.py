@@ -115,7 +115,25 @@ def _vector_search(
             vec = _user_query_vector(user_id, query_text)
             if vec is None:
                 return []
-            hits = store.similarity_search_by_vector_with_score(vec, k=top_k)
+            # 为什么不是 `similarity_search_by_vector_with_score`：装在这台机器上的
+            # langchain-chroma 根本没有那个方法（它只有 similarity_search_by_vector、
+            # _by_vector_with_relevance_scores、similarity_search_with_score 等）。
+            # 原先写的名字不存在 → 每次调用都 AttributeError → 被下面 except 吞掉
+            # → 静默降级成关键词匹配，向量检索等于从未生效（2026-10-01 定位）。
+            # 实测该版本 `_with_relevance_scores` 的返回值与 similarity_search_with_score
+            # 的 cosine 距离逐位相同，故下面仍按「距离」语义折算相似度。
+            # getattr 兼容：换版本时名字变了也不会再次静默挂掉（拿不到就返回空，
+            # 由上层降级关键词，日志里能看到）。
+            search_by_vector = getattr(
+                store, "similarity_search_by_vector_with_relevance_scores", None
+            ) or getattr(store, "similarity_search_with_score_by_vector", None)
+            if search_by_vector is None:
+                logger.warning(
+                    "[RAG] 向量库缺少「按向量检索」方法，降级关键词检索: %s",
+                    type(store).__name__,
+                )
+                return []
+            hits = search_by_vector(vec, k=top_k)
         else:
             hits = store.similarity_search_with_score(query_text, k=top_k)
     except Exception as exc:
