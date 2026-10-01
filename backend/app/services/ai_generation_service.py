@@ -47,7 +47,7 @@ from app.models.letter import Letter
 from app.repositories import ai_generation_repo
 from app.services import ai_stream_registry
 from app.services.letter_service import is_locked_future
-from app.services.llm_client import LlmError, llm  # noqa: F401 —— llm 作常量/回落保留
+from app.services.llm_client import LlmError, error_payload, llm  # noqa: F401 —— llm 作常量/回落保留
 from app.services.safety_service import check_output_safety_detail, merge_risk_levels
 from app.services.sse import stream_with_heartbeat
 from app.services.structured_stream import StructuredStreamSplitter
@@ -456,7 +456,8 @@ def stream_generation_events(prepared: Dict[str, Any]) -> Iterator[Dict[str, Any
         completed = True
         yield {
             "event": "error",
-            "data": {"code": 50000, "message": "AI 服务异常，请稍后重试"},
+            # 额度/欠费类走 30012 + 可操作文案，其余仍是 50000（见 error_payload）
+            "data": error_payload(exc),
         }
 
     finally:

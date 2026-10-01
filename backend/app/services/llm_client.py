@@ -84,6 +84,29 @@ def _is_key_retryable(status_code: int, code: str) -> bool:
     return code in _KEY_ROTATE_CODES or status_code in _KEY_ROTATE_STATUS
 
 
+#: 命中这些错误码说明是**账户额度/欠费**问题（2026-10-01 内测兜底配套）。
+#: 为什么要单独归类：换 key、降级模型、换 IP、重试**全都无效**——钱不够就是不够。
+#: 老路径会把它们当"模型不可用"降级，逐个模型试完再抛一句
+#: 「所有候选模型均不可用」，用户看到的是含糊的"服务异常"，只会反复重试白等。
+_QUOTA_EXHAUSTED_CODES = frozenset({
+    "Arrearage",                     # 阿里云百炼：账户欠费
+    "AllocationQuota.FreeTierOnly",  # 免费额度已用尽（仅剩付费额度）
+    "Throttling.AllocationQuota",    # 配额维度限流
+    "ModelQuotaExceeded",
+    "FreeQuotaExhausted",
+    "QuotaExhausted",
+    "insufficient_quota",            # OpenAI 兼容：额度不足
+    "billing_error",
+    "quota_exceeded",
+    "exceeded_current_quota",
+})
+
+
+def _is_quota_exhausted(code: str) -> bool:
+    """是否属于「额度/欠费」类失败（区别于网络抖动等可重试故障）。"""
+    return code in _QUOTA_EXHAUSTED_CODES
+
+
 @contextlib.contextmanager
 def _cancel_scope(
     cancel_event: Optional[threading.Event], resp: httpx.Response
@@ -123,6 +146,60 @@ class LlmError(RuntimeError):
     """LLM 调用失败（网络/HTTP/取消/结构化解析）。业务层据此降级或提示。"""
 
 
+class LlmQuotaError(LlmError):
+    """上游**额度/欠费**类失败（`LlmError` 的子类，老调用方的 except 仍然接得住）。
+
+    与普通 `LlmError` 的区别在于**可恢复性**：网络抖动、超时是"等一会再试"，
+    这类是"账户没钱了或配额用尽"——重试、降级模型、轮换 key 都没用。
+    上层据此给明确出口（去充值 / 换一把 key），而不是让人傻等重试。
+
+    ``used_fallback``：本次调用是否走的是**全局兜底配置**（内测体验额度）。
+    文案必须据此分叉——消耗的是你自己（站长）的额度，就该引导用户
+    「去配置你自己的 API Key」，而不是让他去给一个不属于他的账户充值。
+    """
+
+    def __init__(self, message: str, *, used_fallback: bool = False) -> None:
+        super().__init__(message)
+        self.used_fallback = used_fallback
+
+
+#: 业务码：上游额度/欠费导致 AI 不可用。
+#: 与 `app/main.py` 里 LlmQuotaError 全局处理器用的是同一个码，此处定义一次。
+AI_QUOTA_EXHAUSTED_CODE = 30012
+
+
+def quota_message(used_fallback: bool) -> str:
+    """额度耗尽时给用户看的话。分叉依据是**烧的是谁的额度**。
+
+    - 走全局兜底 → 额度是站长的，用户没法替他充值，只能引导去配自己的 Key；
+    - 用用户自己的 Key → 提示查余额 / 换 Key。
+    """
+    if used_fallback:
+        return (
+            "内测体验额度已用尽，请在「设置 → AI 服务配置」中填入你自己的 "
+            "API Key 后继续使用"
+        )
+    return (
+        "你的 API Key 额度已用尽或账户欠费，请检查账户余额，"
+        "或在「设置 → AI 服务配置」中更换 Key"
+    )
+
+
+def error_payload(exc: BaseException) -> Dict[str, Any]:
+    """把 LLM 异常翻译成流式错误帧的 ``{"code": ..., "message": ...}``。
+
+    额度/欠费类单独下发 30012 + 可操作文案。为什么不能沿用 50000
+    「AI 服务异常，请稍后重试」：那句话会诱导用户**反复重试**，
+    而额度问题重试永远不会成功（详见 main.py 的 LlmQuotaError 处理器）。
+    """
+    if isinstance(exc, LlmQuotaError):
+        return {
+            "code": AI_QUOTA_EXHAUSTED_CODE,
+            "message": quota_message(bool(getattr(exc, "used_fallback", False))),
+        }
+    return {"code": 50000, "message": "AI 服务异常，请稍后重试"}
+
+
 class LlmClient:
     """大模型统一客户端（OpenAI 兼容协议）。模块级单例见文件底部 `llm`。
 
@@ -146,6 +223,7 @@ class LlmClient:
         thinking_budget: Optional[int] = None,
         api_keys: Optional[List[str]] = None,
         send_thinking_params: Optional[bool] = None,
+        is_fallback: bool = False,
     ) -> None:
         # 多 key 轮换：api_keys 优先；未传时退化单 key（显式 api_key 或全局
         # AI_API_KEY）——全局单例/`get_client_for_mode` 依赖这一回落
@@ -173,6 +251,9 @@ class LlmClient:
         #: 是否下发思考参数（enable_thinking/thinking_budget 是 DashScope 专有）。
         #: None = 自动：仅 base_url 为 DashScope 时下发；显式 True/False 强制。
         self.send_thinking_params = send_thinking_params
+        #: 本次调用用的是否是**全局兜底配置**（内测体验额度，而非用户自己的 key）。
+        #: 只用于出错时选文案：额度耗尽时，用兜底的要引导用户去配自己的 key。
+        self.is_fallback = is_fallback
 
         if not self.api_key:
             logger.warning("未配置 AI_API_KEY，AI 功能将不可用")
@@ -293,6 +374,13 @@ class LlmClient:
                                 if _is_key_retryable(resp.status_code, code):
                                     if self._advance_key():
                                         continue
+                                    # 额度/欠费类：直接给明确出口（理由同 invoke）
+                                    if _is_quota_exhausted(code):
+                                        raise LlmQuotaError(
+                                            "流式调用上游额度不可用 HTTP %s: %s"
+                                            % (resp.status_code, last_error),
+                                            used_fallback=self.is_fallback,
+                                        )
                                     if code in _MODEL_UNAVAILABLE_CODES or resp.status_code in (429, 503):
                                         logger.warning(
                                             "[LLM] 流式模型 %s 不可用[%s]，降级到下一个模型", model, code
@@ -569,6 +657,15 @@ class LlmClient:
                 if _is_key_retryable(resp.status_code, code):
                     if self._advance_key():
                         continue
+                    # 额度/欠费类：换 key、降级模型都救不了，直接给明确出口。
+                    # 必须放在降级判断**之前** —— 否则会被当成"模型不可用"逐个
+                    # 试完所有模型，既浪费时间，又把真实原因（账户没钱了）
+                    # 盖成含糊的「所有候选模型均不可用」。
+                    if _is_quota_exhausted(code):
+                        raise LlmQuotaError(
+                            "上游额度不可用 HTTP %s: %s" % (resp.status_code, last_error),
+                            used_fallback=self.is_fallback,
+                        )
                     if code in _MODEL_UNAVAILABLE_CODES or resp.status_code in (429, 503):
                         logger.warning("[LLM] 模型 %s 不可用[%s]，降级到下一个模型", model, code)
                         break
@@ -889,6 +986,12 @@ class AnthropicClient(LlmClient):
 
             code, message = self._parse_error(resp)
             last_error = "%s (%s)" % (message, code)
+            # 额度/欠费类先拦下来：换 key、重试都救不了，要给明确出口
+            if _is_quota_exhausted(code):
+                raise LlmQuotaError(
+                    "上游额度不可用 HTTP %s: %s" % (resp.status_code, last_error),
+                    used_fallback=self.is_fallback,
+                )
             if _is_key_retryable(resp.status_code, code) and self._advance_key():
                 continue
             raise LlmError("LLM 调用失败 HTTP %s: %s" % (resp.status_code, last_error))
@@ -963,6 +1066,13 @@ class AnthropicClient(LlmClient):
                     if resp.status_code != 200:
                         raw = resp.read().decode("utf-8", errors="replace")
                         code, message = self._parse_error_offline(raw)
+                        # 额度/欠费类先拦下来（理由同基类）
+                        if _is_quota_exhausted(code):
+                            raise LlmQuotaError(
+                                "流式调用上游额度不可用 HTTP %s: %s"
+                                % (resp.status_code, message),
+                                used_fallback=self.is_fallback,
+                            )
                         if _is_key_retryable(resp.status_code, code) and self._advance_key():
                             yield from self.stream_events(
                                 messages, temperature=temperature,

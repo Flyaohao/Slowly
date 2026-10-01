@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session
 
 from app.core.crypto import decrypt_text, encrypt_text
+from app.core import config as app_config
 from app.core.config import AI_ENABLE_THINKING, AI_THINKING_BUDGET
 from app.models.user_ai_config import UserAiConfig, UserAiKey
 
@@ -63,6 +64,48 @@ class AiConfigInvalidError(ValueError):
 
 
 # --------------------------------------------------------------------------- #
+# 内测期全局兜底（2026-10-01）
+# --------------------------------------------------------------------------- #
+class _FallbackAiConfig:
+    """全局兜底配置的**只读替身**（不落库、不参与 key 轮换）。
+
+    为什么需要它：`build_chat_client` / `build_embeddings` 都是围绕
+    `UserAiConfig` 的 ORM 行写的。内测期要让「没配 key 的用户」也能用，
+    最省的做法是造一个**字段对齐**的替身对象让那两条路径原样复用，
+    而不是在每条调用链上到处插 if。
+
+    `keys` 固定为空列表：兜底不参与 DB 上的 key 轮换与错误留痕
+    （那些都会写 `user_ai_key`，而兜底没有对应的行）。
+    """
+
+    def __init__(self) -> None:
+        self.user_id = 0                      # 0 = 非任何真实用户，避免误写库
+        self.provider_type = app_config.AI_FALLBACK_PROVIDER
+        self.base_url = app_config.AI_FALLBACK_BASE_URL
+        self.model_name = app_config.AI_FALLBACK_MODEL
+        self.embedding_base_url = app_config.AI_FALLBACK_EMBEDDING_BASE_URL or None
+        self.embedding_model = app_config.AI_FALLBACK_EMBEDDING_MODEL
+        self.embedding_api_key_enc = None     # 无独立 embedding key → 与 chat 共用
+        self.embedding_dim = REQUIRED_EMBEDDING_DIM
+        self.enable_rate_limit = True
+        self.key_cursor = 0
+        self.keys: List[Any] = []
+        #: 兜底自身的明文 key（resolve 直接返回，不走 ORM 解密）
+        self.api_key = app_config.AI_FALLBACK_API_KEY
+        #: 标记，供上层区分文案与审计（与 `LlmClient.is_fallback` 同语义）
+        self.is_fallback = True
+
+
+def _fallback_config() -> Optional[_FallbackAiConfig]:
+    """构造全局兜底配置；未启用或没配 key 时返回 None（回到纯 BYOK）。"""
+    if not app_config.AI_FALLBACK_ENABLED:
+        return None
+    if not app_config.AI_FALLBACK_API_KEY:
+        return None
+    return _FallbackAiConfig()
+
+
+# --------------------------------------------------------------------------- #
 # 读取与解析
 # --------------------------------------------------------------------------- #
 def get_config(db: Session, user_id: int) -> Optional[UserAiConfig]:
@@ -86,15 +129,24 @@ def _enabled_keys(config: UserAiConfig) -> List[str]:
     return out
 
 
-def resolve(db: Session, user_id: int) -> Tuple[UserAiConfig, List[str]]:
-    """读取配置与解密后的 key 列表。未配置/无可用 key → AiConfigMissingError。"""
+def resolve(db: Session, user_id: int) -> Tuple[Any, List[str]]:
+    """读取配置与解密后的 key 列表。
+
+    优先级：**用户自己的配置（BYOK）→ 全局兜底（内测期）→ AiConfigMissingError**。
+
+    兜底只补位、不越位：用户一旦自己配过（且有可用 key），永远优先用用户的；
+    兜底只在「完全没配」或「配了但没有启用的 key」时才生效。
+    `AI_FALLBACK_ENABLED=0` 时本函数行为与纯 BYOK 完全一致。
+    """
     config = get_config(db, user_id)
-    if config is None:
-        raise AiConfigMissingError(user_id)
-    keys = _enabled_keys(config)
-    if not keys:
-        raise AiConfigMissingError(user_id)
-    return config, keys
+    if config is not None:
+        keys = _enabled_keys(config)
+        if keys:
+            return config, keys
+    fallback = _fallback_config()
+    if fallback is not None:
+        return fallback, [fallback.api_key]
+    raise AiConfigMissingError(user_id)
 
 
 def build_chat_client(
@@ -113,6 +165,9 @@ def build_chat_client(
     from app.services.llm_client import AnthropicClient, LlmClient
 
     config, keys = resolve(db, user_id)
+    # 兜底替身没有 DB 行、也不参与 key 轮换（只有一把 key，rotate 无副作用）；
+    # 把标记透给客户端，出错时才能区分「你的 key 额度用尽」与「体验额度用尽」。
+    is_fallback = bool(getattr(config, "is_fallback", False))
     keys = _rotate(keys, config.key_cursor or 0)
 
     eff_thinking = AI_ENABLE_THINKING if enable_thinking is None else enable_thinking
@@ -129,6 +184,7 @@ def build_chat_client(
         model=config.model_name,
         enable_thinking=eff_thinking,
         thinking_budget=eff_budget,
+        is_fallback=is_fallback,
     )
     cls = AnthropicClient if config.provider_type == "anthropic" else LlmClient
     return cls(**kwargs)

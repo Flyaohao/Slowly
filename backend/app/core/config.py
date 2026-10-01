@@ -16,6 +16,25 @@ AI_MODEL: str = os.getenv("AI_MODEL", "qwen3.7-flash")
 AI_MEMORY_MODEL: str = os.getenv("AI_MEMORY_MODEL", "qwen-turbo")
 AI_BASE_URL: str = os.getenv("AI_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 
+# ---- 内测期全局兜底 AI 配置（2026-10-01）----
+# 背景：v5.0 是 BYOK（用户必须自己配 api-key 才能用 AI）。内测阶段为了
+# 让「没配 key」的人也能体验，未配置时**回落**到下面这套全局配置；
+# 用户一旦自己配过，永远优先用用户自己的 —— BYOK 语义不变，兜底只是补位。
+# 默认值全部继承 AI_API_KEY / AI_BASE_URL / AI_MODEL，所以**不改 .env 即可生效**；
+# 想单独指定（例如兜底用更便宜的模型、或和后台任务分开计费）再显式设置。
+#: 总开关。置 0 回到「未配置即 30010」的纯 BYOK 行为
+AI_FALLBACK_ENABLED: bool = os.getenv("AI_FALLBACK_ENABLED", "1") == "1"
+AI_FALLBACK_API_KEY: str = os.getenv("AI_FALLBACK_API_KEY", "") or AI_API_KEY
+AI_FALLBACK_BASE_URL: str = os.getenv("AI_FALLBACK_BASE_URL", "") or AI_BASE_URL
+AI_FALLBACK_MODEL: str = os.getenv("AI_FALLBACK_MODEL", "") or AI_MODEL
+#: openai = OpenAI 兼容协议；anthropic = Anthropic Messages 协议
+AI_FALLBACK_PROVIDER: str = os.getenv("AI_FALLBACK_PROVIDER", "openai")
+#: 兜底的 embedding。向量库固定 1024 维，必须用 text-embedding-v4
+AI_FALLBACK_EMBEDDING_MODEL: str = os.getenv(
+    "AI_FALLBACK_EMBEDDING_MODEL", "text-embedding-v4"
+)
+AI_FALLBACK_EMBEDDING_BASE_URL: str = os.getenv("AI_FALLBACK_EMBEDDING_BASE_URL", "")
+
 #: 推理模型的思考预算（token）。主模型是推理模型，**思考长度直接等于用户等待时间**：
 #: 实测同一封信的解读，不限制时思考 9258 字 / 首字正文 32.9s；压到 1024 时
 #: 思考 3343 字 / 首字 13.4s；完全关掉思考则 0.9s 出字。取 0 表示不限制。

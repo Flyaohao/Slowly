@@ -23,6 +23,11 @@ from app.services.user_ai_config_service import (
     AiConfigInvalidError,
     AiConfigMissingError,
 )
+from app.services.llm_client import (
+    AI_QUOTA_EXHAUSTED_CODE,
+    LlmQuotaError,
+    quota_message,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -315,6 +320,25 @@ async def ai_config_invalid_handler(request: Request, exc: AiConfigInvalidError)
     """v5.0 D10：AI 配置非法/连通性测试未通过 → 业务码 30011，消息透传原因。"""
     return _respond_business_error(
         request, 200, 30011, exc.message or "AI 配置无效", None
+    )
+
+
+@app.exception_handler(LlmQuotaError)
+async def llm_quota_exhausted_handler(request: Request, exc: LlmQuotaError):
+    """上游**额度/欠费** → 业务码 30012（2026-10-01 内测兜底配套）。
+
+    为什么不并入 50000「AI 服务异常，请稍后重试」：那句话让用户以为"等会儿
+    再试就好"，于是反复重试、白等 —— 而额度问题**重试永远不会成功**。
+
+    文案按 `used_fallback` 分叉，因为两种情形的正确出口完全不同：
+    - 走全局兜底（内测体验额度）→ 额度是站长的，用户没法给他充值，
+      只能引导他「去配自己的 Key」；
+    - 用用户自己的 Key → 提示他查余额 / 换 Key。
+    """
+    used_fallback = bool(getattr(exc, "used_fallback", False))
+    logger.warning("[AI] 上游额度不可用 used_fallback=%s: %s", used_fallback, exc)
+    return _respond_business_error(
+        request, 200, AI_QUOTA_EXHAUSTED_CODE, quota_message(used_fallback), None
     )
 
 

@@ -50,7 +50,7 @@ from app.services.rag_service import retrieve_chunks, build_rag_context
 from app.services import relationship_review_service
 from app.services.memory_service import get_memory_context, distill_in_background
 from app.services.memory_retrieval import build_profile_keywords, retrieve_memory_items
-from app.services.llm_client import llm, LlmError, get_client_for_mode
+from app.services.llm_client import llm, LlmError, get_client_for_mode, error_payload
 from app.services import user_ai_config_service as uaicfg
 from app.services.user_ai_config_service import AiConfigMissingError
 from app.services.sse import HEARTBEAT_INTERVAL, stream_with_heartbeat
@@ -896,7 +896,8 @@ def stream_chat_events(prepared: dict) -> Iterator[Dict[str, Any]]:
         logger.error("[AI] 流式调用失败 scene=%s: %s", prepared["scene_key"], exc)
         yield {
             "event": "error",
-            "data": {"code": 50000, "message": "AI 服务异常，请稍后重试"},
+            # 额度/欠费类走 30012 + 可操作文案，其余仍是 50000（见 error_payload）
+            "data": error_payload(exc),
         }
         return
 

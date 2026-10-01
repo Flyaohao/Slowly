@@ -62,6 +62,18 @@ x-ai-env: &ai-env
   MEMORY_ASSERTION_INDEX_WORKER: ${MEMORY_ASSERTION_INDEX_WORKER:-0}
   # 解绑后记忆清理的保留期（天）。couple_repo / memory_purge_service 直读
   MEMORY_PURGE_RETENTION_DAYS: ${MEMORY_PURGE_RETENTION_DAYS:-30}
+  # ---- 内测期全局兜底 AI 配置（2026-10-01）----
+  # 用户没自己配 key 时回落到这套配置，让内测用户都能体验；用户配过则永远优先。
+  # 默认值故意留空：config.py 里会回落到 AI_API_KEY / AI_BASE_URL / AI_MODEL，
+  # 所以**不改 .env 也能生效**。想单独指定（如兜底换更便宜的模型、与后台任务分开
+  # 计费）再在这里对应的 .env 项里设。
+  AI_FALLBACK_ENABLED: ${AI_FALLBACK_ENABLED:-1}
+  AI_FALLBACK_API_KEY: ${AI_FALLBACK_API_KEY:-}
+  AI_FALLBACK_BASE_URL: ${AI_FALLBACK_BASE_URL:-}
+  AI_FALLBACK_MODEL: ${AI_FALLBACK_MODEL:-}
+  AI_FALLBACK_PROVIDER: ${AI_FALLBACK_PROVIDER:-openai}
+  AI_FALLBACK_EMBEDDING_MODEL: ${AI_FALLBACK_EMBEDDING_MODEL:-text-embedding-v4}
+  AI_FALLBACK_EMBEDDING_BASE_URL: ${AI_FALLBACK_EMBEDDING_BASE_URL:-}
 
 services:
   backend:

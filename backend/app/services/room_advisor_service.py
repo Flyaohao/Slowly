@@ -35,6 +35,7 @@ from app.services.party_labels import NEUTRAL_A, NEUTRAL_B, party_labels
 from app.repositories import profile_repo
 from app.services import mediation_styles
 from app.services.lc_prompt_builder import build_chat_messages
+from app.services.llm_client import AI_QUOTA_EXHAUSTED_CODE, error_payload
 from app.services.memory_retrieval import visibility_filter
 from app.services.sse import stream_with_heartbeat
 
@@ -156,7 +157,8 @@ def stream_reply_events(
 
     cancel_event = threading.Event()
     accumulated: List[Tuple[str, str]] = []
-    stream_error: Optional[str] = None
+    #: 保存异常本身而非类型名——额度/欠费类要据此给出可操作文案
+    stream_error: Optional[BaseException] = None
 
     # token 校验在请求级 db 上完成；生成用独立会话（写回事务边界要求）
     pending = room_repo.get_pending(db, room_id)
@@ -184,13 +186,18 @@ def stream_reply_events(
                 yield {"event": "delta", "data": {"delta": text}}
     except Exception as exc:  # noqa: BLE001 —— 流中断：不落库，释放 pending
         logger.warning("[ROOM] 军师流式失败 room=%s: %s", room_id, exc)
-        stream_error = type(exc).__name__
+        stream_error = exc
     finally:
         cancel_event.set()
 
     if stream_error is not None:
         _release_pending_standalone(room_id)
-        yield {"event": "error", "data": {"code": 50000, "message": "军师开小差了，请重新@军师"}}
+        payload = error_payload(stream_error)
+        # 额度/欠费不算"军师开小差"——原样透出可操作文案；其余失败维持房间
+        # 语境的说法，不把内部异常暴露给用户。
+        if payload["code"] != AI_QUOTA_EXHAUSTED_CODE:
+            payload = {"code": 50000, "message": "军师开小差了，请重新@军师"}
+        yield {"event": "error", "data": payload}
         return
 
     thinking = "".join(t for k, t in accumulated if k == "thinking").strip() or None
