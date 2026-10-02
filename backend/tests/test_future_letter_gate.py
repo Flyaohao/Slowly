@@ -247,7 +247,9 @@ def t_ai_gates():
     db, rel, L = _fresh()
     orig_llm = letter_ai_service._call_llm
 
-    def fake_llm(prompt, scene_key):
+    # `client=None`：生产侧 `_call_llm` v5.0 起会收到调用方传入的 `client=`。
+    # 桩不接该参数会抛 `TypeError: unexpected keyword argument 'client'`（2026-10-02 修复）。
+    def fake_llm(prompt, scene_key, client=None):
         return {"summary": "（stub）", "key_concerns": [], "emotion": "平静",
                 "expected_response": "", "misunderstandable": [],
                 "reply_suggestions": [], "replies": [],

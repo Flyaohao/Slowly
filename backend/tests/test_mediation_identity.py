@@ -545,7 +545,7 @@ def t_confirm_false_supplement_regenerates():
         supplement = "补充：其实我想要的只是到家那句问候"
 
         # 桩换成「只改我这一侧」的返回，才能验证对方那侧是原样保留的
-        def llm_mine_only(prompt, scene_key):
+        def llm_mine_only(prompt, scene_key, client=None):
             if scene_key == "mediation_rewrite":
                 return {
                     "rewrite_a": REWRITE_STUB["rewrite_a"],
@@ -633,7 +633,7 @@ def t_missing_own_rewrite_compensation_is_async_and_fails_loudly():
         ).delete()
         db.commit()
 
-        def broken_rewrite_llm(prompt, scene_key):
+        def broken_rewrite_llm(prompt, scene_key, client=None):
             if scene_key == "mediation_rewrite":
                 raise RuntimeError("LLM 不可用（测试桩）")
             return dict(SUMMARY_STUB)
@@ -716,7 +716,7 @@ def t_confirm_false_failure_is_visible_not_silent():
     with _env() as (h, db):
         sid, _ = _reach_confirming(db)
 
-        def broken_rewrite_llm(prompt, scene_key):
+        def broken_rewrite_llm(prompt, scene_key, client=None):
             if scene_key == "mediation_rewrite":
                 raise RuntimeError("LLM 不可用（测试桩）")
             return dict(SUMMARY_STUB)
@@ -913,7 +913,7 @@ def t_home_active_mediation_filter():
         # 整改 B4.1-4：生成失败态仍在首页可见（用户要能回去重试）
         mediation_service.accept_mediation(db, started["session_id"], B_ID)
 
-        def broken_llm(prompt, scene_key):
+        def broken_llm(prompt, scene_key, client=None):
             if scene_key == "mediation_rewrite":
                 raise RuntimeError("LLM 不可用（测试桩）")
             return dict(SUMMARY_STUB)
@@ -1327,7 +1327,7 @@ def t_generation_not_blocking():
         mediation_service.accept_mediation(db, sid, B_ID)
         mediation_service.submit_input(db, sid, B_ID, INPUT_B)
 
-        def slow_llm(prompt, scene_key):
+        def slow_llm(prompt, scene_key, client=None):
             time.sleep(0.3)
             return dict(STUBS[scene_key])
 

@@ -423,3 +423,10 @@ package-lock.json
 /*.html
 /android/s1.png
 /android/u1.xml
+
+# ---- 凭据类文件（2026-10-03）----
+# `.env` 已被上面的规则忽略，但 `.env.bak-*` 这类手工备份不被覆盖，
+# 而它们同样含 AI_API_KEY 等明文凭据。宁可漏提交，绝不泄露。
+.env.bak-*
+.env.*.bak*
+*.env.bak

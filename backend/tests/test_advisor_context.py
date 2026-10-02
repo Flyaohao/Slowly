@@ -111,7 +111,10 @@ def case_chat_response_has_evidence():
     from app.core.database import SessionLocal
     from app.models.couple_relation import CoupleRelation
 
-    def _fake_call_llm(messages, scene_key):
+    # `client=None`：生产侧 `_call_llm` v5.0 起由调用方经
+    # `build_chat_client` 传入 `client=`。桩不接该参数会抛
+    # `TypeError: unexpected keyword argument 'client'`（2026-10-02 修复）。
+    def _fake_call_llm(messages, scene_key, client=None):
         return {
             "raw_text": "测试回复：我理解你的焦虑。",
             "summary": "测试",

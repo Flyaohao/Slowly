@@ -35,6 +35,7 @@ for p in (BACKEND_DIR, HERE):
         sys.path.insert(0, p)
 
 from mysql_harness import MysqlHarness, mysql_available  # noqa: E402
+from live_llm_guard import live_llm_enabled, skip_reason  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.models.questionnaire import Questionnaire  # noqa: E402
 from app.models.diary_entry import DiaryEntry  # noqa: E402
@@ -236,6 +237,12 @@ def _run_body(h):
 
 
 def main():
+    # 真调LLM 的套件默认跳过（烧额度 + 额度耗尽会伪装成回归信号）。
+    # 确认真机/真模型验收时：LIVE_LLM_VIEWPOINT=1 python tests/test_viewpoint_analysis.py
+    if not live_llm_enabled("viewpoint_analysis"):
+        print(skip_reason("viewpoint_analysis"), flush=True)
+        return 0
+
     avail = mysql_available()
     if not avail:
         print("MySQL 不可用，跳过（不伪装通过）", flush=True)

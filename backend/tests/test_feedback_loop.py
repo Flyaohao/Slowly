@@ -35,6 +35,7 @@ BACKEND_DIR = os.path.dirname(HERE)
 sys.path.insert(0, BACKEND_DIR)
 
 from sqlalchemy import BigInteger, Integer, create_engine  # noqa: E402
+from live_llm_guard import live_llm_enabled, skip_reason  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
@@ -741,6 +742,9 @@ def t_feedback_outcome_via_api(db: Session):
 
 def main() -> int:
     print("[整改 §8.3/§8.2] 反馈闭环 + 流式结构化 回归")
+    if not live_llm_enabled("feedback_loop"):
+        print(skip_reason("feedback_loop"))
+        return 0
     db = seed()
     try:
         t_upsert(db)

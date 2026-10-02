@@ -887,7 +887,7 @@ def t_fastapi_contract_processing_semantics():
     h = MediationHarness()
     try:
         with h:
-            def slow_llm(prompt, scene_key):
+            def slow_llm(prompt, scene_key, client=None):
                 time.sleep(1.0)
                 return dict(STUBS[scene_key])
 

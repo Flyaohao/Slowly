@@ -18,7 +18,11 @@
 import os
 import sys
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from live_llm_guard import live_llm_enabled, skip_reason  # noqa: E402
 
 from app.services.ai_service import _call_llm  # noqa: E402
 from app.services.prompt_builder import build_prompt  # noqa: E402
@@ -64,6 +68,12 @@ def run(label: str, user_profile: str, partner_profile: str, pattern: str) -> di
 
 
 def main() -> int:
+    # 2026-10-02：本套件**真调 LLM**（烧额度，且额度耗尽会伪装成"测试失败"）。
+    # 默认拦下；显式要跑：LIVE_LLM_PROFILE_AB=1 或 LIVE_LLM=1
+    if not live_llm_enabled("profile_ab"):
+        print(skip_reason("profile_ab"))
+        return 0
+
     print("问题：%s" % QUESTION)
 
     a = run("A 组 · 注入画像", PROFILE_A_USER, PROFILE_A_PARTNER, PATTERN_A)

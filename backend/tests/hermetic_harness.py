@@ -229,12 +229,25 @@ class MediationHarness:
         `stubs` 形如 `{"mediation_rewrite": {...}, "mediation_summary": {...}}`；
         也可以是 callable：`callable(prompt, scene_key) -> dict`，
         用于「第一次失败、第二次成功」这类需要按调用次数变化的场景。
+
+        ## 为什么桩签名带 `client=None`（2026-10-02）
+
+        `ai_service._call_llm` 在 v5.0 改成 `(prompt, scene_key, client=None)`，
+        `client` 由调用方经 `user_ai_config_service.build_chat_client` 解析。
+        但**测试桩不需要真的模型 client**——它只关心 scene_key。
+
+        若桩写成 `def fake_llm(prompt, scene_key)`，生产代码一传`client=`
+        就抛 `TypeError: got an unexpected keyword argument 'client'`，
+        套件全挂（曾一次性挂 6 个 mediation/advisor 套件）。
+
+        故统一补`client=None` 吸收该参数。`client` 刻意不传给 stubs 的
+        callable —— 桩的职责是产出固定结构，不需要真实 client。
         """
         from app.services import mediation_service
 
         harness = self
 
-        def fake_llm(prompt, scene_key):
+        def fake_llm(prompt, scene_key, client=None):
             harness.llm_calls.append(scene_key)
             if callable(stubs):
                 return stubs(prompt, scene_key)

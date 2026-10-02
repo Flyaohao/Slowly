@@ -15,8 +15,11 @@ import json
 import os
 import sys
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from live_llm_guard import live_llm_enabled, skip_reason  # noqa: E402
 from app.services.ai_service import _call_llm  # noqa: E402
 from app.services.prompt_builder import build_prompt  # noqa: E402
 
@@ -44,6 +47,12 @@ PLACEHOLDER_MARKERS = ("占位", "测试回复", "需接入真实 LLM API")
 
 
 def main() -> int:
+    # 2026-10-02：本套件**真调 LLM**（烧额度，且额度耗尽会伪装成"测试失败"）。
+    # 默认拦下；显式要跑：LIVE_LLM_AI_LIVE=1 或 LIVE_LLM=1
+    if not live_llm_enabled("ai_live"):
+        print(skip_reason("ai_live"))
+        return 0
+
     print("=" * 72)
     print("AI 核心链路验证")
     print("=" * 72)

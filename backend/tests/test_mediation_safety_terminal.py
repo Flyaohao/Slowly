@@ -26,6 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from hermetic_harness import MediationHarness  # noqa: E402
+from live_llm_guard import live_llm_enabled, skip_reason  # noqa: E402
 
 from app.models.ai import AiChatSession  # noqa: E402
 from app.models.couple_relation import CoupleRelation  # noqa: E402
@@ -368,6 +369,9 @@ def t_summary_risk_also_fail_closed():
 
 def main() -> int:
     print("[调解安全终态 / 未知风险 fail closed] 整改 B4.3 P0-2 + P0-4 验收")
+    if not live_llm_enabled("mediation_safety_terminal"):
+        print(skip_reason("mediation_safety_terminal"))
+        return 0
     t_high_risk_lands_in_safety_blocked()
     t_safety_blocked_can_review_but_has_no_progress_actions()
     t_safety_blocked_not_in_history_or_active()

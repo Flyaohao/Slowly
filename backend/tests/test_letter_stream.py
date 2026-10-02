@@ -25,6 +25,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import httpx  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
+from live_llm_guard import live_llm_enabled, skip_reason  # noqa: E402
+
 from app.core.database import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.ai_generation import AiGeneration  # noqa: E402
@@ -32,7 +34,12 @@ from app.models.couple_relation import CoupleRelation  # noqa: E402
 from app.models.letter import Letter  # noqa: E402
 from app.schemas.ai_output import LetterAnalysisOutput  # noqa: E402
 from app.security.jwt import create_access_token  # noqa: E402
-from app.services.letter_ai_service import LETTER_UNDERSTAND_PROMPT  # noqa: E402
+from app.services.letter_ai_service import (  # noqa: E402
+    LETTER_UNDERSTAND_PROMPT,
+    UNDERSTAND_PRINCIPLES_RECEIVER,
+    VIEWER_NOTE_RECEIVER,
+    _understand_prompt,
+)
 from app.services.llm_client import llm  # noqa: E402
 from app.services.prompt_builder import build_structured_stream_prompt  # noqa: E402
 from app.services.structured_stream import (  # noqa: E402
@@ -53,6 +60,11 @@ TEST_LETTER_CONTENT = (
 )
 
 PROMPT_ARGS = dict(
+    # 方向说明与指导原则自 2026-10-01 起也走模板参数（信件方向错位修复）。
+    # 这里填收信人视角，以保留下方「逐段分析信件内容」的历史断言；
+    # 写信人视角另有专门的互斥检查（见 check_prompt）。
+    viewer_note=VIEWER_NOTE_RECEIVER,
+    principles=UNDERSTAND_PRINCIPLES_RECEIVER,
     sender_profile="依恋类型: 焦虑依恋型, 置信度: 0.82",
     letter_title=TEST_LETTER_TITLE,
     letter_content=TEST_LETTER_CONTENT,
@@ -113,8 +125,27 @@ def check_prompt() -> bool:
     base = LETTER_UNDERSTAND_PROMPT.format(**PROMPT_ARGS)
     streamed = build_structured_stream_prompt(base, LetterAnalysisOutput)
 
+    # 方向互斥（2026-10-01 修复回归）：同一封信，两种视角的提示词不能混。
+    # 修之前只有收信人一种，用户打开自己发出的信会被按「TA 写来的」解读。
+    class _LetterStub:
+        sender_id = 7
+        title = TEST_LETTER_TITLE
+        content = TEST_LETTER_CONTENT
+
+    mine = _understand_prompt(_LetterStub(), 7, "我的画像")
+    theirs = _understand_prompt(_LetterStub(), 9, "TA 的画像")
+
     checks = [
         ("流式版保留原 prompt 的分析要求", "逐段分析信件内容" in streamed),
+        ("写信人视角：声明这封信是用户自己写的", "用户自己" in mine),
+        ("写信人视角：不出现收信人口吻", "用户是**收信人**" not in mine),
+        ("写信人视角：不给回信建议", "不需要回自己的信" in mine),
+        ("收信人视角：声明用户是收信人", "用户是**收信人**" in theirs),
+        ("收信人视角：不出现写信人口吻", "用户自己" not in theirs),
+        (
+            "两种视角的指导原则互不相同",
+            "逐段分析信件内容" in theirs and "逐段分析信件内容" not in mine,
+        ),
         ("流式版保留信件原文", TEST_LETTER_CONTENT in streamed),
         ("流式版保留发件人画像", "焦虑依恋型" in streamed),
         ("流式版含分隔符", STRUCTURED_MARKER in streamed),
@@ -483,6 +514,10 @@ def main() -> int:
     print("=" * 72)
     print("信件「AI 帮我理解」流式链路验证")
     print("=" * 72)
+
+    if not live_llm_enabled("letter_stream"):
+        print(skip_reason("letter_stream"))
+        return 0
 
     if not llm.api_key:
         print("❌ 未配置 AI_API_KEY，无法进行端到端验证")

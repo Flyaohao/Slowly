@@ -27,6 +27,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import httpx  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+from live_llm_guard import live_llm_enabled, skip_reason  # noqa: E402
+
 from app.core.database import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.ai import AiChatMessage, AiChatSession  # noqa: E402
@@ -306,6 +308,10 @@ def main() -> int:
     print("=" * 72)
     print("SSE 流式链路验证")
     print("=" * 72)
+
+    if not live_llm_enabled("sse"):
+        print(skip_reason("sse"))
+        return 0
 
     user_id = pick_active_user()
     print("测试用户: user_id=%d（active 情侣关系中的一方）" % user_id)

@@ -38,7 +38,11 @@ import os
 import sys
 import time
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from live_llm_guard import live_llm_enabled, skip_reason  # noqa: E402
 
 import httpx  # noqa: E402
 from sqlalchemy import text  # noqa: E402
@@ -60,6 +64,7 @@ from app.services.letter_ai_service import (  # noqa: E402
     LETTER_REPLY_PROMPT,
     LETTER_REWRITE_PROMPT,
     LETTER_UNDERSTAND_PROMPT,
+    VIEWER_NOTE_REPLY_RECEIVER,
 )
 from app.services.prompt_builder import (  # noqa: E402
     STRUCTURED_MARKER,
@@ -98,6 +103,8 @@ PROMPT_CASES = [
             letter_title=TEST_LETTER_TITLE,
             letter_content=TEST_LETTER_CONTENT,
             style="温柔一点",
+            # 注意：改写模板用的是 {style}，**没有** {viewer_note}。
+            # 视角说明只在「理解 / 回信」两个模板里（2026-10-02 核实）。
         ),
         LetterRewriteOutput,
         ["rewritten_title", "rewritten_content", "changes"],
@@ -109,6 +116,11 @@ PROMPT_CASES = [
             sender_profile="依恋类型: 焦虑依恋型",
             letter_title=TEST_LETTER_TITLE,
             letter_content=TEST_LETTER_CONTENT,
+            principles="先接住情绪，再谈事实；不替对方下结论。",
+            # 2026-10-02：模板新增 {viewer_note}（按收发方向注入不同视角说明）。
+            # 本用例取收信人方向，与生产 `build_reply_prompt` 中
+            # `_is_sender` 为False 时的取值一致。
+            viewer_note=VIEWER_NOTE_REPLY_RECEIVER,
         ),
         LetterReplyOutput,
         ["replies", "do_not_say"],
@@ -441,6 +453,13 @@ def print_stream_result(tag: str, r: dict, extra_checks: list) -> bool:
 # 主流程
 # ---------------------------------------------------------------------- #
 def main() -> int:
+    # 2026-10-02：本套件**真调 LLM**（SSE 流式请求真实打上游，烧额度，
+    # 且额度耗尽会伪装成"流式失败"）。默认拦下；
+    # 显式要跑：LIVE_LLM_GENERATION_STREAM=1 或 LIVE_LLM=1
+    if not live_llm_enabled("generation_stream"):
+        print(skip_reason("generation_stream"))
+        return 0
+
     print("\n流式端点清单（OpenAPI）：")
     for p in sorted(app.openapi()["paths"]):
         if "/stream" in p:

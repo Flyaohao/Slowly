@@ -18,8 +18,11 @@ import json
 import os
 import sys
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from live_llm_guard import live_llm_enabled, skip_reason  # noqa: E402
 from app.agent.executor import run_agent  # noqa: E402
 from app.agent.tools import build_agent_tools  # noqa: E402
 
@@ -36,6 +39,16 @@ CASES = [
 
 
 def main() -> int:
+    # 2026-10-02：本套件**真调 LLM**（Agent 多轮工具调用，单次可打 6+ 次上游，
+    # 烧额度且失败会被误读成"Agent 能力不行"）。默认拦下；
+    # 显式要跑：LIVE_LLM_AGENT=1 或 LIVE_LLM=1
+    #
+    # 为什么以前没被发现会真调：`.env` 里 AI_API_KEY 为空时它在下游
+    # 直接短路返回，看起来是"通过"。一旦配了 key 就会真跑并烧额度。
+    if not live_llm_enabled("agent"):
+        print(skip_reason("agent"))
+        return 0
+
     print("=" * 72)
     print("Agent 工具调用验证")
     print("=" * 72)
