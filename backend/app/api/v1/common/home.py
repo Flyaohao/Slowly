@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.errors import safe_business_code
 from app.schemas.common import ApiResponse
 from app.services import home_service
 
@@ -23,5 +24,5 @@ def get_home(
             "10001": (400, "用户不存在"),
         }
         sc, msg = error_map.get(code, (400, "获取失败"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=data)

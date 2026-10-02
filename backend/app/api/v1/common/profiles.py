@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.errors import safe_business_code
 from app.schemas.common import ApiResponse
 from app.schemas.profile_schema import EnrichProfileRequest, ManualVersionRequest
 from app.repositories import profile_repo, couple_repo
@@ -29,11 +30,8 @@ _PROFILE_ERRORS = {
 def _profile_error(exc: ValueError) -> ApiResponse:
     code = str(exc)
     _, message = _PROFILE_ERRORS.get(code, (400, "操作失败"))
-    try:
-        numeric = int(code)
-    except ValueError:
-        numeric = 400
-    return ApiResponse(code=numeric, message=message, data=None)
+    # 非数字码（Pydantic / service 中文消息）回退 400，与全局映射表同口径。
+    return ApiResponse(code=safe_business_code(code, 400), message=message, data=None)
 
 
 @router.get("/me", response_model=ApiResponse)

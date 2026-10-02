@@ -4,6 +4,7 @@ from typing import Optional, List
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.errors import safe_business_code
 from app.core.features import feature_disabled_error
 from app.schemas.common import ApiResponse
 from app.schemas.letter_schema import (
@@ -36,7 +37,7 @@ def create_letter(
             return ApiResponse(code=60004, message="单身模式下仅支持普通信和未说出口", data=None)
         if code == "10006":
             raise feature_disabled_error()
-        return ApiResponse(code=int(code), message="创建失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="创建失败", data=None)
     return ApiResponse(data=LetterOut.model_validate(letter).model_dump())
 
 
@@ -111,7 +112,7 @@ def get_letter(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": 60001, "message": "信件不存在", "data": None})
         if code == "60002":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": 60002, "message": "无权访问此信件", "data": None})
-        return ApiResponse(code=int(code), message="获取失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="获取失败", data=None)
     return ApiResponse(data=LetterOut.model_validate(letter).model_dump())
 
 
@@ -135,7 +136,7 @@ def update_letter(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": 60003, "message": "信件已发送，无法编辑", "data": None})
         if code == "10006":
             raise feature_disabled_error()
-        return ApiResponse(code=int(code), message="更新失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="更新失败", data=None)
     return ApiResponse(data=LetterOut.model_validate(letter).model_dump())
 
 
@@ -153,7 +154,7 @@ def delete_letter(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": 60001, "message": "信件不存在", "data": None})
         if code == "60002":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": 60002, "message": "无权访问此信件", "data": None})
-        return ApiResponse(code=int(code), message="删除失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="删除失败", data=None)
     return ApiResponse()
 
 
@@ -177,7 +178,7 @@ def send_letter(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": 30005, "message": "请先绑定情侣关系", "data": None})
         if code == "10006":
             raise feature_disabled_error()
-        return ApiResponse(code=int(code), message="发送失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="发送失败", data=None)
     return ApiResponse(data=LetterOut.model_validate(letter).model_dump())
 
 
@@ -206,5 +207,5 @@ def toggle_favorite(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": 60001, "message": "信件不存在", "data": None})
         if code == "60002":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": 60002, "message": "无权访问此信件", "data": None})
-        return ApiResponse(code=int(code), message="操作失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="操作失败", data=None)
     return ApiResponse(data=LetterOut.model_validate(letter).model_dump())

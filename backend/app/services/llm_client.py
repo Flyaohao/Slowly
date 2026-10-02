@@ -44,7 +44,7 @@ logger = logging.getLogger("couple.llm")
 #: 主模型额度耗尽或限流时，依次尝试的备用模型（仅全局配置；用户级配置禁用）
 FALLBACK_MODELS: List[str] = ["qwen-plus", "deepseek-v3", "qwen-turbo"]
 
-#: 单次请求超时。qwen3.7-flash 这类推理模型会先产出思考内容，
+#: 单次请求超时。推理模型（qwen3.8-max 等）会先产出思考内容，
 #: 实测单次结构化调用约 30s，长 prompt 更久，故留足余量。
 _REQUEST_TIMEOUT = 120.0
 _TOOL_NAME = "submit_structured_answer"

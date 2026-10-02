@@ -6,6 +6,7 @@ from datetime import date
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.errors import safe_business_code
 from app.core.features import require_feature
 from app.schemas.common import ApiResponse
 from app.services import presence_service
@@ -43,7 +44,7 @@ def set_meet_date(
             "40001": (404, "空间不存在"),
         }
         sc, msg = error_map.get(code, (400, "设置失败"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=data)
 
 
@@ -61,7 +62,7 @@ def share_moment(
         code = str(e)
         error_map = {"30005": (400, "请先绑定情侣关系")}
         sc, msg = error_map.get(code, (400, "分享失败"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=data)
 
 
@@ -76,7 +77,7 @@ def get_feed(
         code = str(e)
         error_map = {"30005": (400, "请先绑定情侣关系")}
         sc, msg = error_map.get(code, (400, "获取失败"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=data)
 
 
@@ -92,5 +93,5 @@ def send_companion_request(
         code = str(e)
         error_map = {"30005": (400, "请先绑定情侣关系")}
         sc, msg = error_map.get(code, (400, "发送失败"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=data)

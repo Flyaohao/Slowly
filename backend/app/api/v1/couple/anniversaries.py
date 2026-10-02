@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.errors import safe_business_code
 from app.schemas.common import ApiResponse
 from app.schemas.anniversary_schema import (
     AnniversaryCreate, AnniversaryUpdate, AnniversaryOut,
@@ -24,7 +25,7 @@ def create_anniversary(
         code = str(e)
         if code == "30005":
             return ApiResponse(code=30005, message="请先绑定情侣关系", data=None)
-        return ApiResponse(code=int(code), message="创建失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="创建失败", data=None)
     return ApiResponse(data=AnniversaryOut.model_validate(
         anniversary_service.serialize_anniversary(item)
     ).model_dump())
@@ -47,6 +48,29 @@ def list_anniversaries(
     return ApiResponse(data=result)
 
 
+@router.get("/{item_id}", response_model=ApiResponse)
+def get_anniversary(
+    item_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """查单条。之前只有列表接口，客户端点进详情页只能把整页列表拉下来自己找。"""
+    try:
+        item = anniversary_service.get_anniversary(db, current_user.id, item_id)
+    except ValueError as e:
+        code = str(e)
+        if code == "30005":
+            return ApiResponse(code=30005, message="请先绑定情侣关系", data=None)
+        if code == "100001":
+            return ApiResponse(code=100001, message="纪念日不存在", data=None)
+        if code == "100002":
+            return ApiResponse(code=100002, message="无权访问", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="查询失败", data=None)
+    return ApiResponse(data=AnniversaryOut.model_validate(
+        anniversary_service.serialize_anniversary(item)
+    ).model_dump())
+
+
 @router.put("/{item_id}", response_model=ApiResponse)
 def update_anniversary(
     item_id: int,
@@ -65,7 +89,7 @@ def update_anniversary(
             return ApiResponse(code=100001, message="纪念日不存在", data=None)
         if code == "100002":
             return ApiResponse(code=100002, message="无权访问", data=None)
-        return ApiResponse(code=int(code), message="更新失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="更新失败", data=None)
     return ApiResponse(data=AnniversaryOut.model_validate(
         anniversary_service.serialize_anniversary(item)
     ).model_dump())
@@ -87,5 +111,5 @@ def delete_anniversary(
             return ApiResponse(code=100001, message="纪念日不存在", data=None)
         if code == "100002":
             return ApiResponse(code=100002, message="无权访问", data=None)
-        return ApiResponse(code=int(code), message="删除失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="删除失败", data=None)
     return ApiResponse()

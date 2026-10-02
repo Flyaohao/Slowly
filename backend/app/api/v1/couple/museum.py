@@ -7,6 +7,7 @@ from typing import Optional
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.errors import safe_business_code
 from app.core.features import require_feature
 from app.schemas.common import ApiResponse
 from app.schemas.museum_schema import MuseumItemCreate, MuseumItemUpdate, MuseumItemOut
@@ -24,18 +25,31 @@ _ALLOWED_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
 
 
 @router.post("/upload-image", response_model=ApiResponse)
-async def upload_image(
+def upload_image(
     file: UploadFile = File(...),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """上传藏品配图（照片类藏品），返回相对 URL，创建/更新藏品时放入 image_url。"""
+    """上传藏品配图（照片类藏品），返回相对 URL，创建/更新藏品时放入 image_url。
+
+    ## 为什么是同步 `def` 而不是 `async def`
+
+    `museum_service.ensure_relation` 是**同步**函数，会执行阻塞 SQL（查情侣关系）。
+    若路由写成 `async def`，这段同步 SQL 就会直接跑在事件循环上，
+    阻塞整个进程的其他请求（表现为「一个人传图，全站卡住」）。
+
+    FastAPI 会自动把同步 `def` 路由放进线程池执行，阻塞被限制在单个线程内——
+    这才是同步 service 该有的写法。
+
+    读文件同理：`UploadFile.read()` 是 async 方法，同步路由里用底层的
+    `file.file.read()`（BinaryIO，FastAPI 官方同步用法）。
+    """
     try:
         museum_service.ensure_relation(db, current_user.id)
     except ValueError:
         return ApiResponse(code=30005, message="请先绑定情侣关系", data=None)
 
-    content = await file.read()
+    content = file.file.read()
     if len(content) > _MAX_IMAGE_SIZE:
         return ApiResponse(code=10003, message="文件大小超过限制", data=None)
     ext = os.path.splitext(file.filename or "")[1].lower()
@@ -62,7 +76,7 @@ def create_item(
         code = str(e)
         if code == "30005":
             return ApiResponse(code=30005, message="请先绑定情侣关系", data=None)
-        return ApiResponse(code=int(code), message="创建失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="创建失败", data=None)
     return ApiResponse(data=MuseumItemOut.model_validate(item).model_dump())
 
 
@@ -98,7 +112,7 @@ def get_item(
             return ApiResponse(code=80001, message="藏品不存在", data=None)
         if code == "80002":
             return ApiResponse(code=80002, message="无权访问", data=None)
-        return ApiResponse(code=int(code), message="获取失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="获取失败", data=None)
     return ApiResponse(data=MuseumItemOut.model_validate(item).model_dump())
 
 
@@ -120,7 +134,7 @@ def update_item(
             return ApiResponse(code=80001, message="藏品不存在", data=None)
         if code == "80002":
             return ApiResponse(code=80002, message="无权访问", data=None)
-        return ApiResponse(code=int(code), message="更新失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="更新失败", data=None)
     return ApiResponse(data=MuseumItemOut.model_validate(item).model_dump())
 
 
@@ -140,7 +154,7 @@ def delete_item(
             return ApiResponse(code=80001, message="藏品不存在", data=None)
         if code == "80002":
             return ApiResponse(code=80002, message="无权访问", data=None)
-        return ApiResponse(code=int(code), message="删除失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="删除失败", data=None)
     return ApiResponse()
 
 
@@ -160,5 +174,5 @@ def toggle_pin(
             return ApiResponse(code=80001, message="藏品不存在", data=None)
         if code == "80002":
             return ApiResponse(code=80002, message="无权访问", data=None)
-        return ApiResponse(code=int(code), message="操作失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="操作失败", data=None)
     return ApiResponse(data=MuseumItemOut.model_validate(item).model_dump())

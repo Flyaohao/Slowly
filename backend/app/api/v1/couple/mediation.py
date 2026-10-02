@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.errors import safe_business_code
 from app.schemas.common import ApiResponse
 from app.services import mediation_service
 from app.repositories import couple_repo
@@ -56,7 +57,7 @@ def accept_mediation(
             "50003": (400, "调解已结束"),
         }
         sc, msg = error_map.get(code, (500, "服务异常"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=result)
 
 
@@ -75,7 +76,7 @@ def reject_mediation(
             "50002": (403, "无权参与此调解"),
         }
         sc, msg = error_map.get(code, (500, "服务异常"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=result)
 
 
@@ -102,7 +103,7 @@ def submit_input(
             "50003": (400, "调解状态不允许此操作"),
         }
         sc, msg = error_map.get(code, (500, "服务异常"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=result)
 
 
@@ -128,7 +129,7 @@ def confirm_rewrite(
             "50000": (500, "AI 服务异常，请稍后重试"),
         }
         sc, msg = error_map.get(code, (500, "服务异常"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=result)
 
 
@@ -153,7 +154,7 @@ def retry_generation(
             "50003": (400, "调解状态不允许此操作"),
         }
         sc, msg = error_map.get(code, (500, "服务异常"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=result)
 
 
@@ -173,7 +174,7 @@ def get_status(
             "50002": (403, "无权参与此调解"),
         }
         sc, msg = error_map.get(code, (500, "服务异常"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=result)
 
 
@@ -207,5 +208,5 @@ def next_step(
             "50005": (400, "无效的操作"),
         }
         sc, msg = error_map.get(code, (500, "服务异常"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=result)

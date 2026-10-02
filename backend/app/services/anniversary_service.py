@@ -84,6 +84,22 @@ def list_anniversaries(db: Session, user_id: int, page: int = 1, page_size: int 
     }
 
 
+def get_anniversary(db: Session, user_id: int, item_id: int) -> Anniversary:
+    """取单条纪念日。
+
+    与 update/delete 同一套鉴权口径：先确认绑定了情侣，再比relation_id。
+    **顺序不能反**——先比 relation_id 会把「没绑定」和「无权访问他人」混成同一个码，
+    前者该回30005（引导去绑定），后者该回 100002。
+    """
+    relation = _check_relation(db, user_id)
+    item = anniversary_repo.get_anniversary_by_id(db, item_id)
+    if not item:
+        raise ValueError("100001")
+    if item.relation_id != relation.id:
+        raise ValueError("100002")
+    return item
+
+
 def update_anniversary(db: Session, user_id: int, item_id: int, data: dict) -> Anniversary:
     relation = _check_relation(db, user_id)
     item = anniversary_repo.get_anniversary_by_id(db, item_id)
@@ -124,6 +140,17 @@ def list_wishlists(db: Session, user_id: int, page: int = 1, page_size: int = 20
     relation = _check_relation(db, user_id)
     items, total = anniversary_repo.list_wishlists(db, relation.id, page, page_size)
     return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+def get_wishlist(db: Session, user_id: int, item_id: int) -> Wishlist:
+    """取单条愿望。鉴权口径与 get_anniversary 一致：先绑定、再比 relation_id。"""
+    relation = _check_relation(db, user_id)
+    item = anniversary_repo.get_wishlist_by_id(db, item_id)
+    if not item:
+        raise ValueError("100001")
+    if item.relation_id != relation.id:
+        raise ValueError("100002")
+    return item
 
 
 def update_wishlist(db: Session, user_id: int, item_id: int, data: dict) -> Wishlist:

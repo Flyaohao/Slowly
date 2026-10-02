@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.errors import safe_business_code
 from app.schemas.common import ApiResponse
 from app.schemas.couple_schema import CoupleSpaceUpdateRequest, BindRequest
 from app.services import couple_service
@@ -23,7 +24,7 @@ def generate_invite(current_user=Depends(get_current_user), db: Session = Depend
         sc, message = error_map.get(code, (400, "生成恋爱码失败"))
         raise HTTPException(
             status_code=sc,
-            detail={"code": int(code), "message": message, "data": None},
+            detail={"code": safe_business_code(code, sc), "message": message, "data": None},
         )
     return ApiResponse(data=result)
 
@@ -48,7 +49,7 @@ def bind_couple(
         sc, message = error_map.get(code, (400, "绑定失败"))
         raise HTTPException(
             status_code=sc,
-            detail={"code": int(code), "message": message, "data": None},
+            detail={"code": safe_business_code(code, sc), "message": message, "data": None},
         )
     return ApiResponse(data=result)
 

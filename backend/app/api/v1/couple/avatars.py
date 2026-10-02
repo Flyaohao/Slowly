@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.errors import safe_business_code
 from app.core.features import require_feature
 from app.schemas.common import ApiResponse
 from app.schemas.avatar_schema import (
@@ -33,7 +34,7 @@ def get_avatar(
         code = str(e)
         error_map = {"30005": (400, "请先绑定情侣关系")}
         sc, msg = error_map.get(code, (400, "获取失败"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=AvatarOut.model_validate(avatar).model_dump())
 
 
@@ -55,7 +56,7 @@ def update_avatar(
         code = str(e)
         error_map = {"30005": (400, "请先绑定情侣关系")}
         sc, msg = error_map.get(code, (400, "更新失败"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=AvatarOut.model_validate(avatar).model_dump())
 
 
@@ -76,7 +77,7 @@ def get_assets(
         code = str(e)
         error_map = {"30005": (400, "请先绑定情侣关系")}
         sc, msg = error_map.get(code, (400, "获取失败"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     items = [AvatarAssetOut.model_validate(a).model_dump() for a in assets]
     return ApiResponse(data=items)
 
@@ -93,5 +94,5 @@ def set_voice_style(
         code = str(e)
         error_map = {"30005": (400, "请先绑定情侣关系")}
         sc, msg = error_map.get(code, (400, "设置失败"))
-        raise HTTPException(status_code=sc, detail={"code": int(code), "message": msg, "data": None})
+        raise HTTPException(status_code=sc, detail={"code": safe_business_code(code, sc), "message": msg, "data": None})
     return ApiResponse(data=AvatarOut.model_validate(avatar).model_dump())

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.errors import safe_business_code
 from app.schemas.common import ApiResponse
 from app.schemas.dual_perspective_schema import (
     DualPerspectiveEventCreate,
@@ -29,7 +30,7 @@ def create_event(
         code = str(e)
         if code == "30005":
             return ApiResponse(code=30005, message="请先绑定情侣关系", data=None)
-        return ApiResponse(code=int(code), message="创建失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="创建失败", data=None)
     return ApiResponse(data=DualPerspectiveEventListOut.model_validate(event).model_dump())
 
 
@@ -64,7 +65,7 @@ def get_event_detail(
             return ApiResponse(code=70001, message="事件不存在", data=None)
         if code == "70002":
             return ApiResponse(code=70002, message="无权访问", data=None)
-        return ApiResponse(code=int(code), message="获取失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="获取失败", data=None)
     return ApiResponse(data=DualPerspectiveEventOut.model_validate(event).model_dump())
 
 
@@ -87,7 +88,7 @@ def submit_record(
             return ApiResponse(code=70002, message="无权访问", data=None)
         if code == "70003":
             return ApiResponse(code=70003, message="已提交过视角", data=None)
-        return ApiResponse(code=int(code), message="提交失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="提交失败", data=None)
     return ApiResponse(data=DualPerspectiveRecordOut.model_validate(record).model_dump())
 
 
@@ -112,7 +113,7 @@ def edit_record(
             return ApiResponse(code=70002, message="无权访问", data=None)
         if code == "70004":
             return ApiResponse(code=70004, message="记录不存在", data=None)
-        return ApiResponse(code=int(code), message="编辑失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="编辑失败", data=None)
     return ApiResponse(data=DualPerspectiveRecordOut.model_validate(record).model_dump())
 
 
@@ -134,5 +135,5 @@ def reveal_event(
             return ApiResponse(code=70002, message="无权访问", data=None)
         if code == "70005":
             return ApiResponse(code=70005, message="双方尚未都提交视角", data=None)
-        return ApiResponse(code=int(code), message="操作失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="操作失败", data=None)
     return ApiResponse(data=DualPerspectiveEventOut.model_validate(event).model_dump())

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.errors import safe_business_code
 from app.schemas.common import ApiResponse
 from app.schemas.relationship_event_schema import (
     RelationshipEventCreate,
@@ -32,7 +33,7 @@ def _error(e: ValueError) -> ApiResponse:
     if code == "100001":
         return ApiResponse(code=100001, message="事件不存在", data=None)
     try:
-        return ApiResponse(code=int(code), message="操作失败", data=None)
+        return ApiResponse(code=safe_business_code(code, 400), message="操作失败", data=None)
     except (TypeError, ValueError):
         return ApiResponse(code=100001, message="操作失败", data=None)
 

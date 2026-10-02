@@ -46,12 +46,19 @@ def update_me(
 
 
 @router.post("/me/avatar", response_model=ApiResponse)
-async def upload_avatar(
+def upload_avatar(
     file: UploadFile = File(...),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    content = await file.read()
+    #同步路由（`def` 而非 `async def`）：`user_service.upload_avatar` 是同步函数，
+    # 会执行阻塞 SQL（查用户、写avatar_url）。放在 `async def` 里会在事件循环
+    # 上直接跑同步 SQL，阻塞整个进程的所有其他请求。
+    #
+    # `UploadFile.read()` 是 async 方法，同步路由里改读底层的 `file.file`
+    #（starlette 内部是 SpooledTemporaryFile/BinaryIO，FastAPI 官方同步用法）。
+    # 这里的 `await file.read()` 已一并改为 `file.file.read()`。
+    content = file.file.read()
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

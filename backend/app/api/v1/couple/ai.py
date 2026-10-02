@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.errors import safe_business_code
 from app.core.features import require_feature
 from app.core.limiter import ai_limit
 from app.schemas.common import ApiResponse
@@ -433,7 +434,7 @@ def understand_letter(
         sc, msg = error_map.get(code, (500, "AI 服务异常"))
         raise HTTPException(
             status_code=sc,
-            detail={"code": int(code), "message": msg, "data": None},
+            detail={"code": safe_business_code(code, sc), "message": msg, "data": None},
         )
     return ApiResponse(data=result)
 
@@ -488,7 +489,7 @@ def understand_letter_stream(
         sc, msg = error_map.get(code, (500, "AI 服务异常"))
         raise HTTPException(
             status_code=sc,
-            detail={"code": int(code), "message": msg, "data": None},
+            detail={"code": safe_business_code(code, sc), "message": msg, "data": None},
         )
 
     return StreamingResponse(
@@ -574,7 +575,7 @@ def rewrite_letter(
         sc, msg = error_map.get(code, (500, "AI 服务异常"))
         raise HTTPException(
             status_code=sc,
-            detail={"code": int(code), "message": msg, "data": None},
+            detail={"code": safe_business_code(code, sc), "message": msg, "data": None},
         )
     return ApiResponse(data=result)
 
@@ -599,7 +600,7 @@ def generate_reply(
         sc, msg = error_map.get(code, (500, "AI 服务异常"))
         raise HTTPException(
             status_code=sc,
-            detail={"code": int(code), "message": msg, "data": None},
+            detail={"code": safe_business_code(code, sc), "message": msg, "data": None},
         )
     return ApiResponse(data=result)
 
@@ -701,7 +702,7 @@ def _raise_prepared_error(exc: ValueError, error_map: dict) -> None:
     sc, msg = error_map.get(code, (500, "AI 服务异常"))
     raise HTTPException(
         status_code=sc,
-        detail={"code": int(code) if code.isdigit() else 50000, "message": msg, "data": None},
+        detail={"code": safe_business_code(code, sc), "message": msg, "data": None},
     )
 
 

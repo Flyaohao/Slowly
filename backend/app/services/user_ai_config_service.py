@@ -76,6 +76,12 @@ class _FallbackAiConfig:
 
     `keys` 固定为空列表：兜底不参与 DB 上的 key 轮换与错误留痕
     （那些都会写 `user_ai_key`，而兜底没有对应的行）。
+
+    **它刻意没有 `.id`**：兜底在 `user_ai_config` 表里没有行，任何拿它当
+    ORM 行落库的地方（`user_ai_key.config_id` 是 `NOT NULL` 外键）不是撞
+    外键报错、就是留下指向 config_id=0 的孤儿 key 行。给它补一个假 id
+    （0 或 None）只会把「显式的 AttributeError」换成「静默的坏数据」，
+    所以正确做法是**写库路径一律不碰替身**——见 `_require_persisted`。
     """
 
     def __init__(self) -> None:
@@ -114,6 +120,35 @@ def get_config(db: Session, user_id: int) -> Optional[UserAiConfig]:
         .filter(UserAiConfig.user_id == user_id)
         .first()
     )
+
+
+def _require_persisted(config: Any, user_id: int) -> UserAiConfig:
+    """写库路径的守门人：把兜底替身拦在「需要 config.id」的操作之外。
+
+    ## 为什么需要它
+
+    `resolve()` 有意在「用户没配」时返回全局兜底替身，让只读路径
+    （`build_chat_client` / `build_embeddings`）原样复用。但**写库路径**
+    拿到的必须是真实 ORM 行：`user_ai_key.config_id` 是
+    `ForeignKey("user_ai_config.id") NOT NULL`，替身没有 `.id`。
+
+    原 bug（2026-10-01）：`add_key` 直接用 `resolve()` 的返回值当 config，
+    走兜底时 `config.id` 抛 `AttributeError` → 端点 500。给替身补一个
+    假 id 只会把显式异常换成 `IntegrityError`，或是更糟的
+    `config_id=0` 孤儿行（SQLite 不开外键时连报错都没有）。
+
+    ## 为什么抛 AiConfigInvalidError 而不是 AiConfigMissingError
+
+    用户此刻**已经进了设置页、正在加 key**，不是「从头开始用 AI」。
+    报 30010（"请先去设置页配置"）会把他弹回同一个页面、原地打转。
+    30011 的文案由调用点给出，能直接说清「先保存端点/模型，再加 key」。
+    """
+    if isinstance(config, _FallbackAiConfig) or getattr(config, "is_fallback", False):
+        raise AiConfigInvalidError(
+            "还没有你自己的 AI 服务配置。请先点「保存配置」填好服务地址与模型名"
+            "（这一步会同时保存第一把 key），之后再在这里追加更多 key。"
+        )
+    return config
 
 
 def _enabled_keys(config: UserAiConfig) -> List[str]:
@@ -481,11 +516,16 @@ def clear_config(db: Session, user_id: int) -> None:
 
 
 def add_key(db: Session, user_id: int, plain_key: str, label: str = "") -> Dict[str, Any]:
-    """新增一把 key（即时探测通过才入库）。"""
+    """新增一把 key（即时探测通过才入库）。
+
+    走兜底替身的用户（还没配自己的 AI 服务）在这里被 `_require_persisted`
+    拦下并给出 30011 —— 此前直接取 `config.id` 抛 `AttributeError` → 500。
+    """
     plain_key = (plain_key or "").strip()
     if not plain_key:
         raise AiConfigInvalidError("API Key 不能为空")
     config, keys = resolve(db, user_id)
+    config = _require_persisted(config, user_id)
     probe_keys = keys + [plain_key]
     _chat_probe(config.provider_type, config.base_url, config.model_name, probe_keys)
     row = UserAiKey(

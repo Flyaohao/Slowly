@@ -106,7 +106,14 @@ def create_letter(db: Session, user_id: int, data: dict) -> Letter:
         "relation_id": relation_id,
         "sender_id": user_id,
         "receiver_id": receiver_id,
-        "title": data.get("title") or "无标题",
+        # P1（10-02 真机实测）：原先这里写的是 `or "无标题"` —— 空标题在**创建时**
+        # 就被替换成占位文案落库，后果是①DB 被污染、"用户没填标题"这个信息永久丢失
+        # ②前端 8 处 `title?.ifBlank { "无标题" }` 兜底**全部失效**（字段根本不空，
+        # 值就是"无标题"这三个字），真机上信箱「已发出」3 封信标题全是它。
+        # 现在存空串，把「叫什么」的决定权交回前端（各列表按类型给出不同兜底文案）。
+        # 注意：列定义为 `nullable=False`（app/models/letter.py:28），所以只能用空串
+        # 不能用 None。
+        "title": data.get("title") or "",
         "content": data["content"],
         "letter_type": data.get("letter_type", "normal"),
         "is_private": data.get("is_private", False),

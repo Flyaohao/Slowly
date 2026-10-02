@@ -269,19 +269,26 @@ class LetterAnalysisOutput(BaseModel):
     - 本模型（scene `letter_analysis`）服务于信箱里的「解读这封信」功能，
       字段更细，且必须与 `letter_ai_service.LETTER_UNDERSTAND_PROMPT` 的要求、
       以及客户端 `LetterDto.LetterUnderstanding` 三者逐字一致。
+
+    字段口径随信件方向变化（2026-10-01 修复）：收信人视角下讲的是写信的 TA，
+    写信人视角下讲的是**读完这封信的** TA。本模型的 description 会随 Function
+    Calling 的 Schema / 内联 Schema 一起进 prompt，所以这里不能写死「对方」——
+    写死了就会和提示词里的方向说明打架，把模型拽回收信人口吻。
     """
 
     summary: str = Field(..., description="一句话摘要")
     key_concerns: List[str] = Field(
-        default_factory=list, description="对方在这封信里最在意的点"
+        default_factory=list, description="这封信里最被看重的点"
     )
-    emotion: str = Field("", description="对方写信时的情绪状态")
-    expected_response: str = Field("", description="对方期待的回应")
+    emotion: str = Field("", description="情绪描述，口径见提示词「这封信的来向」")
+    expected_response: str = Field(
+        "", description="期待或可能给出的回应，口径见提示词「这封信的来向」"
+    )
     misunderstandable: List[LetterMisunderstandableItem] = Field(
         default_factory=list, description="可能被误解的句子及说明"
     )
     reply_suggestions: List[str] = Field(
-        default_factory=list, description="建议的回信方向"
+        default_factory=list, description="建议的回信方向，写信人视角留空"
     )
     risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
 
@@ -297,13 +304,20 @@ class LetterRewriteOutput(BaseModel):
 
 
 class LetterReplyOutput(BaseModel):
-    """信件回信建议：给出多个风格的回信版本"""
+    """信件回信建议：给出多个风格的回信版本。
+
+    方向口径同 `LetterAnalysisOutput`：收信人视角 = 用户可发的回信；
+    写信人视角 = TA 可能会怎么回。
+    """
 
     summary: str = Field("", description="一句话摘要")
     replies: List[RewriteItem] = Field(
-        default_factory=list, description="回信版本列表，每项含 style 与 content"
+        default_factory=list,
+        description="回信版本列表，每项含 style 与 content，写信人视角填 TA 可能给出的回应",
     )
-    do_not_say: str = Field("", description="回信时应避免说的话")
+    do_not_say: str = Field(
+        "", description="回信时应避免说的话，写信人视角填「想让 TA 这样回，自己别说什么」"
+    )
     risk_level: RiskLevel = Field(RiskLevel.NORMAL, description="风险等级")
 
 

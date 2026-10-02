@@ -50,7 +50,29 @@ def _stop(signum, frame):  # noqa: ARG001
 
 
 def run_once() -> int:
-    """一次巡回：先回收僵尸任务，再执行到期任务；最后处理房间任务。返回执行数量。"""
+    """一次巡回：先回收僵尸任务，再执行到期任务；最后处理房间任务。返回执行数量。
+
+    ## 为什么这里的 `SessionLocal()` 不包 `run_in_threadpool`
+
+    worker 是**纯同步进程**：`main()` 用 `time.sleep` 串行循环，没有任何
+    event loop（见本文件 `main()`）。在这种上下文里调用
+    `fastapi.concurrency.run_in_threadpool` 只会**返回一个从未 await 的
+    coroutine 对象**（`RuntimeWarning: coroutine ... was never awaited`），
+    session 根本不会被创建——是静默失效，不是报错，比不改更糟。
+
+    要包 threadpool，就得为 worker 引入 `asyncio.run()` 或常驻 loop，
+    属于「为了包一层而给纯同步进程加事件循环」：worker 只有 BATCH=5 条
+    串行任务，session 建立的开销远小于引入 loop 的复杂度与风险
+    （信号处理、异常传播、优雅退出都要重新验证）。
+
+    结论：**worker 保持同步直连 SessionLocal**。若将来 worker 真的
+    出现并发瓶颈，正确做法是整体迁到 Celery/RQ 这类自带并发模型的
+    worker，而不是在同步巡回里手搓 loop。
+
+    （2026-10-02 补注：曾短暂试过把请求链路的 `get_db` 改成 async
+    generator，2026-10-02 已回退——它动了 179 个路由的依赖契约，
+    且实测收益不明确。本注释保留的结论与那次试验无关，独立成立。）
+    """
     db = SessionLocal()
     try:
         recovered = ai_task_service.recover_stale_tasks(db)

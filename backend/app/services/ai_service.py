@@ -2374,7 +2374,7 @@ def prepare_viewpoint_analysis(db: Session, user_id: int, viewpoint_id: int) -> 
         base_prompt,
         ViewpointAnalysisOutput,
         content_instruction=(
-            "用自己的话说清这段观点说明了什么、为什么值得（或不值得）记进你对他的理解，"
+            "用自己的话说清这段观点说明了什么、为什么值得（或不值得）记进你对这个人的理解，"
             "不要罗列字段名，也不要给建议分数"
         ),
         max_content_chars=500,

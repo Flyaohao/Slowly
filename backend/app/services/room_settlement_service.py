@@ -53,20 +53,37 @@ _VALID_RESULTS = (RESULT_RECONCILED, RESULT_DEFERRED, RESULT_COLD_WAR)
 
 
 class SettlementOutput(BaseModel):
-    """调解书结构化输出。"""
+    """调解书结构化输出。
+
+    语言约束（P1，10-02 真机实测复现）：真机上已结算房间的「共同约定」曾显示
+    `Change plans at least one day ahead, no last-minute overrides`（英文），而同卡
+    `summary_text` 正常中文。根因是本模型的 system 与字段描述里都没有语言约束，
+    模型偶尔按英文作答。每个自然语言字段的 `description` 都追加「必须是简体中文」
+    —— 这些description 会随 Function Calling Schema 一起进 prompt，是最可靠的
+    注入点（防模型忽略 system 层单点约束）。
+    `result` 字段**故意不加**：它是 reconciled/deferred/cold_war 枚举值，必须保持英文。
+    """
 
     result: str = Field(description="结果判定，只能是：reconciled / deferred / cold_war")
-    summary_text: str = Field(description="调解书正文：对本次事件的复盘与双方达成的理解")
-    agreements: List[str] = Field(description="双方共同约定，每条一句可执行的话，2-5 条")
-    responsibility_a: str = Field(description="user_a 当事人（称谓见对话记录标签）要做的责任与行动")
-    responsibility_b: str = Field(description="user_b 当事人（称谓见对话记录标签）要做的责任与行动")
+    summary_text: str = Field(
+        description="调解书正文：对本次事件的复盘与双方达成的理解。必须是简体中文"
+    )
+    agreements: List[str] = Field(
+        description="双方共同约定，每条一句可执行的话，2-5 条。必须是简体中文"
+    )
+    responsibility_a: str = Field(
+        description="user_a 当事人（称谓见对话记录标签）要做的责任与行动。必须是简体中文"
+    )
+    responsibility_b: str = Field(
+        description="user_b 当事人（称谓见对话记录标签）要做的责任与行动。必须是简体中文"
+    )
     viewpoint_a: str = Field(
         description="把 user_a 当事人在调解室里的发言压缩成一条第一人称观点（150 字内），"
-        "只呈现其立场与感受，不加评判"
+        "只呈现其立场与感受，不加评判。必须是简体中文"
     )
     viewpoint_b: str = Field(
         description="把 user_b 当事人在调解室里的发言压缩成一条第一人称观点（150 字内），"
-        "只呈现其立场与感受，不加评判"
+        "只呈现其立场与感受，不加评判。必须是简体中文"
     )
 
 
@@ -198,6 +215,7 @@ def _invoke_settlement(
     room: MediationRoom, transcript: str, client=None
 ) -> SettlementOutput:
     system = (
+        "输出必须是简体中文，禁止使用英文句子或中英混杂。\n\n"
         "你是情侣双人调解室的军师。双方点击了「结束调解」，现在请你收拢全程对话，"
         "生成一份调解书。你必须中立方：判定结果、共同约定、双方各自责任，"
         "并把双方各自的发言压缩成观点（第一人称、不加评判）。"
