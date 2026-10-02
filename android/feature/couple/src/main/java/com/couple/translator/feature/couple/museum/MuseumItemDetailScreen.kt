@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.couple.translator.core.network.toAbsoluteUrl
+import com.couple.translator.core.ui.components.AppAsyncImage
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.ErrorDialog
@@ -107,13 +108,14 @@ fun MuseumItemDetailScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             if (item.imageUrl != null) {
-                AsyncImage(
+                AppAsyncImage(
                     model = item.imageUrl.toAbsoluteUrl(),
                     contentDescription = item.title,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(220.dp)
-                        .clip(RoundedCornerShape(12.dp)),
+                        .height(220.dp),
+                    shape = RoundedCornerShape(AppRadius.lg),
+                    iconSize = 34.dp,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }

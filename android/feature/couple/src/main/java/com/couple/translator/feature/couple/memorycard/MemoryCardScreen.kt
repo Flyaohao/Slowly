@@ -61,7 +61,11 @@ fun MemoryCardScreen(
     }
 
     if (uiState.error.isNotEmpty()) {
-        ErrorDialog(message = uiState.error, onDismiss = { viewModel.startGeneration() })
+        //「关闭」只是关闭，不能顺手触发重新生成。
+        // 原来是 onDismiss = { startGeneration() }—— 生成一次要真调 LLM 烧额度，
+        // 用户想关掉弹窗却误触重跑，既烧钱又可能覆盖已有内容。
+        // 想重生成请点页面上那个显式的「重新生成」按钮（:155 / :178）。
+        ErrorDialog(message = uiState.error, onDismiss = { viewModel.clearError() })
     }
     if (uiState.saveError.isNotEmpty()) {
         ErrorDialog(message = uiState.saveError, onDismiss = { viewModel.saveToMuseum() })

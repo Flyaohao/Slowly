@@ -57,6 +57,7 @@ import com.couple.translator.core.ui.components.AiWaitingBubble
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
+import com.couple.translator.core.ui.components.AppErrorState
 import com.couple.translator.core.ui.components.AppPrimaryButton
 import com.couple.translator.core.ui.components.AppSecondaryButton
 import com.couple.translator.core.ui.components.DimensionRadarChart
@@ -66,14 +67,17 @@ import com.couple.translator.core.ui.components.SkeletonPageHeader
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
+import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppOnAccent
 import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
+import com.couple.translator.core.ui.theme.AppSuccessGreen
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
 import com.couple.translator.core.ui.theme.AppTrack
+import com.couple.translator.core.ui.theme.AppWarning
 import io.noties.markwon.Markwon
 
 /** internal：同包 UnderstandingScreen（三合一页）复用同一套维度中文名。 */
@@ -113,6 +117,17 @@ fun ProfileResultScreen(
             onRefresh = { viewModel.refresh() },
             modifier = Modifier.padding(padding),
         ) {
+        // 错误态必须排在 isLoading 与空态之前：请求失败时 submissions 同样是空，
+        // 漏判就会显示「还没有关系画像 + 去完成问卷」，用户会以为是自己没做问卷，
+        // 而真实原因是接口挂了（ProfileResultViewModel 会往 error 里写真实异常）。
+        if (uiState.error.isNotBlank()) {
+            AppErrorState(
+                message = uiState.error,
+                onRetry = { viewModel.refresh() },
+            )
+            return@PullToRefreshLayout
+        }
+
         if (uiState.isLoading) {
             Column(
                 modifier = Modifier
@@ -570,10 +585,12 @@ private fun TipCard(number: Int, text: String) {
 
 @Composable
 private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
+    // 风险等级色走语义色板：色板里的 error/warning/success 已按深浅色各调过一档，
+    // 写死色值（0xFFFF6B6B 等）在深色模式下是刺眼的荧光。
     val levelColor = when (dim.level) {
-        "高" -> androidx.compose.ui.graphics.Color(0xFFFF6B6B)
-        "中" -> androidx.compose.ui.graphics.Color(0xFFFFA726)
-        "低" -> androidx.compose.ui.graphics.Color(0xFF66BB6A)
+        "高" -> AppErrorRed
+        "中" -> AppWarning
+        "低" -> AppSuccessGreen
         else -> AppAccent
     }
 

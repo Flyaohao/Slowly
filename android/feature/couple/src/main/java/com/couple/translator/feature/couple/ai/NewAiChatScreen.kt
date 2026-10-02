@@ -105,6 +105,7 @@ import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppSurfaceMuted
+import com.couple.translator.core.ui.text.displayTitle
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
@@ -561,7 +562,10 @@ fun NewAiChatScreen(
             error = uiState.quotePickerError,
             onDismiss = { quotePickerType = null },
             onPickMessage = { msg ->
-                val label = if (msg.role == "user") "你说过" else "TA 说过"
+                // 来源标签会以【引用·…】进提示词，标错就等于告诉模型「这是别人的话」。
+                // 会话里的 assistant 消息**是军师**说的话，此前写成「TA 说过」，
+                // 在情侣语境下 TA 指伴侣，会把这句引成「伴侣说过的话」（2026-10-01 修）。
+                val label = if (msg.role == "user") "你说过" else "军师说过"
                 viewModel.setQuoteChip(
                     QuoteChip(
                         sourceLabel = label,
@@ -575,7 +579,7 @@ fun NewAiChatScreen(
             // P-C4：来源写进 sourceLabel——它会以【引用·…】进 message 即进提示词，
             // 两种来源作用不同（理解 TA / 改进我的表达），提示词必须可区分
             onPickLetter = { letter, fromPartner ->
-                val title = letter.title ?: "无标题"
+                val title = letter.title.displayTitle()
                 val label = if (fromPartner) "TA写给你的信《$title》" else "你写给TA的信《$title》"
                 viewModel.setQuoteChip(
                     QuoteChip(

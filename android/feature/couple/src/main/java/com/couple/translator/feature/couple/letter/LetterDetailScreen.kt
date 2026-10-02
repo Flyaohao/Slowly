@@ -51,6 +51,7 @@ import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppMotion
 import com.couple.translator.core.ui.theme.AppSpacing
+import com.couple.translator.core.ui.text.displayTitle
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
@@ -154,11 +155,20 @@ fun LetterDetailScreen(
                             tint = if (letter.isFavorite) AppAccent else AppTextSecondary,
                             onClick = { viewModel.toggleFavorite() },
                         )
-                        AppTopBarAction(
-                            icon = Icons.Default.Delete,
-                            contentDescription = "删除",
-                            onClick = { showDeleteDialog = true },
-                        )
+                        // 删除权限分两种情况，别混：
+                        // ① 草稿信 —— 后端 delete_letter 只要求「是收发双方之一」
+                        //   （letter_service.py:272），但草稿语义上只属于发件人，
+                        //   加守卫是为了「角色判定」不依赖数据可见性，以后草稿
+                        //   共享逻辑一变也不会漏。
+                        // ② 已送达的信 —— 后端明确允许收发双方删除，保持原行为。
+                        // 用 != false：isMine 尚未取到时不剥夺作者的能力。
+                        if (letter.status != "draft" || uiState.isMine != false) {
+                            AppTopBarAction(
+                                icon = Icons.Default.Delete,
+                                contentDescription = "删除",
+                                onClick = { showDeleteDialog = true },
+                            )
+                        }
                     }
                 },
             )
@@ -198,7 +208,7 @@ fun LetterDetailScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = letter.title ?: "无标题",
+                text = letter.title.displayTitle(),
                 style = MaterialTheme.typography.headlineSmall,
                 color = AppTextPrimary,
             )
@@ -331,6 +341,9 @@ fun LetterDetailScreen(
                     status = uiState.understandingStatus,
                     // 自己写的信不展示「回信建议」分组：那是收信人才需要的
                     showReplySuggestions = uiState.isMine != true,
+                    // 方向也传给卡片：写信人视角下「TA 的情绪 / 回应」指的是
+                    // TA 读完这封信的反应，与收信人视角的标签不是一回事
+                    viewerIsSender = uiState.isMine == true,
                     onDismiss = { viewModel.dismissUnderstanding() },
                 )
             }

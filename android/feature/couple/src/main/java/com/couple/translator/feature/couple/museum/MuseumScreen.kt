@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.couple.translator.core.network.toAbsoluteUrl
+import com.couple.translator.core.ui.components.AppAsyncImage
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
@@ -221,13 +222,16 @@ private fun TimelineItem(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (item.imageUrl != null) {
-                    AsyncImage(
+                    AppAsyncImage(
                         model = item.imageUrl.toAbsoluteUrl(),
                         contentDescription = item.title,
                         modifier = Modifier
                             .padding(end = 12.dp)
-                            .size(56.dp)
-                            .clip(RoundedCornerShape(8.dp)),
+                            .size(56.dp),
+                        // 缩略图 56dp，用 xs(6dp) 圆角比例太小、观感仍偏方角，
+                        // 按「圆润、排斥方形」的品牌调性提到 sm(10.dp)。
+                        shape = RoundedCornerShape(AppRadius.sm),
+                        iconSize = 18.dp,
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {

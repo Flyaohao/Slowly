@@ -37,6 +37,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.data.model.ProfileDto
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
+import com.couple.translator.core.ui.components.AppErrorState
 import com.couple.translator.core.ui.components.AppScoreBar
 import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.ErrorDialog
@@ -61,13 +62,8 @@ fun CoupleProfileScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    if (uiState.error.isNotEmpty()) {
-        ErrorDialog(
-            message = uiState.error,
-            onDismiss = { viewModel.clearError() },
-        )
-    }
-
+    // 错误不再用 ErrorDialog：弹窗要用户手动关掉，关掉后剩下的就是
+    // 「双方都完成问卷后才能查看组合画像」这句误导文案。改为整页错误态。
     Scaffold(
         topBar = {
             AppBackTopBar(
@@ -81,6 +77,16 @@ fun CoupleProfileScreen(
             onRefresh = { viewModel.refresh() },
             modifier = Modifier.padding(padding),
         ) {
+        // 拉取失败时 coupleProfile 同样是 null，不短路就会在错误对话框底下
+        // 再显示「双方都完成问卷后才能查看组合画像」——把故障说成「你俩没做问卷」。
+        if (uiState.error.isNotEmpty()) {
+            AppErrorState(
+                message = uiState.error,
+                onRetry = { viewModel.refresh() },
+            )
+            return@PullToRefreshLayout
+        }
+
         if (uiState.isLoading) {
             Column(
                 modifier = Modifier

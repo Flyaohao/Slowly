@@ -50,12 +50,14 @@ import com.couple.translator.core.ui.components.AppAccentButton
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppListItemDivider
+import com.couple.translator.core.ui.components.AvatarBubble
 import com.couple.translator.core.ui.components.ErrorDialog
 import com.couple.translator.core.ui.components.PullToRefreshLayout
 import com.couple.translator.core.ui.components.SkeletonBlock
 import com.couple.translator.core.ui.components.SkeletonPageHeader
 import com.couple.translator.core.ui.components.TextInputField
 import com.couple.translator.core.ui.theme.AppAccent
+import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppSpacing
@@ -146,11 +148,17 @@ fun ProfileScreen(
             ) {
                 Spacer(modifier = Modifier.height(24.dp))
 
-                AsyncImage(
-                    model = uiState.avatarUrl.ifBlank { null }.toAbsoluteUrl(),
-                    contentDescription = "头像",
-                    modifier = Modifier.size(96.dp).clip(CircleShape),
-                    contentScale = ContentScale.Crop,
+                // 复用 AvatarBubble 而不是裸 AsyncImage：
+                // 此前 model 在 avatarUrl 为空时传 null，Coil 什么都不画 →
+                // 96dp 的位置是一个空洞（且加载失败同样无兜底）。
+                // AvatarBubble 自带 loading/error → 首字占位，与顶栏头像同一套表现。
+                AvatarBubble(
+                    url = uiState.avatarUrl.ifBlank { null },
+                    nickname = uiState.nickname.ifBlank { null },
+                    size = 96.dp,
+                    containerColor = AppAccentLight,
+                    contentColor = AppAccent,
+                    fallbackText = "我",
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))

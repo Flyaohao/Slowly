@@ -27,7 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
+import com.couple.translator.core.ui.components.AppAsyncImage
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppFilterChip
 import com.couple.translator.core.ui.components.AppPrimaryButton
@@ -180,13 +180,14 @@ fun AddMuseumItemScreen(
 
             // 配图（照片类藏品可配图，其他类型选填）
             if (uiState.imageUri != null) {
-                AsyncImage(
+                AppAsyncImage(
                     model = uiState.imageUri,
                     contentDescription = "藏品配图预览",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(180.dp)
-                        .clip(RoundedCornerShape(AppRadius.md)),
+                        .height(180.dp),
+                    shape = RoundedCornerShape(AppRadius.md),
+                    iconSize = 30.dp,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

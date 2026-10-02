@@ -45,6 +45,7 @@ import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppSize
 import com.couple.translator.core.ui.theme.AppSpacing
@@ -53,6 +54,12 @@ import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
 import com.couple.translator.feature.couple.data.model.RelationshipEventDto
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.couple.translator.core.ui.components.AppErrorState
 
 // --------------------------------------------------------------------------- //
 // 列表
@@ -65,9 +72,27 @@ fun RelationshipEventScreen(
     viewModel: RelationshipEventListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    // 列表页删除同样要确认：那个删除图标只有 28dp、跟整张卡的可点区域叠在一起，
+    // 不问一句很容易误触，而删掉没法恢复。
+    var pendingDeleteId by remember { mutableStateOf<Long?>(null) }
 
-    if (uiState.error.isNotEmpty()) {
-        ErrorDialog(message = uiState.error, onDismiss = { viewModel.clearError() })
+    if (pendingDeleteId != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDeleteId = null },
+            title = { Text("删除这条记录？") },
+            text = { Text("删掉之后军师就不再依据这件事理解你们了，这个操作没法撤销。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDeleteId?.let { viewModel.delete(it) }
+                    pendingDeleteId = null
+                }) {
+                    Text("删除", color = AppErrorRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteId = null }) { Text("再想想") }
+            },
+        )
     }
 
     Scaffold(
@@ -102,7 +127,14 @@ fun RelationshipEventScreen(
             // 真机表现为：进入本页数据到达后即 IndexOutOfBoundsException 闪退，
             // 堆栈在 ComposerImpl.exitGroup 弹空栈），必须用 if/else 分支结构。
             // 2026-09-27 真机复现并按此修复（抽屉「纪念事件」入口）。
-            if (uiState.items.isEmpty() && !uiState.isLoading) {
+            if (uiState.error.isNotEmpty()) {
+                // 拉取失败时 items 同样是空，不短路就会显示「还没有记录」，
+                // 把故障说成「没记过事」。
+                AppErrorState(
+                    message = uiState.error,
+                    onRetry = { viewModel.load() },
+                )
+            } else if (uiState.items.isEmpty() && !uiState.isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
@@ -122,7 +154,7 @@ fun RelationshipEventScreen(
                         EventCard(
                             item = item,
                             onClick = { onNavigateToEdit(item.id) },
-                            onDelete = { viewModel.delete(item.id) },
+                            onDelete = { pendingDeleteId = item.id },
                         )
                     }
                     item { Spacer(modifier = Modifier.height(88.dp)) }
@@ -219,10 +251,32 @@ fun RelationshipEventEditScreen(
     viewModel: RelationshipEventEditViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    // 删除是不可撤销的写操作，删了就没了 —— 点一下先问一句，
+    // 不做二次确认的话误触（尤其是列表页那个裸IconButton）无法挽回。
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(eventId) { viewModel.start(eventId) }
     LaunchedEffect(uiState.saved, uiState.deleted) {
         if (uiState.saved || uiState.deleted) onSaved()
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("删除这条记录？") },
+            text = { Text("删掉之后军师就不再依据这件事理解你们了，这个操作没法撤销。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    viewModel.remove()
+                }) {
+                    Text("删除", color = AppErrorRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("再想想") }
+            },
+        )
     }
 
     if (uiState.error.isNotEmpty()) {
@@ -332,7 +386,17 @@ fun RelationshipEventEditScreen(
             Spacer(modifier = Modifier.height(AppSpacing.section))
 
             AppPrimaryButton(
-                text = if (uiState.isEditing) "保存修改" else "记下来",
+                text = when {
+                    // 提交中改文案而不是转圈：这一页的表单还在，用户能看见自己填的东西，
+                    // 转圈会把表单盖掉、反而更容易让人以为要重填。
+                    uiState.saving && uiState.isEditing -> "保存中"
+                    uiState.saving -> "记录中"
+                    uiState.isEditing -> "保存修改"
+                    else -> "记下来"
+                },
+                // saving 原来被算出来却没有出口（Screen 一次都没读），
+                // 提交期间按钮仍可点 —— 网络慢时连点会重复提交。
+                enabled = !uiState.saving,
                 onClick = { viewModel.save() },
             )
 
@@ -342,7 +406,10 @@ fun RelationshipEventEditScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(AppRadius.md))
-                        .clickable { viewModel.remove() }
+                        .clickable(enabled = !uiState.saving) {
+                            // 删除是不可撤销的写操作，原来一点就发请求、连问都不问。
+                            showDeleteConfirm = true
+                        }
                         .padding(vertical = 14.dp),
                     contentAlignment = Alignment.Center,
                 ) {

@@ -10,6 +10,7 @@ import com.couple.translator.core.data.repository.HomeRepository
 import com.couple.translator.feature.couple.data.repository.LetterRepository
 import com.couple.translator.core.data.repository.TokenStore
 import com.couple.translator.core.data.repository.UserRepository
+import com.couple.translator.core.ui.text.displayTitle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -161,7 +162,7 @@ class NewHomeViewModel @Inject constructor(
                     recentItems.add(
                         RecentItem(
                             id = letter.id,
-                            title = letter.title ?: "无标题",
+                            title = letter.title.displayTitle(),
                             excerpt = "有一封信等你回应",
                             timeLabel = letter.sendTime?.take(10) ?: "",
                             type = "letter",
@@ -303,7 +304,7 @@ class NewHomeViewModel @Inject constructor(
                     recentItems.add(
                         RecentItem(
                             id = letter.id,
-                            title = letter.title ?: "无标题",
+                            title = letter.title.displayTitle(),
                             excerpt = "有一封信等你回应",
                             timeLabel = letter.sendTime?.take(10) ?: "",
                             type = "letter",

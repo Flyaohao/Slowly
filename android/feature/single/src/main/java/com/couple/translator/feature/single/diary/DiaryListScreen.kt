@@ -53,6 +53,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
+import com.couple.translator.core.ui.components.AppErrorState
 import com.couple.translator.core.ui.components.AppFilterChip
 import com.couple.translator.core.ui.components.AppLinkText
 import com.couple.translator.core.ui.components.AppPageHeader
@@ -183,6 +184,15 @@ fun DiaryListScreen(
 
                 when {
                     uiState.isLoading -> SkeletonListCard(rows = 4, withLeading = false)
+
+                    // 错误态要排在空态之前。此页的 error 是 String?（不是 String），
+                    // Kotlin 对 `uiState.error` 这种复杂表达式不做 smart cast，
+                    // 所以先用局部变量收窄，再判空串（避免把空串当失败提示）。
+                    uiState.error?.isNotBlank() == true -> AppErrorState(
+                        // 上面已确保非 null 非空串，这里 orEmpty 只是让类型收敛为 String
+                        message = uiState.error.orEmpty(),
+                        onRetry = { viewModel.loadDiaries() },
+                    )
 
                     uiState.diaries.isEmpty() -> AppEmptyState(
                         icon = Icons.Outlined.Book,

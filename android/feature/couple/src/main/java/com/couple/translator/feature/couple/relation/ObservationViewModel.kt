@@ -67,12 +67,12 @@ class ObservationViewModel @Inject constructor(
                 _uiState.value = ObservationUiState(
                     loaded = true,
                     content = data.content,
-                    observedAt = data.observed_at,
+                    observedAt = data.observedAt,
                     citationTitle = data.citation?.title,
-                    isNewForCard = data.has_new,
-                    isNewForBadge = data.has_new,
+                    isNewForCard = data.hasNew,
+                    isNewForBadge = data.hasNew,
                 )
-                if (ackIfNew && data.has_new && data.signature != null) {
+                if (ackIfNew && data.hasNew && data.signature != null) {
                     repository.ack(data.signature).onSuccess {
                         _uiState.update { it.copy(isNewForBadge = false) }
                     }

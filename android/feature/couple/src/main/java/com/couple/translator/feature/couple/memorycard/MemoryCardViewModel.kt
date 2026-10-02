@@ -174,6 +174,20 @@ class MemoryCardViewModel @Inject constructor(
     }
 
     /** 把当前卡片存入纪念馆（item_type=memory_card，带 source 关联）。 */
+    /**
+     * 清掉生成错误弹窗（只关弹窗，不触发任何请求）。
+     *
+     * `MemoryCardScreen` 的错误弹窗「关闭」按钮绑到这里。不能绑
+     * `startGeneration()`：生成一次是真调 LLM、要烧额度，用户想关弹窗却误触
+     * 重跑，既花钱又可能把已有内容冲掉。想重生成请点页面上显式的按钮。
+     *
+     * 注意 `startGeneration()` 只清 `saveError` 不清 `error`，所以这个方法
+     * 是必需的，否则弹窗会一直挂着。
+     */
+    fun clearError() {
+        _uiState.update { it.copy(error = "") }
+    }
+
     fun saveToMuseum() {
         val state = _uiState.value
         if (state.cardText.isBlank() || state.isSavingToMuseum || state.savedToMuseum) return

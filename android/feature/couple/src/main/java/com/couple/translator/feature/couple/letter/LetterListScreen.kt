@@ -57,9 +57,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.text.displayTitle
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
+import com.couple.translator.core.ui.components.AppErrorState
 import com.couple.translator.core.ui.components.AppLinkText
 import com.couple.translator.core.ui.components.AppTopBarAction
 import com.couple.translator.core.ui.components.PullToRefreshLayout
@@ -194,6 +196,19 @@ fun LetterListScreen(
                 )
 
                 when {
+                    // 错误态排在 isLoading / 空态之前：加载失败时 letters 也是空，
+                    // 漏判就会显示「还没有信件，写一封吧」，用户会去写信而不是重试。
+                    uiState.error.isNotBlank() -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            AppErrorState(
+                                message = uiState.error,
+                                onRetry = { viewModel.loadLetters() },
+                            )
+                        }
+                    }
                     uiState.isLoading -> {
                         SkeletonListCard(rows = 4)
                     }
@@ -333,7 +348,7 @@ private fun LetterListItem(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = letter.title?.ifBlank { "无标题" } ?: "无标题",
+                        text = letter.title.displayTitle(),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,

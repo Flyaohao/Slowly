@@ -42,6 +42,7 @@ import androidx.compose.animation.core.tween
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
+import com.couple.translator.core.ui.components.AppErrorState
 import com.couple.translator.core.ui.components.AppPrimaryButton
 import com.couple.translator.core.ui.components.AppTag
 import com.couple.translator.core.ui.components.AppTagTone
@@ -173,7 +174,15 @@ fun MediationRoomListScreen(
             },
         )
 
-        if (uiState.loading) {
+        if (uiState.error.isNotBlank()) {
+            // 排在 loading / 空态之前：拉取失败时 rooms 同样是空，
+            // 漏判会把故障说成「还没有调解室」并给出「发起第一场调解」按钮，
+            // 用户会白开一间房而不是重试。
+            AppErrorState(
+                message = uiState.error,
+                onRetry = { viewModel.load() },
+            )
+        } else if (uiState.loading) {
             // G3：骨架屏替代「加载中…」文字，数据到位不跳版
             SkeletonPlainListPage(cardRows = 4)
         } else if (uiState.rooms.isEmpty()) {

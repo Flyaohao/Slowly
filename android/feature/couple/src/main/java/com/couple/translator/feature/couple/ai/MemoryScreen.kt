@@ -46,6 +46,7 @@ import com.couple.translator.feature.couple.data.model.MemoryDto
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
+import com.couple.translator.core.ui.components.AppErrorState
 import com.couple.translator.core.ui.components.AppFilterChip
 import com.couple.translator.core.ui.components.AppInfoBanner
 import com.couple.translator.core.ui.components.AppTag
@@ -111,6 +112,19 @@ fun MemoryScreen(
 
                 Box(modifier = Modifier.fillMaxSize().weight(1f)) {
                     when {
+                        // 错误态排在空态之前：拉取失败时 memories 同样是空，
+                        // 漏判会把「加载失败」说成「军师什么都没记住」，用户不会想到重试。
+                        uiState.error.isNotBlank() -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                AppErrorState(
+                                    message = uiState.error,
+                                    onRetry = { viewModel.loadMemories() },
+                                )
+                            }
+                        }
                         uiState.isLoading -> {
                             SkeletonListCard(rows = 4)
                         }

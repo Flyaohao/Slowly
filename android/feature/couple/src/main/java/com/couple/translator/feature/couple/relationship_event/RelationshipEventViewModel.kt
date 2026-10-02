@@ -153,6 +153,10 @@ class RelationshipEventEditViewModel @Inject constructor(
      * **真正的门槛在后端**（schema + service 两层），这里不承担安全责任。
      */
     fun save() {
+        // 提交中直接拦掉：不加这道闸，网络慢时连点两下会发两次请求，
+        // createEvent 会多出一条重复记录。saving 早在 :176 置位了，
+        // 但 Screen 原来根本没读它，所以这里必须自己兜住。
+        if (_uiState.value.saving) return
         val s = _uiState.value
         val title = s.title.trim()
         val reason = s.reason.trim()
@@ -210,11 +214,19 @@ class RelationshipEventEditViewModel @Inject constructor(
 
     fun remove() {
         val id = eventId ?: return
+        // 同 save：删到一半时再点一次会发第二个 DELETE，虽然不会产生重复数据，
+        // 但用户看到的是「点了没反应」，且并发删除可能撞后端的行锁。
+        if (_uiState.value.saving) return
         viewModelScope.launch {
+            _uiState.update { it.copy(saving = true, error = "") }
             repository.deleteEvent(id)
-                .onSuccess { _uiState.update { it.copy(deleted = true) } }
+                .onSuccess {
+                    _uiState.update { it.copy(saving = false, deleted = true) }
+                }
                 .onFailure { e ->
-                    _uiState.update { it.copy(error = e.message ?: "删除失败") }
+                    _uiState.update {
+                        it.copy(saving = false, error = e.message ?: "删除失败")
+                    }
                 }
         }
     }

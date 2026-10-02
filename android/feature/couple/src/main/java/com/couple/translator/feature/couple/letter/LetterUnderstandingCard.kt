@@ -73,6 +73,14 @@ fun LetterUnderstandingCard(
      * 信件方向传入。默认 true 以兼容既有调用点。
      */
     showReplySuggestions: Boolean = true,
+    /**
+     * 这封信是不是用户自己写的（2026-10-01）。
+     *
+     * 写信人视角下，结构化字段说的是「TA 读完这封信的反应」，不再是写信人
+     * 落笔时的状态 —— 后端提示词已按方向分叉，标签也得跟着换，否则同一份
+     * 结果会被两个相反的标签解释。默认 false（收信人视角）以兼容既有调用点。
+     */
+    viewerIsSender: Boolean = false,
 ) {
     val badge: Pair<String, Color>? = when {
         isThinking -> "深度思考中" to AppAccent
@@ -139,7 +147,7 @@ fun LetterUnderstandingCard(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
-                UnderstandingSections(understanding, showReplySuggestions)
+                UnderstandingSections(understanding, showReplySuggestions, viewerIsSender)
             }
 
             // 正文还在流：逐字显示
@@ -182,18 +190,28 @@ private fun SectionLabel(text: String) {
     )
 }
 
+/**
+ * 结构化要点的分组渲染。
+ *
+ * 前三个标签按信件方向取值（[viewerIsSender]）：收信人读的是「写信的 TA」，
+ * 写信人读的是「读完这封信的 TA」，同一个字段在两边指向不同的人。
+ */
 @Composable
 private fun UnderstandingSections(
     understanding: LetterDto.LetterUnderstanding,
     showReplySuggestions: Boolean = true,
+    viewerIsSender: Boolean = false,
 ) {
     if (understanding.emotion.isNotEmpty()) {
-        SectionItem(label = "对方情绪", value = understanding.emotion)
+        SectionItem(
+            label = if (viewerIsSender) "TA 可能的情绪" else "对方情绪",
+            value = understanding.emotion,
+        )
     }
 
     if (understanding.keyConcerns.isNotEmpty()) {
         Text(
-            text = "关键关注点",
+            text = if (viewerIsSender) "这封信里的重点" else "关键关注点",
             style = MaterialTheme.typography.labelMedium,
             color = AppAccent,
         )
@@ -209,12 +227,15 @@ private fun UnderstandingSections(
     }
 
     if (understanding.expectedResponse.isNotEmpty()) {
-        SectionItem(label = "期待回应", value = understanding.expectedResponse)
+        SectionItem(
+            label = if (viewerIsSender) "TA 可能怎么回应" else "期待回应",
+            value = understanding.expectedResponse,
+        )
     }
 
     if (understanding.misunderstandable.isNotEmpty()) {
         Text(
-            text = "容易误解的句子",
+            text = if (viewerIsSender) "容易被 TA 读偏的句子" else "容易误解的句子",
             style = MaterialTheme.typography.labelMedium,
             color = AppAccent,
         )

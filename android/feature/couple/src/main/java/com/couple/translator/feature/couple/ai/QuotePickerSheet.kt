@@ -42,6 +42,7 @@ import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.text.displayTitle
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
@@ -239,7 +240,7 @@ private fun LetterSection(
     letters.forEachIndexed { index, letter ->
         val date = (letter.sendTime ?: letter.createdAt)?.take(10).orEmpty()
         val label = buildString {
-            append(letter.title ?: "无标题")
+            append(letter.title.displayTitle())
             if (date.isNotEmpty()) {
                 append("  ")
                 append(date)
@@ -311,7 +312,7 @@ private fun LetterPreviewView(
     }
 
     Text(
-        text = letter.title ?: "无标题",
+        text = letter.title.displayTitle(),
         style = MaterialTheme.typography.titleMedium,
         color = AppTextPrimary,
         maxLines = 2,

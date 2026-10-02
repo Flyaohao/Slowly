@@ -115,7 +115,11 @@ object MediationRoomDto {
         @Json(name = "advisor_phase") val advisorPhase: String = "engaged",
         @Json(name = "round_no") val roundNo: Int = 0,
         @Json(name = "waiting_reply") val waitingReply: Boolean = false,
-        @Json(name = "my_role") val myRole: String = "user_a",
+        // 2026-10-01：默认必须是空串而不是 "user_a"。
+        // 空串让上层「身份未就绪 → 不渲染气泡」的分支生效（见
+        // MediationRoomChatScreen 的 resolvedMyRole）；写死 "user_a" 会让
+        // 后端漏字段时 userB 静默看到对方消息被当成自己发的。
+        @Json(name = "my_role") val myRole: String = "",
         @Json(name = "agree_me") val agreeMe: Boolean = false,
         @Json(name = "agree_partner") val agreePartner: Boolean = false,
         @Json(name = "end_vote_me") val endVoteMe: Boolean = false,

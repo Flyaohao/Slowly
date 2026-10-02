@@ -22,8 +22,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.couple.translator.core.ui.text.displayTitle
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppEmptyState
+import com.couple.translator.core.ui.components.AppErrorState
 import com.couple.translator.core.ui.components.AppLinkRow
 import com.couple.translator.core.ui.components.AppListCard
 import com.couple.translator.core.ui.components.AppListItem
@@ -69,6 +71,17 @@ fun NewMailboxScreen(
     // 2026-09-29：单身模式删除后信箱恒为情侣模式，原 isCoupleMode 分支已移除。
     LaunchedEffect(Unit) {
         viewModel.loadMailbox()
+    }
+
+    // 加载失败要盖过空态：接口报错时三个列表同样为空，
+    // 若继续走下面的「还没有信件」分支，就把「加载失败」误报成了「没有数据」，
+    // 用户只会以为还没写信，不会去重试。error 非空时先短路返回。
+    if (uiState.error.isNotBlank()) {
+        AppErrorState(
+            message = uiState.error,
+            onRetry = { viewModel.loadMailbox() },
+        )
+        return
     }
 
     if (uiState.isLoading) {
@@ -209,7 +222,7 @@ private fun LetterRow(
     icon: ImageVector? = null,
 ) {
     AppListItem(
-        title = letter.title?.ifBlank { "无标题" } ?: "无标题",
+        title = letter.title.displayTitle(),
         subtitle = letter.content?.take(60)?.replace('\n', ' ')?.ifBlank { null },
         leadingIcon = icon,
         trailingText = formatDateShort(letter.sendTime ?: letter.createdAt),

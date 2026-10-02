@@ -14,6 +14,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +30,8 @@ import androidx.compose.ui.unit.sp
 import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentFaint
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppErrorContainer
+import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppTextPrimary
@@ -171,5 +175,41 @@ fun AppEmptyState(
             Spacer(modifier = Modifier.height(AppSpacing.lg))
             action()
         }
+    }
+}
+
+/**
+ * 整页加载失败态：**说明失败 + 一个显式的重试按钮**。
+ *
+ * 为什么不直接用 [AppEmptyState] 空态：空态说的是「还没有数据」，
+ * 而请求失败时列表同样是空的，两者视觉上几乎一样 ——
+ * 用户会以为「还没写信」而根本不会去重试。把错误说成「没有内容」是最容易被忽略的一类 bug。
+ *
+ * 约定：页面的 `uiState.error` 非空时，**先短路渲染这个组件再渲染空态**，
+ * 否则失败态永远被空态盖掉（`error` 与「列表为空」可以同时成立）。
+ */
+@Composable
+fun AppErrorState(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+    title: String = "没能加载出来",
+    retryText: String = "重新加载",
+) {
+    AppEmptyState(
+        icon = Icons.Outlined.CloudOff,
+        title = title,
+        subtitle = message,
+        iconTint = AppErrorRed,
+        containerColor = AppErrorContainer,
+        modifier = modifier,
+    ) {
+        // 复用 AppEmptyState 的 action 插槽放主按钮：失败态必须给出路，
+        // 只显示一句错误文案等于把用户堵死。
+        AppPrimaryButton(
+            text = retryText,
+            onClick = onRetry,
+            modifier = Modifier.padding(horizontal = AppSpacing.screenH),
+        )
     }
 }

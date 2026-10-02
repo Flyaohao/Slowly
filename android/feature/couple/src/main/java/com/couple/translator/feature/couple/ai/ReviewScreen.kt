@@ -34,6 +34,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.AppBackTopBar
 import com.couple.translator.core.ui.components.AppCard
 import com.couple.translator.core.ui.components.AppEmptyState
+import com.couple.translator.core.ui.components.AppErrorState
 import com.couple.translator.core.ui.components.AppListItem
 import com.couple.translator.core.ui.components.AppMarkdownText
 import com.couple.translator.core.ui.components.AppPrimaryButton
@@ -44,6 +45,7 @@ import com.couple.translator.core.ui.components.AiThinkingPanel
 import com.couple.translator.core.ui.components.TextInputField
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppErrorRed
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 
@@ -242,6 +244,26 @@ private fun ReviewInputSection(
 
 @Composable
 private fun ReviewStreamSection(uiState: ReviewUiState, viewModel: ReviewViewModel) {
+    // 加载失败时 review 同样是 null，漏判就会在错误文案下面再显示
+    // 「这条复盘没有留下结果 / 可能是生成中途断开了」——后者把请求失败
+    // 说成生成中断，用户会一直重试复盘而不是重试加载。
+    if (uiState.error.isNotBlank() && uiState.review == null) {
+        Spacer(modifier = Modifier.height(12.dp))
+        AppErrorState(
+            message = uiState.error,
+            // 用 loadDetail 重新拉这条记录，不能用 restartReview ——
+            // 后者会清空全部状态让用户重新填表再跑一次生成，
+            // 那是「重新复盘」，拿它当加载失败的重试等于让用户为一次网络错误
+            // 白填一遍表单、还烧一次 AI 额度。
+            onRetry = {
+                val id = uiState.reviewId
+                if (id > 0L) viewModel.loadDetail(id) else viewModel.clearError()
+            },
+            modifier = Modifier.padding(horizontal = AppSpacing.screenH),
+        )
+        return
+    }
+
     if (uiState.error.isNotBlank()) {
         Spacer(modifier = Modifier.height(12.dp))
         Text(

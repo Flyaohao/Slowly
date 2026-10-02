@@ -458,6 +458,10 @@ interface CoupleApiService {
     @GET("api/v1/couple/anniversaries")
     suspend fun getAnniversaries(): ApiResponse<AnniversaryDto.AnniversaryListResponse>
 
+    // 2026-10-02 补：后端原先只有列表没有单条，客户端查详情只能把整页拉下来自己找。
+    @GET("api/v1/couple/anniversaries/{id}")
+    suspend fun getAnniversary(@Path("id") id: Long): ApiResponse<AnniversaryDto.AnniversaryResponse>
+
     @PUT("api/v1/couple/anniversaries/{id}")
     suspend fun updateAnniversary(
         @Path("id") id: Long,
@@ -473,6 +477,10 @@ interface CoupleApiService {
 
     @GET("api/v1/couple/wishlists")
     suspend fun getWishlists(): ApiResponse<WishlistDto.WishlistListResponse>
+
+    // 2026-10-02 补：同 getAnniversary，后端原先缺单条查询。
+    @GET("api/v1/couple/wishlists/{id}")
+    suspend fun getWishlist(@Path("id") id: Long): ApiResponse<WishlistDto.WishlistResponse>
 
     @PUT("api/v1/couple/wishlists/{id}")
     suspend fun updateWishlist(

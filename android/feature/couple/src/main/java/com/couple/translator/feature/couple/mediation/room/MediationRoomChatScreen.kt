@@ -73,6 +73,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.couple.translator.core.ui.components.AppBackTopBar
+import com.couple.translator.core.ui.components.AppEmptyState
 import com.couple.translator.core.ui.components.AppPrimaryButton
 import com.couple.translator.core.ui.components.AppTag
 import com.couple.translator.core.ui.components.AppTagTone
@@ -85,6 +86,7 @@ import com.couple.translator.core.ui.theme.AppSoftGradient
 import com.couple.translator.core.ui.theme.AppBorderLight
 import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppMotion
+import com.couple.translator.core.ui.theme.AppSpacing
 import com.couple.translator.core.ui.theme.AppSurface
 import com.couple.translator.core.ui.theme.AppSurfaceMuted
 import com.couple.translator.core.ui.theme.AppTextPrimary
@@ -110,13 +112,27 @@ private const val TIME_DIVIDER_MS = 5 * 60_000L
 /** 连续消息合并阈值：同发送者 2 分钟内只保留首个昵称（M-6）。 */
 private const val HEADER_MERGE_MS = 2 * 60_000L
 
-private fun senderLabel(senderType: String, partnerName: String): String = when (senderType) {
-    ROLE_USER_A, ROLE_USER_B -> partnerName
-    SENDER_ADVISOR -> "军师"
+/**
+ * 气泡组头显示的昵称。
+ *
+ * 2026-10-01：原先 ROLE_USER_A / ROLE_USER_B 两个分支**都**返回 partnerName，
+ * 等于「只要不是军师就显示对方」——自己发的消息在组头也会顶着对方昵称。
+ * 现在按 myRole 分流：是自己取自己的名字，否则才是对方。
+ */
+private fun senderLabel(
+    senderType: String,
+    myRole: String,
+    myName: String,
+    partnerName: String,
+): String = when {
+    senderType == SENDER_ADVISOR -> "军师"
+    senderType == myRole -> myName
+    senderType == ROLE_USER_A || senderType == ROLE_USER_B -> partnerName
     else -> ""
 }
 
-private fun isMine(senderType: String, myRole: String): Boolean = senderType == myRole
+private fun isMine(senderType: String, myRole: String): Boolean =
+    myRole.isNotBlank() && senderType == myRole
 
 /** created_at（服务端 isoformat，可能无时区）→ 本地时间；解析失败返回 null。 */
 private fun parseChatTime(iso: String?): ZonedDateTime? {
@@ -189,13 +205,24 @@ fun MediationRoomChatScreen(
         }
     }
 
+    // 身份未就绪前不猜方向。
+    // myRole 是气泡左右/颜色的唯一依据（isMine = senderType == myRole），
+    // 拿不到时若兜底成 ROLE_USER_A，userB 进房首屏会把对方(userA)的历史消息
+    // 全部渲染成右侧「我」气泡——用户看到一堆自己没说过的话。
+    // 因此这里不做兜底：myRole 为空时 rows 保持空，交给下面的骨架态。
+    val resolvedMyRole = uiState.state?.myRole?.takeIf { it.isNotBlank() }.orEmpty()
+
     // 行模型：消息 + 乐观上屏 → 时间分隔 / 头像合并（M-6 / D3）
-    val rows = remember(uiState.messages, uiState.pendingSends, uiState.state?.myRole) {
-        buildChatRows(
-            messages = uiState.messages,
-            pendingSends = uiState.pendingSends,
-            myRole = uiState.state?.myRole ?: ROLE_USER_A,
-        )
+    val rows = remember(uiState.messages, uiState.pendingSends, resolvedMyRole) {
+        if (resolvedMyRole.isBlank()) {
+            emptyList()
+        } else {
+            buildChatRows(
+                messages = uiState.messages,
+                pendingSends = uiState.pendingSends,
+                myRole = resolvedMyRole,
+            )
+        }
     }
 
     // M-1：只有贴近底部才自动跟随；用户上翻回看不再被拽回
@@ -213,6 +240,7 @@ fun MediationRoomChatScreen(
         }
     }
 
+    val myName = myNickname?.trim()?.takeIf { it.isNotEmpty() } ?: "我"
     val myAvatarChar = myNickname?.trim()?.firstOrNull()?.toString() ?: "我"
     val partnerName = partnerNickname?.trim()?.takeIf { it.isNotEmpty() } ?: "对方"
     val partnerAvatarChar = partnerNickname?.trim()?.firstOrNull()?.toString() ?: "TA"
@@ -253,6 +281,8 @@ fun MediationRoomChatScreen(
                             mine = row.mine,
                             advisor = row.advisor,
                             showHeader = row.showHeader,
+                            myRole = resolvedMyRole,
+                            myName = myName,
                             partnerName = partnerName,
                             partnerAvatarChar = partnerAvatarChar,
                             myAvatarChar = myAvatarChar,
@@ -288,9 +318,26 @@ fun MediationRoomChatScreen(
                 }
             }
 
-            // 初始加载态：聊天气泡骨架（G3），数据到位后无缝替换
-            if (uiState.loading && rows.isEmpty() && !uiState.advisorStreaming) {
+            // 初始加载态：聊天气泡骨架（G3），数据到位后无缝替换。
+            // 身份未就绪时也算「还在加载」——此时不能渲染气泡（会左右反转），
+            // 若不加这一条，消息已到但 my_role 未到就会留下一片空白。
+            // 但不能无限转圈：若已退出 loading 且服务端始终没给 my_role，
+            // 骨架会永远挂着（这本身就是一种「App 坏了」的观感），
+            // 所以那种情况改降级为 advisor 视角的中性提示 + 可重试。
+            val identityPending = resolvedMyRole.isBlank() && uiState.error.isBlank()
+            if ((uiState.loading || identityPending) &&
+                rows.isEmpty() && !uiState.advisorStreaming
+            ) {
                 SkeletonChatPage(modifier = Modifier.fillMaxSize())
+            } else if (resolvedMyRole.isBlank() && rows.isEmpty()) {
+                // 兜底：拿不到身份就不显示气泡（宁可少也不要错标方向），
+                // 军师消息此时仍可见，因为它不依赖 myRole。
+                AppEmptyState(
+                    icon = Icons.Outlined.AutoAwesome,
+                    title = "暂时看不到双方的发言",
+                    subtitle = "没有认出你在这段调解里的身份，先别急着下结论。点右上角重试，或退出后重新进入。",
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = AppSpacing.screenH),
+                )
             }
 
             // 回到底部：离开底部才浮出（Telegram 口径）
@@ -495,6 +542,8 @@ private fun MessageBubble(
     mine: Boolean,
     advisor: Boolean,
     showHeader: Boolean,
+    myRole: String,
+    myName: String,
     partnerName: String,
     partnerAvatarChar: String,
     myAvatarChar: String,
@@ -517,7 +566,7 @@ private fun MessageBubble(
             // 昵称只在「组头」显示（连续消息合并），军师常显暖色
             if (showHeader || advisor) {
                 Text(
-                    text = if (mine) "我" else senderLabel(msg.senderType, partnerName),
+                    text = senderLabel(msg.senderType, myRole, myName, partnerName),
                     style = MaterialTheme.typography.labelSmall,
                     color = if (advisor) AppWarm else AppTextTertiary,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),

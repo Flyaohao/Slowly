@@ -67,12 +67,15 @@ import com.couple.translator.core.ui.theme.AppAccent
 import com.couple.translator.core.ui.theme.AppAccentLight
 import com.couple.translator.core.ui.theme.AppBackground
 import com.couple.translator.core.ui.theme.AppBorderLight
+import com.couple.translator.core.ui.theme.AppErrorRed
 import com.couple.translator.core.ui.theme.AppOnAccent
 import com.couple.translator.core.ui.theme.AppRadius
 import com.couple.translator.core.ui.theme.AppSpacing
+import com.couple.translator.core.ui.theme.AppSuccessGreen
 import com.couple.translator.core.ui.theme.AppTextPrimary
 import com.couple.translator.core.ui.theme.AppTextSecondary
 import com.couple.translator.core.ui.theme.AppTextTertiary
+import com.couple.translator.core.ui.theme.AppWarning
 import io.noties.markwon.Markwon
 
 private val dimensionNames = mapOf(
@@ -468,11 +471,12 @@ private fun HighlightCard(text: String, icon: ImageVector) {
 
 @Composable
 private fun DimensionAnalysisCard(dim: QuestionnaireDto.DimensionAnalysis) {
-    // 高/中/低是数据分级色（红/橙/绿），不属于主题色板，保持原样
+    // 高/中/低是数据分级色，语义上正好对应色板里的 error / warning / success，
+    // 三者已按深浅色各调过一档。写死色值（0xFFFF6B6B 等）在深色模式下是刺眼荧光。
     val levelColor = when (dim.level) {
-        "高" -> Color(0xFFFF6B6B)
-        "中" -> Color(0xFFFFA726)
-        "低" -> Color(0xFF66BB6A)
+        "高" -> AppErrorRed
+        "中" -> AppWarning
+        "低" -> AppSuccessGreen
         else -> AppAccent
     }
 
