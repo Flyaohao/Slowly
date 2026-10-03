@@ -119,13 +119,41 @@ def _make_event(source: str, content: str = "这是一段足够长的测试内�
 
 
 def _with_llm(fake):
-    original = memory_service.distill_llm
-    memory_service.distill_llm = fake
+    """把 `fake` 接成蒸馏链路真正用的那个 LLM 客户端（2026-10-03 修）。
+
+    ## 为什么原来的 `memory_service.distill_llm = fake` 无效
+
+    v5.0 之后 `distill_and_save(db, ..., llm_client=None)` 的客户端解析是：
+
+        if llm_client is None:
+            llm_client = uaicfg.build_chat_client(db, user_id, enable_thinking=False)
+        ...
+        result = llm_client.invoke_structured([...])      # memory_service.py:635
+
+    模块级的 `memory_service.distill_llm` **在这条路径上根本不会被读**——
+    它只是 import 期建的一个对象（`:22`），蒸馏时走的是 `uaicfg` 现解析的客户端。
+    所以旧桩打在了没人用的地方，请求照真发上游 → 撞 403 Free quota exhausted，
+    还污染同套件后续断言的状态。
+
+    ## 现在的做法
+
+    拦在 `user_ai_config_service.build_chat_client`——它才是蒸馏链路的
+    客户端出口。这样：
+      - 不改任何生产代码；
+      - `build_chat_client` 是全仓唯一的建客户端入口，拦它覆盖最全；
+      - 套件自己仍持有 `fake.calls`，`len(fake.calls) == 1` 之类断言照常有效。
+    """
+    from app.services import user_ai_config_service as uaicfg
+
+    original = uaicfg.build_chat_client
+    uaicfg.build_chat_client = lambda *a, **k: fake
     return original
 
 
 def _restore_llm(original):
-    memory_service.distill_llm = original
+    from app.services import user_ai_config_service as uaicfg
+
+    uaicfg.build_chat_client = original
 
 
 # ---------------------------------------------------------------------- #

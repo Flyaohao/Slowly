@@ -25,6 +25,29 @@ os.environ["COUPLE_DISABLE_MEMORY_DISTILL"] = "1"
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
+# 注意（2026-10-03）：桩必须拦在 `user_ai_config_service.build_chat_client`。
+# 模块级的 `memory_service.distill_llm` 在蒸馏路径上**不会被读**——
+# `distill_and_save(db, ..., llm_client=None)` 会现解析 uaicfg 客户端，
+# 然后调 `llm_client.invoke_structured(...)`（memory_service.py:635）。
+# 打旧位置会让请求真发上游 → 403 Free quota exhausted。
+
+
+def _stub_client_factory(fake):
+    """把 `fake` 接成蒸馏链路的 LLM 客户端，返回原函数供还原。"""
+    from app.services import user_ai_config_service as uaicfg
+
+    original = uaicfg.build_chat_client
+    uaicfg.build_chat_client = lambda *a, **k: fake
+    return original
+
+
+def _restore_client_factory(original):
+    from app.services import user_ai_config_service as uaicfg
+
+    uaicfg.build_chat_client = original
+
+
 FAILURES = []
 #: 本次用例创建、finally 需要清理的 id 列表（DB 行；向量按同批 id 全量补删）
 _CREATED_IDS = []
@@ -132,8 +155,8 @@ def case_c2_five_sources(user_id: int, relation_id: int):
 
     sources = ("letter", "museum", "dual", "anniversary", "questionnaire")
     fake = FakeLlm()
-    orig = memory_service.distill_llm
-    memory_service.distill_llm = fake
+    uaicfg = _stub_client_factory(fake)
+    orig = uaicfg
     try:
         for i, source in enumerate(sources):
             before_ids = set(_recent_ids(relation_id))
@@ -160,7 +183,7 @@ def case_c2_five_sources(user_id: int, relation_id: int):
         ok("AI 源各调一次 invoke_structured（共 3 次、不打真模型）",
            len(fake.calls) == 3, str(fake.calls))
     finally:
-        memory_service.distill_llm = orig
+        _restore_client_factory(orig)
 
 
 def _recent_ids(relation_id: int):
@@ -184,8 +207,8 @@ def case_c3_event_row_without_distill(user_id: int, relation_id: int):
     from app.services.memory_events import distill_event
 
     fake = FakeLlm(should_remember=False)
-    orig = memory_service.distill_llm
-    memory_service.distill_llm = fake
+    uaicfg = _stub_client_factory(fake)
+    orig = uaicfg
     try:
         result = distill_event(_event("letter", user_id, relation_id, 91001))
         new_ids = [r["id"] for r in result]
@@ -198,7 +221,7 @@ def case_c3_event_row_without_distill(user_id: int, relation_id: int):
         ok("事件行带 source='letter'",
            all(r.source == "letter" for r in rows if r.memory_type == "事件"))
     finally:
-        memory_service.distill_llm = orig
+        _restore_client_factory(orig)
 
 
 def case_c9_diary(active_user_id: int, relation_id: int, no_rel_user_id: int):
@@ -210,8 +233,8 @@ def case_c9_diary(active_user_id: int, relation_id: int, no_rel_user_id: int):
 
     # 打桩蒸馏（§8.1 不调模型；首轮 C9 曾真调了 distill_llm）
     fake = FakeLlm()
-    orig = memory_service.distill_llm
-    memory_service.distill_llm = fake
+    uaicfg = _stub_client_factory(fake)
+    orig = uaicfg
     db = SessionLocal()
     entry = None
     try:
@@ -259,7 +282,7 @@ def case_c9_diary(active_user_id: int, relation_id: int, no_rel_user_id: int):
         ok("单身日记 relation_id 保持 NULL", entry2.relation_id is None,
            str(entry2.relation_id))
     finally:
-        memory_service.distill_llm = orig
+        _restore_client_factory(orig)
         if entry is not None:
             _CREATED_DIARY_IDS.append(entry.id)
         db.close()
@@ -291,8 +314,8 @@ def case_c10_session_summary_vector(relation_id: int):
 
     saved_flag = os.environ.pop("COUPLE_DISABLE_MEMORY_DISTILL", None)
     fake = FakeLlm()
-    orig = memory_service.distill_llm
-    memory_service.distill_llm = fake
+    uaicfg = _stub_client_factory(fake)
+    orig = uaicfg
     mem_id = None
     try:
         # 先就绪 collection 再触发后台写——避免向量线程与主线程竞速懒加载
@@ -341,7 +364,7 @@ def case_c10_session_summary_vector(relation_id: int):
             time.sleep(0.3)
         ok("couple_memory 查得到该 memory_id", present)
     finally:
-        memory_service.distill_llm = orig
+        _restore_client_factory(orig)
         if saved_flag is not None:
             os.environ["COUPLE_DISABLE_MEMORY_DISTILL"] = saved_flag
 

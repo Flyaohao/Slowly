@@ -26,6 +26,29 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
+# 注意（2026-10-03）：桩必须拦在 `user_ai_config_service.build_chat_client`。
+# 模块级的 `memory_service.distill_llm` 在蒸馏路径上**不会被读**——
+# `distill_and_save(db, ..., llm_client=None)` 会现解析 uaicfg 客户端，
+# 然后调 `llm_client.invoke_structured(...)`（memory_service.py:635）。
+# 打旧位置会让请求真发上游 → 403 Free quota exhausted。
+
+
+def _stub_client_factory(fake):
+    """把 `fake` 接成蒸馏链路的 LLM 客户端，返回原函数供还原。"""
+    from app.services import user_ai_config_service as uaicfg
+
+    original = uaicfg.build_chat_client
+    uaicfg.build_chat_client = lambda *a, **k: fake
+    return original
+
+
+def _restore_client_factory(original):
+    from app.services import user_ai_config_service as uaicfg
+
+    uaicfg.build_chat_client = original
+
+
 from app.schemas.ai_output import MemoryDistillOutput  # noqa: E402
 from app.services import memory_service  # noqa: E402
 from app.services.llm_client import LlmError  # noqa: E402
@@ -90,15 +113,14 @@ class FakeLlm:
 def run_case(name, *, db, llm, user_input="我其实更希望他直接说，不要让我猜"):
     # 记忆沉淀走的是专用轻量客户端（memory_service.distill_llm），
     # 不是主链路单例（llm），桩要打在同一个对象上。
-    original = memory_service.distill_llm
-    memory_service.distill_llm = llm
+    original = _stub_client_factory(llm)
     try:
         result = memory_service.distill_and_save(
             db, user_id=1, relation_id=2, scene_key="private_advisor",
             user_input=user_input, assistant_text="AI 的回复内容",
         )
     finally:
-        memory_service.distill_llm = original
+        _restore_client_factory(original)
     cases.append(name)
     return result
 

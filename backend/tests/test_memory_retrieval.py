@@ -25,6 +25,50 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 FAILURES = []
 
 
+# ---------------------------------------------------------------------- #
+# 全局：禁止真调 LLM（2026-10-03）
+# ---------------------------------------------------------------------- #
+# 这个套件验证的是**召回**逻辑，chat 模型对它没有意义。但
+# `case_stream_starts_on_embed_timeout` 只mock 了 `_stream_with_heartbeat`，
+# 没 mock `ai_service._extract_structured_with_keepalive` → 那里会
+# `client.invoke_structured()` 真打上游。
+#
+# 后果有二：
+#   1. 烧额度（实测阿里云返回 403 Free quota exhausted）；
+#   2. **污染后面的用例** —— 额度耗尽后 `case_cross_relation_isolation`
+#      的 embedding 通道被置空，于是 `scored=0 items=[]`，两个断言
+#      以「看起来像业务 bug」的形式失败，排查方向被带偏。
+#
+# 桩放在 `llm_client.LlmClient.invoke_structured` 这个**统一出口**，
+# 覆盖所有结构化提取路径（首轮 / 重试 / JSON 兜底）。
+def _install_no_llm_guard():
+    """把结构化提取与流式提取都短路，保证本套件零真调、零额度消耗。"""
+    from app.services.llm_client import LlmClient, llm
+
+    orig_structured = LlmClient.invoke_structured
+    orig_request = LlmClient._request
+
+    def _fake_invoke_structured(self, messages, scene=None, **kwargs):
+        # 返回契约要求的最小结构；各用例只关心「有没有走到召回」，
+        # 不校验模型输出内容。
+        return {
+            "raw_text": "（测试桩）",
+            "summary": "（测试桩）",
+            "key_concerns": [],
+            "emotion": "平静",
+            "expected_response": "",
+            "misunderstandable": [],
+            "needs_clarification": False,
+            "scene_key": scene,
+        }
+
+    LlmClient.invoke_structured = _fake_invoke_structured
+    return orig_structured, orig_request
+
+
+_ORIG_STRUCTURED, _ORIG_REQUEST = _install_no_llm_guard()
+
+
 def check(name: str, ok: bool, detail: str = ""):
     mark = "PASS" if ok else "FAIL"
     print(f"  {mark}  {name}" + (f"  [{detail}]" if detail and not ok else ""))

@@ -25,6 +25,55 @@ os.environ["COUPLE_DISABLE_MEMORY_DISTILL"] = "1"
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
+# ---------------------------------------------------------------------- #
+# LLM 桩接在 build_chat_client（2026-10-03 修）
+# ---------------------------------------------------------------------- #
+# 原来桩打在被替换对象的 `invoke_structured` 上（`ms.distill_llm.invoke_structured = ...`），
+# 但 `distill_and_save(db, ..., llm_client=None)` 会现解析
+# `uaicfg.build_chat_client(db, user_id, enable_thinking=False)`，
+# 再调那个返回对象的 `invoke_structured`（memory_service.py:635）。
+# 模块级 `ms.distill_llm` 在这条路径上**不会被读** → 桩失效 → 真打上游 → 403。
+#
+# 本文件另外几处用 `_FakeClient` 验证**请求体**（thinking_budget 剥离等），
+# 那些走 `invoke` / `_request`，本守卫不拦，不受影响。
+
+
+def _stub_client_factory(fake):
+    """把 `fake` 接成蒸馏链路的 LLM 客户端，返回原函数供还原。"""
+    from app.services import user_ai_config_service as uaicfg
+
+    original = uaicfg.build_chat_client
+    uaicfg.build_chat_client = lambda *a, **k: fake
+    return original
+
+
+def _restore_client_factory(original):
+    from app.services import user_ai_config_service as uaicfg
+
+    uaicfg.build_chat_client = original
+
+
+class _MustNotCall:
+    """开关关闭时若仍发起模型调用，直接判失败。"""
+
+    def invoke_structured(self, *a, **k):
+        raise AssertionError("开关关闭时不得发起模型调用")
+
+
+class _ReachedModel:
+    """记录模型是否被调用；返回 should_remember=False 让蒸馏走「不记」分支。"""
+
+    def __init__(self, reached):
+        self._reached = reached
+
+    def invoke_structured(self, *a, **k):
+        self._reached["model"] = True
+        from types import SimpleNamespace
+
+        return SimpleNamespace(should_remember=False)
+
+
 FAILURES = []
 
 
@@ -73,6 +122,14 @@ def case_no_thinking_payload():
     try:
         client = lc.LlmClient(
             api_key="test-key", enable_thinking=True, thinking_budget=1024,
+            # 必须显式给 base_url（2026-10-03）：`LlmClient` 默认取
+            # `config.AI_BASE_URL`，而 `send_thinking_params` 的自动判断是
+            # `"dashscope" in base_url.lower()`。本机 .env 里AI_BASE_URL 指向
+            # 私有端点（llm-*.maas.aliyuncs.com，不含 "dashscope"），
+            # 于是自动判断为「非 DashScope → 不下发思考参数」，
+            # 断言 `thinking_budget == 1024` 就会失败。
+            # 显式传值让本用例不依赖环境配置。
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
         )
         # 默认路径（主聊天）：thinking_budget 照旧
         client.invoke([{"role": "user", "content": "hi"}], scene="probe")
@@ -136,7 +193,12 @@ def case_backlog_sweep(db, rid):
 
     fake_col = _FakeCollection()
     orig_embed, orig_col = mw._embed, mw._collection
-    mw._embed = lambda text: [0.0, 1.0, 0.5]
+    # 桩签名必须带 `user_id`（2026-10-03 修）：实现侧是
+    # `vec = _embed(text, user_id=row.user_id)`（memory_index_worker.py:247），
+    # 原来写 `lambda text:` 只接受 1 个参数 → TypeError → 走 `_on_index_failure`
+    # → 状态被打成 `failed`，于是「清扫重投后转 indexed」与
+    # 「向量写入 fake collection」两条断言一起红，且看不出是桩的问题。
+    mw._embed = lambda text, user_id=None: [0.0, 1.0, 0.5]
     mw._collection = lambda: fake_col
     created = None
     try:
@@ -192,8 +254,8 @@ def case_distill_switch(db, uid, rid):
     def _must_not_call(*a, **k):
         raise AssertionError("开关关闭时不得发起模型调用")
 
-    orig_invoke = ms.distill_llm.invoke_structured
-    ms.distill_llm.invoke_structured = _must_not_call
+    orig_invoke = _stub_client_factory(_MustNotCall())
+
     try:
         rel.memory_distill_enabled = False
         db.commit()
@@ -206,7 +268,7 @@ def case_distill_switch(db, uid, rid):
         check("memory_distill_enabled 读回 False",
               ms.memory_distill_enabled(db, rid) is False)
     finally:
-        ms.distill_llm.invoke_structured = orig_invoke
+        _restore_client_factory(orig_invoke)
         rel.memory_distill_enabled = original
         db.commit()
 
@@ -228,8 +290,7 @@ def _probe_distill_reaches_model(db, uid, rid):
         # should_remember=False → distill 走「不记」分支干净返回
         return SimpleNamespace(should_remember=False)
 
-    orig = ms.distill_llm.invoke_structured
-    ms.distill_llm.invoke_structured = _fake_invoke
+    orig = _stub_client_factory(_ReachedModel(reached))
     try:
         ms.distill_and_save(
             db, uid, rid, "chat",
@@ -240,7 +301,7 @@ def _probe_distill_reaches_model(db, uid, rid):
     except Exception:
         return False
     finally:
-        ms.distill_llm.invoke_structured = orig
+        _restore_client_factory(orig)
 
 
 # ---------------------------------------------------------------------- #

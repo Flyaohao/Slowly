@@ -77,7 +77,13 @@ def seed_user_and_questionnaire(h):
     db.add(u)
     db.add(q)
     db.commit()
-    return u.id, q.id
+    uid, qid = u.id, q.id
+    # 必须显式 close（2026-10-03 修）：借出的连接不在连接池里，
+    # engine.dispose() 关不掉它 → 基座退出时 `DROP DATABASE` 被这个连接的
+    # metadata lock 卡到超时，整个套件看起来「跑不完」。
+    # 与 test_enrich 末尾同款注释；这里原先漏了。
+    db.close()
+    return uid, qid
 
 
 def seed_profile(db, uid, qid):
@@ -228,9 +234,19 @@ def test_enrich(h):
           vscores["values_orientation"].explanation)
 
     # 累计上限（相对问卷基线 60 -> 最高 80）
-    for _ in range(8):
+    #
+    # ⚠️ 每轮必须换一个新的 viewpoint_id（2026-10-03 修）。
+    # `enrich_from_viewpoint` 有幂等闸：当前版本的 `source_viewpoint_id`
+    # 等于入参 viewpoint_id 时直接抛 `ValueError("70008")`
+    # （profile_service.py:784「这条观点已经计入过」）。
+    # 原来 8 轮都传 44 → 第 2 轮就抛 70008，而本函数不捕获 →
+    # 异常穿透 `with MysqlHarness(...)` → 基座退出时 DROP DATABASE
+    # 被未关闭连接的 metadata lock 卡住 → 整个套件看起来「跑不完」。
+    #
+    # 用 `44 + i` 既绕开幂等闸，语义也正确：本轮确实在模拟 8 条不同观点。
+    for i in range(8):
         profile_service.enrich_from_viewpoint(
-            db, uid, viewpoint_id=44, dimensions=["reassurance_need"],
+            db, uid, viewpoint_id=44 + i, dimensions=["reassurance_need"],
             summary="还是希望有回应", directions={
                 "reassurance_need": {"direction": "up", "strength": "moderate"}
             }, confidence=0.9,

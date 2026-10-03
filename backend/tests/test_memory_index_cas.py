@@ -210,6 +210,13 @@ def main() -> int:
         works = memory_index_worker.claim_index_work(db, limit=1)
         ok("领到用例1", len(works) == 1 and works[0]["id"] == case1["mem_id"],
            str(works))
+        # `works` 可能为空（领取失败）：直接取works[0] 会抛 IndexError，
+        # 整个套件在 finally 清理之前崩溃 → 残留脏任务/脏行，
+        # 进而污染后续套件（如 test_memory_retrieval 召回不到向量）。
+        # 这里记失败并跳到下一个用例，保证清理一定执行。
+        if not works:
+            ok("用例1 领取索引工作（跳过：无可领任务）", False, str(works))
+            return
         memory_index_worker.process_index_work(db, works[0])
         row1 = _row(case1["mem_id"])
         ok("复查发现离场 → 向量已撤下（最终无向量）",
@@ -221,6 +228,9 @@ def main() -> int:
         works = memory_index_worker.claim_index_work(db, limit=1)
         ok("领取删除工作", len(works) == 1 and works[0]["kind"] == "remove",
            str(works))
+        if not works:
+            ok("领取删除工作（跳过：无可领任务）", False, str(works))
+            return
         memory_index_worker.process_index_work(db, works[0])
         row1 = _row(case1["mem_id"])
         ok("行 removed、无向量",
