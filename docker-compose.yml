@@ -144,6 +144,11 @@ services:
     # 必须覆盖 entrypoint 而不是 command：镜像的 ENTRYPOINT 是 docker-entrypoint.sh，
     # 它会无视传入的 CMD 参数强行起 uvicorn（部署时实测踩中，scheduler 变成了空转的 uvicorn）
     entrypoint: ["python", "-m", "app.tasks.unbinding_timeout"]
+    # 同 ai-task-worker：镜像的 HEALTHCHECK 是给 backend 的 curl /docs，
+    # 本容器只跑定时循环、没有 HTTP 服务 → 恒 unhealthy。关掉探针，
+    # 存活交给 supervisor（restart: unless-stopped）。
+    healthcheck:
+      disable: true
     depends_on:
       - backend
 
@@ -170,6 +175,15 @@ services:
     # 必须覆盖 entrypoint 而不是 command：镜像的 ENTRYPOINT 是 docker-entrypoint.sh，
     # 它会无视传入的 CMD 参数强行起 uvicorn（部署时实测踩中，scheduler 变成了空转的 uvicorn）
     entrypoint: ["python", "-m", "app.tasks.ai_task_worker"]
+    # 必须关掉镜像里写死的 HEALTHCHECK（2026-10-03）。
+    # 镜像的检查是 `curl http://127.0.0.1:8000/docs`，那是给 backend 用的；
+    # 本容器覆盖 entrypoint 后只跑轮询循环，**容器里没有 HTTP 服务**，
+    # curl 恒返回 000 → 状态永远是 unhealthy。
+    # 后果不是功能故障（日志显示 worker 正常工作），而是
+    # `docker compose ps` 的健康列不可信——以后判断部署是否成功会误判。
+    # worker 的存活由 supervisor（restart: unless-stopped）负责，无需探针。
+    healthcheck:
+      disable: true
     depends_on:
       - backend
 
