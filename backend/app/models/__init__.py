@@ -40,6 +40,17 @@ from app.models.museum import MuseumItem
 from app.models.practice import RelationshipPractice, PracticeRecord
 from app.models.anniversary import Anniversary, Wishlist
 from app.models.avatar import AiAvatar, AiAvatarAsset
+# 调解室 4 张表（2026-10-03 补注册）。
+# 之前漏了这里，导致 `Base.metadata` 里没有这 4 张表 → 任何走
+# `Base.metadata.create_all()` 的场景（测试 harness、临时库初始化）都建不出
+# `mediation_room`，表现为 `sqlite3.OperationalError: no such table: mediation_room`。
+# 线上库不受影响（表由 alembic 迁移建的），所以这个缺陷此前一直没暴露。
+from app.models.mediation_room import (
+    MediationRoom,
+    RoomMessage,
+    MediationRoomPending,
+    MediationEvent,
+)
 from app.models.diary_entry import DiaryEntry
 from app.models.invite_code import InviteCode
 from app.models.email_verification import EmailVerificationCode

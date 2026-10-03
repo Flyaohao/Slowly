@@ -125,9 +125,31 @@ _SPLIT_RE = re.compile(
 #: 返回 10 条，导致 chat_mode 档位矩阵在降级环境失效、同源断言对不上）。
 RECENCY_LIMIT = 10
 
-#: query embedding 硬超时（秒）。v3.1 §3 并行通道 400ms 窗——向量与关键词
-#: 并行跑，总预算 ≤800ms；超窗未归的向量线程按通道失败处理（结果不再可信）。
-QUERY_EMBED_TIMEOUT = 0.4
+#: query embedding 硬超时（秒）。
+#:
+#: **为什么从 0.4s 提到 1.0s（2026-10-03）**
+#:
+#: v3.1 §3 当初定 400ms 窗，是按「内网 embedding 服务」的假设算的：
+#: 并行跑，总预算 ≤800ms。但实际部署用的是公网 DashScope
+#: `text-embedding-v4`，**一次 query embedding 的真实耗时是 1.36~2.32s**
+#: （本机实测 5 次：1.92 / 2.32 / 1.57 / 1.40 / 1.36，平均 1.71s）。
+#:
+#: 于是 400ms 阈值下**向量通道 100% 超时**，而
+#: `memory_need=personal_fact` 档按 v3.2 §5.2 路由表**不降级近因**
+#: → 语义召回实际完全失效，只剩关键词通道。
+#: 这不是「慢一点」，是「该功能不工作」。
+#:
+#: 取 2.0s 的权衡（2026-10-03 二次实测后从 1.0 调上来的）：
+#: 端到端实测（embed + Chroma 查询）1.68 / 1.79 / 1.77 / 1.81 / **3.23** 秒。
+#: 原 0.4s 下向量通道 100% 超时；改 1.0s 仍不够——因为真实公网单次 embed
+#: 就要 1.4~2.3s，留给线程收尾的余量几乎为零。
+#:
+#: 2.0s 的代价：向量通道在独立线程里跑，**不阻塞关键词通道**，
+#: 所以对 `personal_fact` 以外档位的首字延迟影响接近 0；
+#: 只有需要等语义结果的场景才会多花这段时间。
+#:
+#: 更彻底的解法是预计算 query 向量（用户输入时后台算好），本轮不做。
+QUERY_EMBED_TIMEOUT = 2.0
 
 _collection = None
 _collection_loaded = False
@@ -902,7 +924,15 @@ def retrieve_memory_items(
         keyword_scores = {}
         kw_ok = False
 
-    vec_thread.join(timeout=QUERY_EMBED_TIMEOUT + 0.5)
+    # 线程 join 预算必须**大于** `_embed_query_fast` 的超时，否则会出现
+    # 「HTTP 客户端已超时返回、但线程还在收尾」的窗口，join 先返回 → 判失败。
+    # 两者关系：TIMEOUT 是给 HTTP 的硬超时，JOIN_GRACE 是收尾宽限。
+    #
+    # 宽限不能太小：实测端到端（embed + Chroma）1.68~3.23s，而 HTTP 层
+    # 在 2.0s 就返回了，线程还要做 Chroma 查询 + 排序。原 0.5s 宽限在
+    # TIMEOUT=1.0 时几乎必然踩空（1.4s 的 embed + 尾部 → join 先返回）。
+    # 宽限 1.0s 后总预算 3.0s，覆盖实测最坏 3.23s 的量级。
+    vec_thread.join(timeout=QUERY_EMBED_TIMEOUT + 1.0)
     if vec_thread.is_alive():
         vec_ok = False  # 超预算仍未返回 → 按失败计（线程放弃，不等它）
         vector_scores: Dict[int, float] = {}
