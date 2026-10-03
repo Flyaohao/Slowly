@@ -75,11 +75,9 @@ fun DrawerContent(
     pendingCount: Int = 0,
     /** 当前壳内 tab 路由：对得上的条目高亮（R 系列抽屉项「当前项高亮态」）。 */
     currentRoute: String? = null,
-    /**
-     * 回到「我们的空间」首页。空间页是壳内 pager 的一页（不是独立路由），
-     * 由壳层负责收抽屉 + 滑回该页；2026-09-29 顶替原关系 tab 位置。
-     */
-    onNavigateToHome: () -> Unit = {},
+    // 2026-10-03：原 onNavigateToHome（「回到我们的空间」）随抽屉里的
+    // 「我们的空间」条目一起移除 —— 空间页是底栏一级页，抽屉不再做它的入口，
+    // 这条回调链（CoupleShell → DrawerPage → DrawerContent）随之变成死参数。
 ) {
     val defaultState = androidx.compose.runtime.remember { CoupleState() }
     val coupleState = coupleStateManager?.state?.collectAsState()?.value ?: defaultState
@@ -102,17 +100,12 @@ fun DrawerContent(
         HorizontalDivider(color = AppBorderLight)
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 2026-09-29：单身模式已删除，未绑定用户进不到本抽屉，所有条目恒为情侣侧内容
-        // （原先的 if (isCoupleMode) 门控恒为真，已展平）。
-        // 2026-09-29 恢复空间首页：抽屉置顶入口「我们的空间」（壳内 pager 页 2，
-        // 高亮 route 吃 BottomTab.Home.route）。
-        DrawerNavItem(
-            icon = Icons.Outlined.FavoriteBorder,
-            label = "我们的空间",
-            onClick = onNavigateToHome,
-            route = BottomTab.Home.route,
-            currentRoute = currentRoute,
-        )
+        // 2026-10-03：移除抽屉置顶的「我们的空间」入口。
+        // 空间页是**壳内 pager 的一级页**（底部导航第 2 格），已经在主导航层，
+        // 抽屉是二级导航，再放一个入口属于重复导向。
+        // 关系设置页（CoupleInfoScreen）里的「进入我们的空间」是关系维度的一部分，
+        // 不在本次移除范围。
+        //
         // 2026-09-28 共同调解室（设计 §一）：抽屉入口（三处入口之一）
         DrawerNavItem(
             icon = Icons.Outlined.Forum,

@@ -220,11 +220,25 @@ fun CoupleShell(
 
     // 跨组件一次性落页请求（2026-09-29）：「进入我们的空间」等外部入口在
     // rememberPagerState 保留了上次 tab 的情况下，仍要精确落到目标页。
+    //
+    // 2026-10-03 修 BUG：点「进入我们的空间」却落在军师页。
+    // 原因是**动画竞态**——调用方（关系设置页）先 `request()` 再 `navigateToMain()`，
+    // 壳层是被导航回来的，此时 Pager 还没完成布局，
+    // `animateScrollToPage` 的动画在布局前发出会被静默丢弃，
+    // 页面停在 `initialPage = 1`（军师）。而且 consume() 已经把标志清了，
+    // 没有第二次机会，于是永久停在错误页。
+    //
+    // 修法两点：
+    //   1) 用 `scrollToPage`（瞬时跳转）而不是 `animateScrollToPage`——
+    //      瞬时跳转不依赖动画帧，布局未完成时也能正确设置目标页；
+    //   2) 已经在目标页时直接返回，避免无谓的二次滚动。
     val landing by ShellLandingHolder.pending.collectAsState()
     LaunchedEffect(landing) {
         landing?.let { page ->
             ShellLandingHolder.consume()
-            pagerState.animateScrollToPage(page.index)
+            if (pagerState.currentPage != page.index) {
+                pagerState.scrollToPage(page.index)
+            }
         }
     }
 
@@ -282,9 +296,8 @@ fun CoupleShell(
                 0 -> DrawerPage(
                     currentRoute = currentRoute,
                     onNavigateToRoute = onNavigateToRoute,
-                    // 抽屉「我们的空间」：空间页是壳内 pager 页 1，不是独立路由，
-                    // 由壳层收回抽屉并滑回该页（而不是压栈新页面）。
-                    onNavigateToHome = closeDrawer,
+                    // 2026-10-03：抽屉「我们的空间」条目已移除（空间页是底栏一级页），
+                    // 原 onNavigateToHome 回调链一并删掉。
                     // 登出清理（clearTokens / clearCouple / stop socket）统一由 NavGraph
                     // 根级 performLogout 负责——此前这里就地清理，导致绑定页/设置页两条
                     // 出口漏清 token（2026-09-29 BUG）。壳层不再重复实现，只透传。
@@ -365,7 +378,6 @@ fun CoupleShell(
 private fun DrawerPage(
     currentRoute: String?,
     onNavigateToRoute: (String) -> Unit,
-    onNavigateToHome: () -> Unit,
     onLogout: () -> Unit,
     coupleStateManager: CoupleStateManager?,
     pendingCount: Int,
@@ -390,7 +402,6 @@ private fun DrawerPage(
                     // 无需壳内拦截。
                     onNavigateToRoute(route)
                 },
-                onNavigateToHome = onNavigateToHome,
                 onLogout = onLogout,
                 coupleStateManager = coupleStateManager,
                 pendingCount = pendingCount,
